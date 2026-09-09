@@ -1,13 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fundipap/main.dart';
+import 'package:fundipap/app.dart';
 
 void main() {
-  testWidgets('FUNDIPAP v1.0 loads', (WidgetTester tester) async {
-    // Build our FUNDIPAP app
-    await tester.pumpWidget(const FundipapApp());
+  testWidgets('Fundi Pap loads', (WidgetTester tester) async {
+    await tester.pumpWidget(const FundiPapApp());
 
-    // Check that Customer screen text exists
-    expect(find.text('FUNDIPAP'), findsOneWidget);
-    expect(find.textContaining('OGANGO'), findsOneWidget);
+    expect(find.text('Fundi Pap - Ogango'), findsOneWidget);
   });
 }
