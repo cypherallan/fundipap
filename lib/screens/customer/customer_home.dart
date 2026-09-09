@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../theme/app_theme.dart';
 
 class CustomerHome extends StatefulWidget {
@@ -9,89 +11,58 @@ class CustomerHome extends StatefulWidget {
 }
 
 class _CustomerHomeState extends State<CustomerHome> {
-  double _radius = 5.0; // km
-  String _filter = 'distance'; // distance, rated, cheap, expensive
+  double _radius = 5.0;
+  String _filter = 'distance';
+  Position? _userPos;
+  bool _loadingLoc = true;
 
-  final List<Map<String, dynamic>> _allFundis = [
-    {
-      'name': 'Otieno Wireman',
-      'skill': 'Electrical',
-      'rating': 4.9,
-      'price': 1200,
-      'distance': 1.2,
-      'jobs': 124,
-      'verified': true,
-    },
-    {
-      'name': 'Akinyi Plumber',
-      'skill': 'Plumbing',
-      'rating': 4.7,
-      'price': 800,
-      'distance': 2.5,
-      'jobs': 89,
-      'verified': true,
-    },
-    {
-      'name': 'Omondi Painter',
-      'skill': 'Painting',
-      'rating': 4.5,
-      'price': 1500,
-      'distance': 0.8,
-      'jobs': 56,
-      'verified': false,
-    },
-    {
-      'name': 'Atieno Mason',
-      'skill': 'Masonry',
-      'rating': 5.0,
-      'price': 2000,
-      'distance': 4.2,
-      'jobs': 210,
-      'verified': true,
-    },
-    {
-      'name': 'Ochieng Welder',
-      'skill': 'Welding',
-      'rating': 4.3,
-      'price': 900,
-      'distance': 6.0,
-      'jobs': 34,
-      'verified': true,
-    },
-    {
-      'name': 'Awino Tiler',
-      'skill': 'Tiling',
-      'rating': 4.8,
-      'price': 1100,
-      'distance': 3.1,
-      'jobs': 72,
-      'verified': true,
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _getLocation();
+  }
 
-  List<Map<String, dynamic>> get filteredFundis {
-    var list = _allFundis
-        .where((f) => (f['distance'] as double) <= _radius)
-        .toList();
-    if (_filter == 'distance') {
-      list.sort(
-        (a, b) => (a['distance'] as double).compareTo(b['distance'] as double),
+  Future<void> _getLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        setState(() => _loadingLoc = false);
+        return;
+      }
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.deniedForever ||
+          permission == LocationPermission.denied) {
+        setState(() => _loadingLoc = false);
+        return;
+      }
+      Position pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
       );
-    } else if (_filter == 'rated') {
-      list.sort(
-        (a, b) => (b['rating'] as double).compareTo(a['rating'] as double),
-      );
-    } else if (_filter == 'cheap') {
-      list.sort((a, b) => (a['price'] as int).compareTo(b['price'] as int));
-    } else if (_filter == 'expensive') {
-      list.sort((a, b) => (b['price'] as int).compareTo(a['price'] as int));
+      setState(() {
+        _userPos = pos;
+        _loadingLoc = false;
+      });
+    } catch (e) {
+      setState(() => _loadingLoc = false);
     }
-    return list;
+  }
+
+  double _calcDistance(double fundiLat, double fundiLng) {
+    if (_userPos == null) return 0.0; // will show all if no loc
+    return Geolocator.distanceBetween(
+          _userPos!.latitude,
+          _userPos!.longitude,
+          fundiLat,
+          fundiLng,
+        ) /
+        1000; // km
   }
 
   @override
   Widget build(BuildContext context) {
-    final fundis = filteredFundis;
     return Column(
       children: [
         // FILTER BAR
@@ -105,7 +76,7 @@ class _CustomerHomeState extends State<CustomerHome> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Near You',
+                    'Fundis Near You',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w800,
                       fontSize: 18,
@@ -121,7 +92,7 @@ class _CustomerHomeState extends State<CustomerHome> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      '${_radius.toStringAsFixed(1)} km radius',
+                      '${_radius.toStringAsFixed(1)} km',
                       style: GoogleFonts.montserrat(
                         fontWeight: FontWeight.w700,
                         fontSize: 11,
@@ -130,7 +101,6 @@ class _CustomerHomeState extends State<CustomerHome> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
               Slider(
                 value: _radius,
                 min: 1,
@@ -140,14 +110,7 @@ class _CustomerHomeState extends State<CustomerHome> {
                 activeColor: FundipapColors.blackGray,
                 onChanged: (v) => setState(() => _radius = v),
               ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('1km', style: GoogleFonts.inter(fontSize: 10)),
-                  Text('20km', style: GoogleFonts.inter(fontSize: 10)),
-                ],
-              ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 4),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
@@ -155,17 +118,70 @@ class _CustomerHomeState extends State<CustomerHome> {
                     _chip('Nearest', 'distance', Icons.near_me),
                     _chip('Top Rated', 'rated', Icons.star),
                     _chip('Cheapest', 'cheap', Icons.arrow_upward),
-                    _chip('Price: High', 'expensive', Icons.arrow_downward),
+                    _chip('Price High', 'expensive', Icons.arrow_downward),
                   ],
                 ),
               ),
             ],
           ),
         ),
-        // FUNDI LIST
+        if (_loadingLoc) const LinearProgressIndicator(),
+        // REAL FIRESTORE LIST
         Expanded(
-          child: fundis.isEmpty
-              ? Center(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('fundis')
+                .where('available', isEqualTo: true)
+                .snapshots(),
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (!snap.hasData || snap.data!.docs.isEmpty) {
+                return Center(
+                  child: Text(
+                    'No fundis available yet',
+                    style: GoogleFonts.inter(),
+                  ),
+                );
+              }
+
+              var docs = snap.data!.docs
+                  .map((d) {
+                    var data = d.data() as Map<String, dynamic>;
+                    double lat = (data['lat'] ?? -0.0917).toDouble();
+                    double lng = (data['lng'] ?? 34.7680).toDouble();
+                    double dist = _userPos == null
+                        ? (data['distance'] ?? 1.0).toDouble()
+                        : _calcDistance(lat, lng);
+                    return {...data, 'id': d.id, 'calcDistance': dist};
+                  })
+                  .where((f) => (f['calcDistance'] as double) <= _radius)
+                  .toList();
+
+              // sort
+              if (_filter == 'distance') {
+                docs.sort(
+                  (a, b) => (a['calcDistance'] as double).compareTo(
+                    b['calcDistance'] as double,
+                  ),
+                );
+              } else if (_filter == 'rated') {
+                docs.sort(
+                  (a, b) => (b['rating'] ?? 0).compareTo(a['rating'] ?? 0),
+                );
+              } else if (_filter == 'cheap') {
+                docs.sort(
+                  (a, b) => (a['price'] ?? 0).compareTo(b['price'] ?? 0),
+                );
+              } else if (_filter == 'expensive') {
+                docs.sort(
+                  (a, b) => (b['price'] ?? 0).compareTo(a['price'] ?? 0),
+                );
+              }
+
+              if (docs.isEmpty) {
+                return Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -181,124 +197,133 @@ class _CustomerHomeState extends State<CustomerHome> {
                       ),
                     ],
                   ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: fundis.length,
-                  itemBuilder: (context, i) {
-                    var f = fundis[i];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.black12),
-                      ),
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 26,
-                            backgroundColor: FundipapColors.primaryYellow,
-                            child: Text(
-                              f['name'][0],
-                              style: GoogleFonts.montserrat(
-                                fontWeight: FontWeight.w800,
-                              ),
+                );
+              }
+
+              return ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: docs.length,
+                itemBuilder: (context, i) {
+                  var f = docs[i];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 26,
+                          backgroundColor: FundipapColors.primaryYellow,
+                          child: Text(
+                            (f['name'] ?? 'F')[0],
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      f['name'],
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 14,
-                                      ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    f['name'] ?? 'Fundi',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
                                     ),
-                                    if (f['verified'])
-                                      const Padding(
-                                        padding: EdgeInsets.only(left: 4),
-                                        child: Icon(
-                                          Icons.verified,
-                                          size: 14,
-                                          color: FundipapColors.greenSuccess,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                Text(
-                                  '${f['skill']} • ${f['jobs']} jobs',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11,
-                                    color: Colors.black54,
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.star,
-                                      size: 14,
-                                      color: FundipapColors.primaryYellow,
-                                    ),
-                                    Text(
-                                      ' ${f['rating']}',
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 12,
+                                  if (f['verified'] == true)
+                                    const Padding(
+                                      padding: EdgeInsets.only(left: 4),
+                                      child: Icon(
+                                        Icons.verified,
+                                        size: 14,
+                                        color: FundipapColors.greenSuccess,
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
-                                    Icon(
-                                      Icons.place,
-                                      size: 14,
-                                      color: Colors.black45,
-                                    ),
-                                    Text(
-                                      ' ${f['distance']} km',
-                                      style: GoogleFonts.inter(fontSize: 11),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'KES ${f['price']}',
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
+                                ],
+                              ),
+                              Text(
+                                '${f['skill'] ?? 'General'} • ${f['jobs'] ?? 0} jobs',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: Colors.black54,
                                 ),
-                              ],
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.star,
+                                    size: 14,
+                                    color: Colors.amber,
+                                  ),
+                                  Text(
+                                    ' ${f['rating'] ?? 4.5}',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Icon(
+                                    Icons.place,
+                                    size: 14,
+                                    color: Colors.black45,
+                                  ),
+                                  Text(
+                                    ' ${(f['calcDistance'] as double).toStringAsFixed(1)} km',
+                                    style: GoogleFonts.inter(fontSize: 11),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'KES ${f['price'] ?? 0}',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            // TODO: open escrow screen with this fundi id: f['id']
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Hire ${f['name']}')),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            minimumSize: Size.zero,
+                          ),
+                          child: Text(
+                            'Hire',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              minimumSize: Size.zero,
-                            ),
-                            onPressed: () {},
-                            child: Text(
-                              'Hire',
-                              style: GoogleFonts.montserrat(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
         ),
       ],
     );
