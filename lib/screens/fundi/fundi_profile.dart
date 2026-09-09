@@ -15,7 +15,6 @@ class FundiProfile extends StatefulWidget {
 
 class _FundiProfileState extends State<FundiProfile> {
   final _bioCtrl = TextEditingController();
-  final _priceCtrl = TextEditingController();
   final _otherProfCtrl = TextEditingController();
   final _keywordCtrl = TextEditingController();
 
@@ -85,7 +84,6 @@ class _FundiProfileState extends State<FundiProfile> {
     var combined = {...?userData, ...?data};
 
     _bioCtrl.text = combined['bio'] ?? '';
-    _priceCtrl.text = (combined['price'] ?? '').toString();
     selectedProfession =
         combined['profession'] ?? combined['skill'] ?? 'Carpentry';
     if (!professions.contains(selectedProfession)) {
@@ -103,7 +101,7 @@ class _FundiProfileState extends State<FundiProfile> {
     if ((combined['name'] ?? '').toString().length > 2) pct += 10;
     if ((combined['profession'] ?? '').toString().isNotEmpty) pct += 15;
     if ((combined['bio'] ?? '').toString().length > 20) pct += 20;
-    if ((combined['price'] ?? 0) != 0) pct += 10;
+    if ((combined['bio'] ?? '').toString().length > 20) pct += 30; // was 20+10
     if (combined['photoUrl'] != null) pct += 15;
     if ((combined['phone'] ?? '').toString().length > 5) pct += 5;
     if ((combined['resumes'] as List?)?.isNotEmpty ?? false) pct += 7;
@@ -111,6 +109,7 @@ class _FundiProfileState extends State<FundiProfile> {
     if ((combined['portfolio'] as List?)?.isNotEmpty ?? false) pct += 5;
     profilePct = pct.clamp(0, 100);
 
+    if (!mounted) return;
     setState(() => loading = false);
   }
 
@@ -133,14 +132,17 @@ class _FundiProfileState extends State<FundiProfile> {
         'photoUrl': url,
       }, SetOptions(merge: true));
       await _load();
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Photo updated +15%')));
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed: $e')));
     } finally {
+      if (!mounted) return;
       setState(() => uploadingPhoto = false);
     }
   }
@@ -161,6 +163,7 @@ class _FundiProfileState extends State<FundiProfile> {
       await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
         field: FieldValue.arrayUnion([url]),
       }, SetOptions(merge: true));
+      if (!mounted) return;
       _load();
       ScaffoldMessenger.of(
         context,
@@ -187,7 +190,7 @@ class _FundiProfileState extends State<FundiProfile> {
       'searchKeyword': finalKeyword,
       'otherSkills': selectedSkills,
       'bio': _bioCtrl.text.trim(),
-      'price': int.tryParse(_priceCtrl.text) ?? 0,
+      'available': true, // <-- ADD THIS
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
@@ -198,6 +201,7 @@ class _FundiProfileState extends State<FundiProfile> {
       'otherSkills': selectedSkills,
     }, SetOptions(merge: true));
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Public profile saved ✨'),
@@ -443,24 +447,6 @@ class _FundiProfileState extends State<FundiProfile> {
               decoration: InputDecoration(
                 hintText:
                     'e.g I install & repair washing machines, dishwashers, TVs. 5 years experience...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Rate per job',
-              style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _priceCtrl,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: 'Price KES',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),

@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../theme/app_theme.dart';
 import 'fundi_profile.dart';
+import '../../services/location_service.dart';
+import 'package:geolocator/geolocator.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});
@@ -15,8 +17,10 @@ class _FundiHomeState extends State<FundiHome> {
   String search = '';
   Map<String, dynamic>? me;
   int completedJobs = 0;
+  double totalEarned = 0;
   int profilePct = 0;
   String mySkill = 'General';
+  Position? currentPos;
 
   // Keywords per skill - so electrician sees electric jobs first
   final Map<String, List<String>> skillKeywords = {
@@ -74,6 +78,27 @@ class _FundiHomeState extends State<FundiHome> {
   void initState() {
     super.initState();
     _loadMe();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadLocation();
+    });
+  }
+
+  Future<void> _loadLocation() async {
+    var pos = await LocationService.determinePosition(context);
+    if (pos == null) return;
+    if (!mounted) return;
+    setState(() => currentPos = pos);
+    try {
+      var uid = FirebaseAuth.instance.currentUser!.uid;
+      await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
+        'lat': pos.latitude,
+        'lng': pos.longitude,
+        'locationUpdatedAt': FieldValue.serverTimestamp(),
+        'location': 'Kisumu',
+      }, SetOptions(merge: true));
+    } catch (e) {
+      print('Location save error: $e');
+    }
   }
 
   Future<void> _loadMe() async {
@@ -91,6 +116,19 @@ class _FundiHomeState extends State<FundiHome> {
         .where('fundiId', isEqualTo: uid)
         .where('status', isEqualTo: 'completed')
         .get();
+
+    double sum = 0;
+    for (var doc in jobsDone.docs) {
+      var d = doc.data();
+      sum +=
+          ((d['finalPrice'] ??
+                      d['agreedPrice'] ??
+                      d['price'] ??
+                      d['budget'] ??
+                      0)
+                  as num)
+              .toDouble();
+    }
 
     if (mounted) {
       var combined = {...?userDoc.data(), ...?fundiDoc.data()};
@@ -114,6 +152,7 @@ class _FundiHomeState extends State<FundiHome> {
       setState(() {
         me = combined;
         completedJobs = jobsDone.docs.length;
+        totalEarned = sum;
         mySkill = (combined['profession'] ?? combined['skill'] ?? 'General')
             .toString()
             .toLowerCase();
@@ -135,6 +174,69 @@ class _FundiHomeState extends State<FundiHome> {
     }
     // keyword matching from skillKeywords map as before
     return score;
+  }
+
+  Future<void> _bidForJob(Map<String, dynamic> job) async {
+    final priceCtrl = TextEditingController();
+    var uid = FirebaseAuth.instance.currentUser!.uid;
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(
+          'Bid for ${job['title']}',
+          style: GoogleFonts.montserrat(
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+          ),
+        ),
+        content: TextField(
+          controller: priceCtrl,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: 'Your price KES',
+            hintText: 'e.g. 1500',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: FundipapColors.primaryYellow,
+            ),
+            onPressed: () async {
+              if (priceCtrl.text.isEmpty) return;
+              await FirebaseFirestore.instance
+                  .collection('jobs')
+                  .doc(job['id'])
+                  .collection('bids')
+                  .doc(uid)
+                  .set({
+                    'fundiId': uid,
+                    'fundiName': me?['name'] ?? 'Fundi',
+                    'photoUrl': me?['photoUrl'],
+                    'rating': me?['rating'] ?? 4.5,
+                    'jobsDone': completedJobs,
+                    'price': int.tryParse(priceCtrl.text) ?? 0,
+                    'createdAt': FieldValue.serverTimestamp(),
+                  });
+              if (!mounted) return;
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Bid sent ✓ client will see it')),
+              );
+            },
+            child: Text(
+              'Send Bid',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -463,7 +565,7 @@ class _FundiHomeState extends State<FundiHome> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'YOU GET FULL',
+                    'TOTAL EARNED • ONLY YOU SEE THIS',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w800,
                       fontSize: 11,
@@ -471,21 +573,23 @@ class _FundiHomeState extends State<FundiHome> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'KES ${me?['price'] ?? 1200}',
+                    me == null
+                        ? 'KES --'
+                        : 'KES ${totalEarned.toStringAsFixed(0)}',
                     style: GoogleFonts.montserrat(
                       fontSize: 36,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   Text(
-                    'Platform fee paid by customer',
+                    'From $completedJobs completed jobs • Platform fee paid by customer',
                     style: GoogleFonts.inter(fontSize: 11),
                   ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
                       _stat('$completedJobs', 'Done'),
-                      _stat('${me?['rating'] ?? 4.9}', 'Rating'),
+                      _stat('${me?['rating'] ?? 5.0}', 'Rating'),
                       _stat('$profilePct%', 'Profile'),
                     ],
                   ),
@@ -715,7 +819,7 @@ class _FundiHomeState extends State<FundiHome> {
                               ),
                               const Spacer(),
                               ElevatedButton(
-                                onPressed: () {},
+                                onPressed: () => _bidForJob(data),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: FundipapColors.blackGray,
                                   minimumSize: const Size(0, 30),

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../theme/app_theme.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class CustomerHome extends StatefulWidget {
   const CustomerHome({super.key});
@@ -19,34 +20,96 @@ class _CustomerHomeState extends State<CustomerHome> {
   @override
   void initState() {
     super.initState();
-    _getLocation();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _getLocation());
   }
 
   Future<void> _getLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
+        if (!mounted) return;
         setState(() => _loadingLoc = false);
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => AlertDialog(
+            title: Text(
+              'Enable Location',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
+            ),
+            content: Text(
+              'FundiPap needs location to find fundis near you in Kisumu.',
+              style: GoogleFonts.inter(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Later'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: FundipapColors.primaryYellow,
+                  foregroundColor: Colors.black,
+                ),
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await Geolocator.openLocationSettings();
+                },
+                child: const Text('Turn On'),
+              ),
+            ],
+          ),
+        );
         return;
       }
+
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.deniedForever ||
-          permission == LocationPermission.denied) {
+      if (permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        setState(() => _loadingLoc = false);
+        await showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Permission Needed'),
+            content: const Text(
+              'Location permission is permanently denied. Open settings to allow.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Geolocator.openAppSettings();
+                },
+                child: const Text('Settings'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      if (permission == LocationPermission.denied) {
+        if (!mounted) return;
         setState(() => _loadingLoc = false);
         return;
       }
+
       Position pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
+      if (!mounted) return;
       setState(() {
         _userPos = pos;
         _loadingLoc = false;
       });
     } catch (e) {
-      setState(() => _loadingLoc = false);
+      if (mounted) setState(() => _loadingLoc = false);
     }
   }
 
@@ -59,6 +122,211 @@ class _CustomerHomeState extends State<CustomerHome> {
           fundiLng,
         ) /
         1000; // km
+  }
+
+  Future<void> _showHireSheet(Map<String, dynamic> fundi) async {
+    final titleCtrl = TextEditingController(
+      text: "Need ${fundi['skill'] ?? 'Fundi'}",
+    );
+    final descCtrl = TextEditingController();
+    final minCtrl = TextEditingController(text: "500");
+    final maxCtrl = TextEditingController(text: "2000");
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          left: 16,
+          right: 16,
+          top: 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Post Job & Invite ${fundi['name']}',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: titleCtrl,
+              decoration: InputDecoration(
+                labelText: 'Job Title',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: descCtrl,
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: 'Describe task',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: minCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Min Budget',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: maxCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Max Budget',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: FundipapColors.blackGray,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () async {
+                  // create job
+                  var jobRef = await FirebaseFirestore.instance
+                      .collection('jobs')
+                      .add({
+                        'title': titleCtrl.text,
+                        'description': descCtrl.text,
+                        'category': fundi['skill'] ?? 'General',
+                        'budgetMin': int.tryParse(minCtrl.text) ?? 0,
+                        'budgetMax': int.tryParse(maxCtrl.text) ?? 0,
+                        'status': 'open',
+                                          'customerId': FirebaseAuth.instance.currentUser!.uid,
+                        'invitedFundi': fundi['id'],
+                        'lat': _userPos?.latitude ?? -0.0917,
+                        'lng': _userPos?.longitude ?? 34.7680,
+                        'createdAt': FieldValue.serverTimestamp(),
+                      });
+                  // auto create first bid invite for this fundi
+                  Navigator.pop(ctx);
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Job posted - fundis will bid. Average will show here.',
+                      ),
+                    ),
+                  );
+                  _showBidsForJob(jobRef.id);
+                },
+                child: Text(
+                  'Post Job',
+                  style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showBidsForJob(String jobId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        expand: false,
+        builder: (_, scrollCtrl) => StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('jobs')
+              .doc(jobId)
+              .collection('bids')
+              .orderBy('price')
+              .snapshots(),
+          builder: (context, snap) {
+            if (!snap.hasData)
+              return Center(child: CircularProgressIndicator());
+            var bids = snap.data!.docs;
+            double avg = 0;
+            if (bids.isNotEmpty) {
+              avg =
+                  bids
+                      .map((d) => (d['price'] ?? 0) as num)
+                      .reduce((a, b) => a + b) /
+                  bids.length;
+            }
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    bids.isEmpty
+                        ? 'No bids yet (0 fundis)'
+                        : 'Average: KES ${avg.toStringAsFixed(0)} • ${bids.length} bids',
+                    style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollCtrl,
+                    itemCount: bids.length,
+                    itemBuilder: (_, i) {
+                      var b = bids[i].data() as Map<String, dynamic>;
+                      return ListTile(
+                        leading: CircleAvatar(
+                          child: Text((b['fundiName'] ?? 'F')[0]),
+                        ),
+                        title: Text(
+                          '${b['fundiName']} • KES ${b['price']}',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '${b['rating']}★ • ${b['jobsDone']} jobs done • 0 fraud',
+                          style: GoogleFonts.inter(fontSize: 11),
+                        ),
+                        trailing: ElevatedButton(
+                          onPressed: () {},
+                          child: Text('Accept'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -129,10 +397,7 @@ class _CustomerHomeState extends State<CustomerHome> {
         // REAL FIRESTORE LIST
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('fundis')
-                .where('available', isEqualTo: true)
-                .snapshots(),
+            stream: FirebaseFirestore.instance.collection('fundis').snapshots(),
             builder: (context, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -296,12 +561,7 @@ class _CustomerHomeState extends State<CustomerHome> {
                           ),
                         ),
                         ElevatedButton(
-                          onPressed: () {
-                            // TODO: open escrow screen with this fundi id: f['id']
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Hire ${f['name']}')),
-                            );
-                          },
+                          onPressed: () => _showHireSheet(f),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
