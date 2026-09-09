@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth/role_select_screen.dart';
+import 'screens/auth/auth_gate.dart';
 import 'screens/customer/customer_home.dart';
+import 'screens/customer/post_job_screen.dart';
+import 'screens/customer/disputes_screen.dart';
 import 'screens/fundi/fundi_home.dart';
 import 'screens/admin/admin_screen.dart';
 import 'services/auth_service.dart';
@@ -15,7 +18,7 @@ class FundiPapApp extends StatelessWidget {
       title: 'Fundi Pap - Kisumu',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      home: const RoleSelectScreen(),
+      home: const AuthGate(),
     );
   }
 }
@@ -41,13 +44,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
         PopupMenuButton<String>(
           onSelected: (value) async {
             if (value == 'profile') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      ProfileScreen(email: widget.email, role: widget.role),
-                ),
-              );
+              setState(() => _index = 3); // Profile is last now
             } else if (value == 'settings') {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('${widget.role} Settings coming soon')),
@@ -122,19 +119,42 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     if (widget.role == 'admin') {
       return Scaffold(appBar: _buildAppBar(), body: const AdminScreen());
     }
-    // CLIENT
+    // CLIENT - NEW 4 TABS: Home, Post Job, Disputes, Profile
+    final pages = [
+      const CustomerHome(), // Home dashboard
+      const PostJobScreen(), // Post Job + pending + completed inside
+      const DisputesScreen(),
+      ProfileScreen(email: widget.email, role: widget.role),
+    ];
     return Scaffold(
       appBar: _buildAppBar(),
-      body: const CustomerHome(),
+      body: pages[_index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         backgroundColor: Colors.white,
         indicatorColor: FundipapColors.primaryYellow,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.receipt), label: 'My Jobs'),
-          NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.add_box_outlined),
+            selectedIcon: Icon(Icons.add_box),
+            label: 'Post Job',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.report_problem_outlined),
+            selectedIcon: Icon(Icons.report_problem),
+            label: 'Disputes',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profile',
+          ),
         ],
       ),
     );

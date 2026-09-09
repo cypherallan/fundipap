@@ -5,6 +5,10 @@ class AuthService {
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;
 
+  // THIS MAKES SESSION PERSIST AFTER RESTART
+  User? get currentUser => _auth.currentUser;
+  Stream<User?> get authState => _auth.authStateChanges();
+
   Future<User?> login({required String email, required String password}) async {
     var cred = await _auth.signInWithEmailAndPassword(
       email: email,
@@ -13,7 +17,7 @@ class AuthService {
     return cred.user;
   }
 
-  Future<void> signUp({
+  Future<User?> signUp({
     required String email,
     required String password,
     required String role,
@@ -29,16 +33,19 @@ class AuthService {
       'phone': phone,
       'createdAt': FieldValue.serverTimestamp(),
     });
+    return cred.user;
   }
 
   Future<String?> getUserRole(String uid) async {
     var doc = await _db.collection('users').doc(uid).get();
-    return doc.data()?['role'];
+    return doc.data()?['role'] as String?;
+  }
+
+  Future<void> logout() async {
+    await _auth.signOut();
   }
 
   Future<void> sendPasswordReset(String email) async {
     await _auth.sendPasswordResetEmail(email: email);
   }
-
-  Future<void> logout() async => await _auth.signOut();
 }
