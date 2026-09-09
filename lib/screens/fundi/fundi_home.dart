@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../theme/app_theme.dart';
+import 'fundi_profile.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});
@@ -187,11 +188,17 @@ class _FundiHomeState extends State<FundiHome> {
                     Positioned(
                       bottom: 0,
                       right: 0,
+                      // change InkWell to GestureDetector too
                       child: GestureDetector(
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          '/fundiProfile',
-                        ), // or push FundiProfile()
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const FundiProfile(),
+                            ),
+                          );
+                          _loadMe();
+                        },
                         child: Container(
                           padding: const EdgeInsets.all(5),
                           decoration: BoxDecoration(
