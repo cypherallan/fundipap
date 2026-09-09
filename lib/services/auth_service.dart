@@ -5,7 +5,15 @@ class AuthService {
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;
 
-  Future<User?> signUp({
+  Future<User?> login({required String email, required String password}) async {
+    var cred = await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+    return cred.user;
+  }
+
+  Future<void> signUp({
     required String email,
     required String password,
     required String role,
@@ -17,21 +25,10 @@ class AuthService {
     );
     await _db.collection('users').doc(cred.user!.uid).set({
       'email': email,
-      'role': role, // customer, fundi, admin
+      'role': role,
       'phone': phone,
       'createdAt': FieldValue.serverTimestamp(),
-      'location':
-          null, // will be set from device GPS on profile creation - global
     });
-    return cred.user;
-  }
-
-  Future<User?> login({required String email, required String password}) async {
-    var cred = await _auth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
-    return cred.user;
   }
 
   Future<String?> getUserRole(String uid) async {
@@ -39,5 +36,9 @@ class AuthService {
     return doc.data()?['role'];
   }
 
-  Future<void> logout() => _auth.signOut();
+  Future<void> sendPasswordReset(String email) async {
+    await _auth.sendPasswordResetEmail(email: email);
+  }
+
+  Future<void> logout() async => await _auth.signOut();
 }

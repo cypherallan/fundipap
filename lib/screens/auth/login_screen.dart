@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/auth_service.dart';
 import '../../app.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final String role;
@@ -15,10 +16,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final emailCtrl = TextEditingController();
   final passCtrl = TextEditingController();
   bool loading = false;
-  static const adminEmails = [
-    'ellerhn.agwona@gmail.com',
-    'agwonamallan@gmail.com',
-  ];
+  bool showPass = false; // <-- added
 
   void _login() async {
     setState(() => loading = true);
@@ -30,12 +28,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user == null) throw 'Login failed';
       var role = await _auth.getUserRole(user.uid);
 
-      // Admin lock
-      if (role == 'admin' && !adminEmails.contains(user.email)) {
-        throw 'Not authorized as admin';
-      }
-      if (widget.role == 'admin' && !adminEmails.contains(user.email)) {
-        throw 'Only ${adminEmails.first} can login as admin';
+      // Strict admin check - only your email can be admin
+      if (role == 'admin' && user.email != 'agwonamallan@gmail.com') {
+        throw 'Only agwonamallan@gmail.com can login as admin';
       }
 
       if (!mounted) return;
@@ -81,11 +76,17 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 16),
             TextField(
               controller: passCtrl,
-              obscureText: true,
+              obscureText: !showPass,
               decoration: InputDecoration(
                 labelText: 'Password',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
+                ),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    showPass ? Icons.visibility : Icons.visibility_off,
+                  ),
+                  onPressed: () => setState(() => showPass = !showPass),
                 ),
               ),
             ),
@@ -100,6 +101,33 @@ class _LoginScreenState extends State<LoginScreen> {
                       : 'Login as ${widget.role.toUpperCase()}',
                 ),
               ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SignupScreen(role: widget.role),
+                  ),
+                );
+              },
+              child: Text('Don\'t have account? Create as ${widget.role}'),
+            ),
+            TextButton(
+              onPressed: () async {
+                if (emailCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Enter email first')),
+                  );
+                  return;
+                }
+                await _auth.sendPasswordReset(emailCtrl.text.trim());
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Reset link sent to email')),
+                );
+              },
+              child: const Text('Forgot password?'),
             ),
           ],
         ),

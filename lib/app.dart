@@ -4,6 +4,8 @@ import 'screens/auth/role_select_screen.dart';
 import 'screens/customer/customer_home.dart';
 import 'screens/fundi/fundi_home.dart';
 import 'screens/admin/admin_screen.dart';
+import 'services/auth_service.dart';
+import 'screens/profile/profile_screen.dart';
 
 class FundiPapApp extends StatelessWidget {
   const FundiPapApp({super.key});
@@ -28,11 +30,81 @@ class HomeNavigator extends StatefulWidget {
 
 class _HomeNavigatorState extends State<HomeNavigator> {
   int _index = 0;
+
+  AppBar _buildAppBar() {
+    bool isFundi = widget.role == 'fundi';
+    return AppBar(
+      backgroundColor: isFundi ? FundipapColors.blackGray : Colors.white,
+      foregroundColor: isFundi ? Colors.white : Colors.black,
+      title: Text('FUNDI PAP - ${widget.role.toUpperCase()}'),
+      actions: [
+        PopupMenuButton<String>(
+          onSelected: (value) async {
+            if (value == 'profile') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ProfileScreen(email: widget.email, role: widget.role),
+                ),
+              );
+            } else if (value == 'settings') {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('${widget.role} Settings coming soon')),
+              );
+            } else if (value == 'logout') {
+              await AuthService().logout();
+              if (!mounted) return;
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const RoleSelectScreen()),
+                (r) => false,
+              );
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'profile',
+              child: Row(
+                children: [
+                  Icon(Icons.person),
+                  SizedBox(width: 8),
+                  Text('Profile'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'settings',
+              child: Row(
+                children: [
+                  Icon(Icons.settings),
+                  SizedBox(width: 8),
+                  Text('Settings'),
+                ],
+              ),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem(
+              value: 'logout',
+              child: Row(
+                children: [
+                  Icon(Icons.logout, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text('Logout', style: TextStyle(color: Colors.red)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // ROLE BASED SCREENS
     if (widget.role == 'fundi') {
       return Scaffold(
+        appBar: _buildAppBar(),
         body: const FundiHome(),
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _index,
@@ -48,10 +120,11 @@ class _HomeNavigatorState extends State<HomeNavigator> {
       );
     }
     if (widget.role == 'admin') {
-      return const Scaffold(body: AdminScreen()); // ONLY admin features
+      return Scaffold(appBar: _buildAppBar(), body: const AdminScreen());
     }
-    // DEFAULT: CLIENT
+    // CLIENT
     return Scaffold(
+      appBar: _buildAppBar(),
       body: const CustomerHome(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
