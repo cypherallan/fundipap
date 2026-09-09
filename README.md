@@ -1,4 +1,4 @@
-# fundapp
+# fundipap
 
 A new Flutter project.
 

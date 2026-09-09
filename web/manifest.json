@@ -1,6 +1,6 @@
 {
-    "name": "fundapp",
-    "short_name": "fundapp",
+    "name": "fundipap",
+    "short_name": "fundipap",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
