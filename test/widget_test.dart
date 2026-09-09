@@ -5,6 +5,6 @@ void main() {
   testWidgets('Fundi Pap loads', (WidgetTester tester) async {
     await tester.pumpWidget(const FundiPapApp());
 
-    expect(find.text('Fundi Pap - Ogango'), findsOneWidget);
+    expect(find.text('FUNDI PAP'), findsOneWidget);
   });
 }

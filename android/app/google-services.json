@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "25675889394",
+    "project_id": "fundipap-global",
+    "storage_bucket": "fundipap-global.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:25675889394:android:9ee3c23f3eb15e852bae6b",
+        "android_client_info": {
+          "package_name": "com.example.fundipap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBBfqGk_JUx5t1Aj2H4vGIk3yRSbY2UkV0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

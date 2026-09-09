@@ -27,7 +27,7 @@ class CustomerHome extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                'OGANGO • KISUMU',
+                'FUNDIPAP • GLOBAL',
                 style: GoogleFonts.montserrat(
                   fontWeight: FontWeight.w700,
                   fontSize: 12,
@@ -43,7 +43,7 @@ class CustomerHome extends StatelessWidget {
               ),
             ),
             Text(
-              'Electrical - Wiring fix in Nyalenda',
+              'Electrical - Wiring fix in your area',
               style: GoogleFonts.inter(color: Colors.black54),
             ),
             const SizedBox(height: 24),

@@ -25,7 +25,7 @@ class AdminScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Ogango Kisumu Fundis',
+              'Fundipap Global - All Fundis',
               style: GoogleFonts.montserrat(
                 fontWeight: FontWeight.w700,
                 fontSize: 18,
