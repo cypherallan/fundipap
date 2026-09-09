@@ -16,6 +16,8 @@ class _SignupScreenState extends State<SignupScreen> {
   final phoneCtrl = TextEditingController();
   final passCtrl = TextEditingController();
   final confirmCtrl = TextEditingController();
+  final otherProfessionCtrl = TextEditingController();
+  final keywordCtrl = TextEditingController();
 
   bool loading = false;
   bool showPass = false;
@@ -25,13 +27,48 @@ class _SignupScreenState extends State<SignupScreen> {
   Color strengthColor = Colors.red;
   double strengthValue = 0;
 
+  // ALPHABETICAL + Other last + Electricals/Electronics Repair
+  // NEW - profession for fundi only
+  String selectedProfession = 'Carpentry';
+  final professions = [
+    'Carpentry',
+    'Cleaning',
+    'Electricals/Electronics Repair',
+    'Electronics Repair',
+    'Gardening',
+    'Masonry',
+    'Mechanic',
+    'Painting',
+    'Plumbing',
+    'Welding',
+    'Other', // always last
+  ];
+
+  // NEW - for multi-skills
+  List<String> selectedSkills = [];
+  final allSkills = [
+    'Carpentry',
+    'Cleaning',
+    'Dishwasher Installation',
+    'Electricals/Electronics Repair',
+    'Electronics Repair',
+    'Gardening',
+    'Masonry',
+    'Mechanic',
+    'Painting',
+    'Plumbing',
+    'TV Installation',
+    'Washing Machine Installation',
+    'Washing Machine Repair',
+    'Welding',
+  ];
+
   void _checkPassword(String pass) {
     bool hasUpper = pass.contains(RegExp(r'[A-Z]'));
     bool hasLower = pass.contains(RegExp(r'[a-z]'));
     bool hasNumber = pass.contains(RegExp(r'[0-9]'));
     bool hasSpecial = pass.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
     bool has8 = pass.length >= 8;
-
     int score = 0;
     if (has8) score++;
     if (hasUpper) score++;
@@ -46,11 +83,9 @@ class _SignupScreenState extends State<SignupScreen> {
       });
       return;
     }
-
     if (score <= 2) {
       setState(() {
-        strengthText =
-            'Weak password - needs upper, lower, number, special, 8+ chars';
+        strengthText = 'Weak - needs upper, lower, number, special, 8+ chars';
         strengthColor = Colors.red;
         strengthValue = 0.33;
       });
@@ -80,16 +115,48 @@ class _SignupScreenState extends State<SignupScreen> {
     if (strengthValue < 1.0) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(strengthText)));
+      ).showSnackBar(SnackBar(content: Text('Make password stronger')));
       return;
     }
+    if (nameCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Enter full name")));
+      return;
+    }
+    // If Other selected, validate custom fields
+    if (widget.role == 'fundi' && selectedProfession == 'Other') {
+      if (otherProfessionCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Enter your profession")));
+        return;
+      }
+      if (keywordCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Enter a keyword for your profession")),
+        );
+        return;
+      }
+    }
+
     setState(() => loading = true);
     try {
+      String finalProfession = selectedProfession == 'Other'
+          ? otherProfessionCtrl.text.trim()
+          : selectedProfession;
+      String finalKeyword = selectedProfession == 'Other'
+          ? keywordCtrl.text.trim().toLowerCase()
+          : selectedProfession.toLowerCase();
+
       await _auth.signUp(
         email: emailCtrl.text.trim(),
         password: passCtrl.text.trim(),
         role: widget.role,
         phone: phoneCtrl.text.trim(),
+        name: nameCtrl.text.trim(),
+        profession: finalProfession,
+        searchKeyword: finalKeyword, // for smart matching in Home
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -107,6 +174,8 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    bool isFundi = widget.role == 'fundi';
+    bool isOther = selectedProfession == 'Other';
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -149,7 +218,53 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            // PASSWORD FIRST
+
+            if (isFundi) ...[
+              DropdownButtonFormField<String>(
+                value: selectedProfession,
+                decoration: InputDecoration(
+                  labelText: 'Your Profession *',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.work),
+                ),
+                items: professions
+                    .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                    .toList(),
+                onChanged: (v) => setState(() => selectedProfession = v!),
+              ),
+              const SizedBox(height: 12),
+              if (isOther) ...[
+                TextField(
+                  controller: otherProfessionCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Type your profession *',
+                    hintText: 'e.g. Solar Installation',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.edit),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: keywordCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Keyword for your profession *',
+                    hintText: 'e.g. solar',
+                    helperText:
+                        'Clients search this word. We will show you solar jobs first.',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.key),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ],
+
             TextField(
               controller: passCtrl,
               obscureText: !showPass,
@@ -190,7 +305,6 @@ class _SignupScreenState extends State<SignupScreen> {
                 ],
               ),
             const SizedBox(height: 12),
-            // CONFIRM SECOND
             TextField(
               controller: confirmCtrl,
               obscureText: !showConfirm,
@@ -207,18 +321,6 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
               ),
             ),
-            if (confirmCtrl.text.isNotEmpty &&
-                passCtrl.text != confirmCtrl.text)
-              const Padding(
-                padding: EdgeInsets.only(top: 6),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    "Passwords don't match",
-                    style: TextStyle(color: Colors.red, fontSize: 12),
-                  ),
-                ),
-              ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,

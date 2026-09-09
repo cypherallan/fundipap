@@ -9,6 +9,7 @@ import 'screens/fundi/fundi_home.dart';
 import 'screens/admin/admin_screen.dart';
 import 'services/auth_service.dart';
 import 'screens/profile/profile_screen.dart';
+import 'screens/fundi/fundi_profile.dart';
 
 class FundiPapApp extends StatelessWidget {
   const FundiPapApp({super.key});
@@ -100,18 +101,29 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   @override
   Widget build(BuildContext context) {
     if (widget.role == 'fundi') {
+      final fundiPages = [
+        const FundiHome(), // Jobs + Earnings + Bio + Rating
+        const FundiProfile(), // My Advert - Resume / Certs / Portfolio
+        ProfileScreen(
+          email: widget.email,
+          role: widget.role,
+        ), // Profile + picture + password
+      ];
       return Scaffold(
         appBar: _buildAppBar(),
-        body: const FundiHome(),
+        body: fundiPages[_index.clamp(0, 2)],
         bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _index,
+          currentIndex: _index.clamp(0, 2),
           onTap: (i) => setState(() => _index = i),
+          selectedItemColor: FundipapColors.blackGray,
+          unselectedItemColor: Colors.black45,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.work), label: 'Jobs'),
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
             BottomNavigationBarItem(
-              icon: Icon(Icons.wallet),
-              label: 'Earnings',
+              icon: Icon(Icons.storefront),
+              label: 'My Advert',
             ),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
       );

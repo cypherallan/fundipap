@@ -5,7 +5,6 @@ class AuthService {
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;
 
-  // THIS MAKES SESSION PERSIST AFTER RESTART
   User? get currentUser => _auth.currentUser;
   Stream<User?> get authState => _auth.authStateChanges();
 
@@ -22,17 +21,54 @@ class AuthService {
     required String password,
     required String role,
     required String phone,
+    String? name,
+    String? profession,
+    String? searchKeyword,
+    List<String>? otherSkills, // NEW
   }) async {
     var cred = await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
-    await _db.collection('users').doc(cred.user!.uid).set({
+    var uid = cred.user!.uid;
+
+    await _db.collection('users').doc(uid).set({
+      'name': name ?? '',
       'email': email,
       'role': role,
       'phone': phone,
+      'skill': profession ?? 'General',
+      'profession': profession ?? 'General',
+      'searchKeyword': searchKeyword ?? profession?.toLowerCase() ?? 'general',
+      'otherSkills': otherSkills ?? [], // NEW - your other skills
+      'photoUrl': null,
       'createdAt': FieldValue.serverTimestamp(),
     });
+
+    if (role == 'fundi') {
+      await _db.collection('fundis').doc(uid).set({
+        'name': name ?? '',
+        'email': email,
+        'phone': phone,
+        'skill': profession ?? 'General',
+        'profession': profession ?? 'General',
+        'searchKeyword':
+            searchKeyword ?? profession?.toLowerCase() ?? 'general',
+        'otherSkills': otherSkills ?? [], // NEW
+        'specialization':
+            profession ?? 'General', // for badge "Specializes in..."
+        'bio': '',
+        'price': 0,
+        'rating': 5.0,
+        'jobs': 0,
+        'photoUrl': null,
+        'resumes': [],
+        'certificates': [],
+        'portfolio': [],
+        'location': 'Kisumu',
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
     return cred.user;
   }
 
