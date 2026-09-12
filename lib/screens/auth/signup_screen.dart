@@ -18,6 +18,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final confirmCtrl = TextEditingController();
   final otherProfessionCtrl = TextEditingController();
   final keywordCtrl = TextEditingController();
+  final usernameCtrl = TextEditingController();
 
   bool loading = false;
   bool showPass = false;
@@ -124,6 +125,12 @@ class _SignupScreenState extends State<SignupScreen> {
       ).showSnackBar(const SnackBar(content: Text("Enter full name")));
       return;
     }
+    if (usernameCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Enter username")));
+      return;
+    }
     // If Other selected, validate custom fields
     if (widget.role == 'fundi' && selectedProfession == 'Other') {
       if (otherProfessionCtrl.text.trim().isEmpty) {
@@ -155,8 +162,9 @@ class _SignupScreenState extends State<SignupScreen> {
         role: widget.role,
         phone: phoneCtrl.text.trim(),
         name: nameCtrl.text.trim(),
+        username: usernameCtrl.text.trim(), // <--- NEW
         profession: finalProfession,
-        searchKeyword: finalKeyword, // for smart matching in Home
+        searchKeyword: finalKeyword,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -194,6 +202,18 @@ class _SignupScreenState extends State<SignupScreen> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: usernameCtrl,
+              decoration: InputDecoration(
+                labelText: 'Username',
+                hintText: 'e.g. allan',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                prefixIcon: const Icon(Icons.person_outline),
               ),
             ),
             const SizedBox(height: 12),

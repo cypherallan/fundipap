@@ -22,6 +22,7 @@ class AuthService {
     required String role,
     required String phone,
     String? name,
+    String? username,
     String? profession,
     String? searchKeyword,
     List<String>? otherSkills, // NEW
@@ -34,6 +35,7 @@ class AuthService {
 
     await _db.collection('users').doc(uid).set({
       'name': name ?? '',
+      'username': username ?? '',
       'email': email,
       'role': role,
       'phone': phone,
@@ -48,6 +50,7 @@ class AuthService {
     if (role == 'fundi') {
       await _db.collection('fundis').doc(uid).set({
         'name': name ?? '',
+        'username': username ?? '',
         'email': email,
         'phone': phone,
         'skill': profession ?? 'General',

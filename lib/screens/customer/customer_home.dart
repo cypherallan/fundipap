@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../theme/app_theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'customer_home_header.dart';
+import 'widgets/customer_bid_notifications.dart';
 
 class CustomerHome extends StatefulWidget {
   const CustomerHome({super.key});
@@ -16,11 +18,24 @@ class _CustomerHomeState extends State<CustomerHome> {
   String _filter = 'distance';
   Position? _userPos;
   bool _loadingLoc = true;
+  Map<String, dynamic>? _me;
+
+  Future<void> _loadMe() async {
+    var uid = FirebaseAuth.instance.currentUser!.uid;
+    var doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    if (doc.exists) setState(() => _me = doc.data());
+  }
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _getLocation());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _getLocation();
+      _loadMe();
+    });
   }
 
   Future<void> _getLocation() async {
@@ -224,7 +239,7 @@ class _CustomerHomeState extends State<CustomerHome> {
                         'budgetMin': int.tryParse(minCtrl.text) ?? 0,
                         'budgetMax': int.tryParse(maxCtrl.text) ?? 0,
                         'status': 'open',
-                                          'customerId': FirebaseAuth.instance.currentUser!.uid,
+                        'customerId': FirebaseAuth.instance.currentUser!.uid,
                         'invitedFundi': fundi['id'],
                         'lat': _userPos?.latitude ?? -0.0917,
                         'lng': _userPos?.longitude ?? 34.7680,
@@ -330,9 +345,24 @@ class _CustomerHomeState extends State<CustomerHome> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     return Column(
       children: [
+        Container(
+          color: FundipapColors.blackGray,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          child: CustomerHomeHeader(
+            me: _me,
+            profilePct: 75,
+            completedJobs: 0,
+            onProfileTap: () {},
+          ),
+        ),
+        // FILTER BAR
+        // BID NOTIFICATIONS ROW
+        const CustomerBidNotifications(),
+
         // FILTER BAR
         Container(
           color: Colors.white,

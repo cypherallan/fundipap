@@ -17,6 +17,7 @@ class _FundiProfileState extends State<FundiProfile> {
   final _bioCtrl = TextEditingController();
   final _otherProfCtrl = TextEditingController();
   final _keywordCtrl = TextEditingController();
+  final _expCtrl = TextEditingController(); // <-- ADDED for experience years
 
   Map<String, dynamic>? data;
   Map<String, dynamic>? userData;
@@ -44,7 +45,6 @@ class _FundiProfileState extends State<FundiProfile> {
     'Welding',
     'Other',
   ];
-
   final allSkills = [
     'Carpentry',
     'Cleaning',
@@ -78,16 +78,16 @@ class _FundiProfileState extends State<FundiProfile> {
         .collection('users')
         .doc(uid)
         .get();
-
     data = fundiDoc.data() ?? {};
     userData = userDoc.data() ?? {};
     var combined = {...?userData, ...?data};
-
     _bioCtrl.text = combined['bio'] ?? '';
+    _expCtrl.text =
+        (combined['experienceYears'] ?? combined['experience'] ?? '')
+            .toString(); // <-- ADDED
     selectedProfession =
         combined['profession'] ?? combined['skill'] ?? 'Carpentry';
     if (!professions.contains(selectedProfession)) {
-      // if custom profession, set to Other and fill text
       if (selectedProfession.isNotEmpty && selectedProfession != 'General') {
         _otherProfCtrl.text = selectedProfession;
         selectedProfession = 'Other';
@@ -95,20 +95,17 @@ class _FundiProfileState extends State<FundiProfile> {
     }
     selectedSkills = List<String>.from(combined['otherSkills'] ?? []);
     _keywordCtrl.text = combined['searchKeyword'] ?? '';
-
-    // calc %
     int pct = 0;
     if ((combined['name'] ?? '').toString().length > 2) pct += 10;
     if ((combined['profession'] ?? '').toString().isNotEmpty) pct += 15;
     if ((combined['bio'] ?? '').toString().length > 20) pct += 20;
-    if ((combined['bio'] ?? '').toString().length > 20) pct += 30; // was 20+10
+    if ((combined['bio'] ?? '').toString().length > 20) pct += 30;
     if (combined['photoUrl'] != null) pct += 15;
     if ((combined['phone'] ?? '').toString().length > 5) pct += 5;
     if ((combined['resumes'] as List?)?.isNotEmpty ?? false) pct += 7;
     if ((combined['certificates'] as List?)?.isNotEmpty ?? false) pct += 8;
     if ((combined['portfolio'] as List?)?.isNotEmpty ?? false) pct += 5;
     profilePct = pct.clamp(0, 100);
-
     if (!mounted) return;
     setState(() => loading = false);
   }
@@ -183,24 +180,29 @@ class _FundiProfileState extends State<FundiProfile> {
     String finalKeyword = selectedProfession == 'Other'
         ? _keywordCtrl.text.trim().toLowerCase()
         : finalProf.toLowerCase();
-
     await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
       'profession': finalProf,
       'skill': finalProf,
       'searchKeyword': finalKeyword,
       'otherSkills': selectedSkills,
       'bio': _bioCtrl.text.trim(),
-      'available': true, // <-- ADD THIS
+      'experienceYears':
+          int.tryParse(_expCtrl.text) ?? _expCtrl.text, // <-- ADDED
+      'experience': _expCtrl.text, // <-- ADDED
+      'available': true,
       'updatedAt': FieldValue.serverTimestamp(),
+      // DO NOT overwrite these stats - keep them if exist
+      'jobsCompleted': data?['jobsCompleted'] ?? 0,
+      'fraudCount': data?['fraudCount'] ?? 0,
+      'averageRating': data?['averageRating'] ?? data?['rating'] ?? 4.5,
+      'ratingCount': data?['ratingCount'] ?? 0,
     }, SetOptions(merge: true));
-
     await FirebaseFirestore.instance.collection('users').doc(uid).set({
       'profession': finalProf,
       'skill': finalProf,
       'searchKeyword': finalKeyword,
       'otherSkills': selectedSkills,
     }, SetOptions(merge: true));
-
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -217,6 +219,12 @@ class _FundiProfileState extends State<FundiProfile> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     var combined = {...?userData, ...?data};
     bool isOther = selectedProfession == 'Other';
+    var jobsDone = combined['jobsCompleted'] ?? 0;
+    var rating = (combined['averageRating'] ?? combined['rating'] ?? 4.5)
+        .toDouble();
+    var fraud = combined['fraudCount'] ?? 0;
+    var ratingCount = combined['ratingCount'] ?? 0;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF6F6F6),
       body: SingleChildScrollView(
@@ -224,7 +232,6 @@ class _FundiProfileState extends State<FundiProfile> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // TOP PROFILE PHOTO + COMPLETION
             Center(
               child: Column(
                 children: [
@@ -332,6 +339,17 @@ class _FundiProfileState extends State<FundiProfile> {
                   : FundipapColors.primaryYellow,
               backgroundColor: Colors.black12,
             ),
+            const SizedBox(height: 16),
+            // STATS FOR FUNDI TO SEE HIMSELF
+            Row(
+              children: [
+                _stat('$jobsDone', 'Jobs Done'),
+                const SizedBox(width: 8),
+                _stat('${rating.toStringAsFixed(1)}★ ($ratingCount)', 'Rating'),
+                const SizedBox(width: 8),
+                _stat('$fraud', 'Fraud Cases'),
+              ],
+            ),
             const SizedBox(height: 20),
             Text(
               'Advertise Yourself',
@@ -345,8 +363,6 @@ class _FundiProfileState extends State<FundiProfile> {
               style: GoogleFonts.inter(color: Colors.black54, fontSize: 12),
             ),
             const SizedBox(height: 20),
-
-            // PRIMARY PROFESSION
             Text(
               'Primary Profession *',
               style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
@@ -398,8 +414,24 @@ class _FundiProfileState extends State<FundiProfile> {
               ),
             ],
             const SizedBox(height: 16),
-
-            // OTHER SKILLS MULTI
+            Text(
+              'Years of Experience',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _expCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'e.g. 5',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 16),
             Text(
               'Other skills you also do',
               style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
@@ -424,10 +456,11 @@ class _FundiProfileState extends State<FundiProfile> {
                       selected: sel,
                       onSelected: (v) {
                         setState(() {
-                          if (v)
+                          if (v) {
                             selectedSkills.add(skill);
-                          else
+                          } else {
                             selectedSkills.remove(skill);
+                          }
                         });
                       },
                     );
@@ -435,7 +468,6 @@ class _FundiProfileState extends State<FundiProfile> {
                   .toList(),
             ),
             const SizedBox(height: 20),
-
             Text(
               'Bio / About You',
               style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
@@ -483,12 +515,84 @@ class _FundiProfileState extends State<FundiProfile> {
               'portfolio',
               Icons.photo_library,
             ),
+            const SizedBox(height: 24),
+            // FUNDI CAN SEE HIS OWN FEEDBACKS
+            Text(
+              'My Customer Feedbacks',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('fundis')
+                  .doc(FirebaseAuth.instance.currentUser!.uid)
+                  .collection('reviews')
+                  .orderBy('createdAt', descending: true)
+                  .snapshots(),
+              builder: (_, snap) {
+                if (!snap.hasData) return const CircularProgressIndicator();
+                if (snap.data!.docs.isEmpty) {
+                  return Text(
+                    'No feedbacks yet',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.black45,
+                    ),
+                  );
+                }
+                return Column(
+                  children: snap.data!.docs.map((d) {
+                    var r = d.data() as Map<String, dynamic>;
+                    return ListTile(
+                      dense: true,
+                      title: Text(
+                        r['clientName'] ?? 'Client',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      subtitle: Text(
+                        r['comment'] ?? '',
+                        style: GoogleFonts.inter(fontSize: 11),
+                      ),
+                      trailing: Text('${r['rating'] ?? 5}★'),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
             const SizedBox(height: 100),
           ],
         ),
       ),
     );
   }
+
+  Widget _stat(String v, String label) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Text(
+            v,
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+            ),
+          ),
+          Text(
+            label,
+            style: GoogleFonts.inter(fontSize: 10, color: Colors.black54),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _uploadSection(String title, String field, IconData icon) {
     List urls = data?[field] ?? [];

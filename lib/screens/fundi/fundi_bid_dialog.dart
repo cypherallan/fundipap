@@ -54,7 +54,10 @@ Future<void> showFundiBidDialog({
                   'rating': me?['rating'] ?? 4.5,
                   'jobsDone': completedJobs,
                   'price': int.tryParse(priceCtrl.text) ?? 0,
+                  'customerId':
+                      job['customerId'] ?? job['clientId'], // <-- ADDED
                   'createdAt': FieldValue.serverTimestamp(),
+                  'status': 'pending', // <-- ADDED for filtering
                 });
             if (!context.mounted) return;
             Navigator.pop(context);

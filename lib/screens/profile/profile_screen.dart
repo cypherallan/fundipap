@@ -15,6 +15,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _nameCtrl = TextEditingController();
+  final _usernameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _mpesaCtrl = TextEditingController();
   final _currentPassCtrl = TextEditingController();
@@ -40,6 +41,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (doc.exists) {
         _userData = doc.data();
         _nameCtrl.text = _userData?['fullName'] ?? _userData?['name'] ?? '';
+        _usernameCtrl.text = _userData?['username'] ?? '';
         _phoneCtrl.text = _userData?['phone'] ?? '';
         _mpesaCtrl.text = _userData?['mpesa'] ?? _userData?['phone'] ?? '';
       }
@@ -53,6 +55,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       var uid = FirebaseAuth.instance.currentUser!.uid;
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'fullName': _nameCtrl.text.trim(),
+        'name': _nameCtrl.text.trim(),
+        'username': _usernameCtrl.text.trim(),
         'phone': _phoneCtrl.text.trim(),
         'mpesa': _mpesaCtrl.text.trim(),
         'email': widget.email,
@@ -221,6 +225,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 12),
           _field('Full Name', _nameCtrl, Icons.person),
+          const SizedBox(height: 12),
+          _field('Username', _usernameCtrl, Icons.alternate_email),
           const SizedBox(height: 12),
           _field(
             'Phone Number',
