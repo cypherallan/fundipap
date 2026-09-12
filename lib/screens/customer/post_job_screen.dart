@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import 'post_new_job_screen.dart';
 
+import 'package:cloud_functions/cloud_functions.dart';
+
 class PostJobScreen extends StatelessWidget {
   const PostJobScreen({super.key});
 
@@ -180,11 +182,12 @@ class PostJobScreen extends StatelessWidget {
         .where('status', whereIn: ['pending', 'countered', 'bidding'])
         .get();
     for (var b in otherBids.docs) {
-      if (b.id != bidRef.id)
+      if (b.id != bidRef.id) {
         await b.reference.update({
           'status': 'rejected',
           'rejectionCategory': 'Another offer accepted',
         });
+      }
     }
     // create escrow tx simulated
     await FirebaseFirestore.instance
@@ -210,48 +213,31 @@ class PostJobScreen extends StatelessWidget {
         .collection('users')
         .doc(uid)
         .get();
-    String phone = userDoc.data()?['phone'] ?? 'your Mpesa number';
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(
-          'Mpesa Payment - SIMULATED',
-          style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          'Simulating STK Push to $phone for KES $amount\n\nWhen you get Daraja keys, this will call your Cloud Function.',
-          style: GoogleFonts.inter(fontSize: 12),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+    String phone = userDoc.data()?['phone'] ?? '';
+    // format 2547...
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'initiateMpesaPayment',
+      );
+      final res = await callable.call({
+        'jobId': jobId,
+        'phone': phone,
+        'amount': amount,
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            res.data['simulated'] == true
+                ? 'Simulated held KES $amount'
+                : 'STK sent to $phone',
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Pay Now (Simulate)'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    await Future.delayed(const Duration(seconds: 2));
-    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
-      'escrowStatus': 'held',
-      'status': 'site_visit',
-      'escrowPaidAt': FieldValue.serverTimestamp(),
-    });
-    await FirebaseFirestore.instance
-        .collection('escrowTransactions')
-        .doc(jobId)
-        .update({'status': 'held', 'paidAt': FieldValue.serverTimestamp()});
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Payment held in escrow: KES $amount - Fundi can now start',
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
   }
 
   Future<void> _acceptRenegotiation(
@@ -467,15 +453,17 @@ class PostJobScreen extends StatelessWidget {
                   .where('customerId', isEqualTo: uid)
                   .snapshots(),
               builder: (_, snap) {
-                if (snap.hasError)
+                if (snap.hasError) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: SelectableText('Error: ${snap.error}'),
                     ),
                   );
-                if (!snap.hasData)
+                }
+                if (!snap.hasData) {
                   return const Center(child: CircularProgressIndicator());
+                }
                 var allDocs = snap.data!.docs;
                 return TabBarView(
                   children: [
@@ -527,8 +515,9 @@ class PostJobScreen extends StatelessWidget {
     List<QueryDocumentSnapshot> jobs,
     BuildContext context,
   ) {
-    if (jobs.isEmpty)
+    if (jobs.isEmpty) {
       return Center(child: Text('No pending jobs', style: GoogleFonts.inter()));
+    }
     return ListView.builder(
       padding: const EdgeInsets.all(12),
       itemCount: jobs.length,
@@ -559,19 +548,22 @@ class PostJobScreen extends StatelessWidget {
                       .collection('bids')
                       .snapshots(),
                   builder: (_, bidSnap) {
-                    if (!bidSnap.hasData)
+                    if (!bidSnap.hasData) {
                       return const LinearProgressIndicator();
+                    }
                     var bids = bidSnap.data!.docs;
-                    if (bids.isEmpty)
+                    if (bids.isEmpty) {
                       return Text(
                         'No bids yet',
                         style: GoogleFonts.inter(fontSize: 11),
                       );
+                    }
                     return Column(
                       children: bids.map((b) {
                         var bid = b.data() as Map<String, dynamic>;
-                        if (bid['status'] == 'rejected')
+                        if (bid['status'] == 'rejected') {
                           return const SizedBox.shrink();
+                        }
                         return Container(
                           margin: const EdgeInsets.only(top: 8),
                           padding: const EdgeInsets.all(10),
@@ -672,10 +664,11 @@ class PostJobScreen extends StatelessWidget {
     List<QueryDocumentSnapshot> docs,
     BuildContext context,
   ) {
-    if (docs.isEmpty)
+    if (docs.isEmpty) {
       return Center(
         child: Text('No confirmed jobs', style: GoogleFonts.inter()),
       );
+    }
     return ListView.builder(
       padding: const EdgeInsets.all(12),
       itemCount: docs.length,
@@ -811,8 +804,9 @@ class PostJobScreen extends StatelessWidget {
               .where('status', isEqualTo: 'rejected')
               .snapshots(),
           builder: (_, bidSnap) {
-            if (!bidSnap.hasData || bidSnap.data!.docs.isEmpty)
+            if (!bidSnap.hasData || bidSnap.data!.docs.isEmpty) {
               return const SizedBox.shrink();
+            }
             var bids = bidSnap.data!.docs
                 .where((b) => (b.data() as Map)['deletedForClient'] != true)
                 .toList();
@@ -856,13 +850,14 @@ class PostJobScreen extends StatelessWidget {
     List<QueryDocumentSnapshot> docs,
     BuildContext context,
   ) {
-    if (docs.isEmpty)
+    if (docs.isEmpty) {
       return Center(
         child: Text(
           'No completed jobs yet',
           style: GoogleFonts.inter(color: Colors.black45),
         ),
       );
+    }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: docs.length,
