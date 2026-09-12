@@ -6,6 +6,7 @@ import 'screens/customer/customer_home.dart';
 import 'screens/customer/post_job_screen.dart';
 import 'screens/customer/disputes_screen.dart';
 import 'screens/fundi/fundi_home.dart';
+import 'screens/fundi/disputes_screen.dart' as fundi_disputes;
 import 'screens/admin/admin_screen.dart';
 import 'services/auth_service.dart';
 import 'screens/profile/profile_screen.dart';
@@ -102,28 +103,40 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   Widget build(BuildContext context) {
     if (widget.role == 'fundi') {
       final fundiPages = [
-        const FundiHome(), // Jobs + Earnings + Bio + Rating
-        const FundiProfile(), // My Advert - Resume / Certs / Portfolio
-        ProfileScreen(
-          email: widget.email,
-          role: widget.role,
-        ), // Profile + picture + password
+        const FundiHome(),
+        const FundiProfile(),
+        const fundi_disputes.FundiDisputesScreen(),
+        ProfileScreen(email: widget.email, role: widget.role),
       ];
       return Scaffold(
         appBar: _buildAppBar(),
-        body: fundiPages[_index.clamp(0, 2)],
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _index.clamp(0, 2),
-          onTap: (i) => setState(() => _index = i),
-          selectedItemColor: FundipapColors.blackGray,
-          unselectedItemColor: Colors.black45,
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.storefront),
+        body: fundiPages[_index.clamp(0, 3)],
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _index.clamp(0, 3),
+          backgroundColor: Colors.white,
+          indicatorColor: FundipapColors.primaryYellow,
+          onDestinationSelected: (i) => setState(() => _index = i),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home),
+              label: 'Home',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.storefront_outlined),
+              selectedIcon: Icon(Icons.storefront),
               label: 'My Advert',
             ),
-            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+            NavigationDestination(
+              icon: Icon(Icons.report_problem_outlined),
+              selectedIcon: Icon(Icons.report_problem),
+              label: 'Disputes',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'Profile',
+            ),
           ],
         ),
       );
