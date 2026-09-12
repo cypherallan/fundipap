@@ -1,44 +1,46 @@
 {
-    "flutter": {
-        "platforms": {
-            "android": {
-                "default": {
-                    "projectId": "fundipap-global",
-                    "appId": "1:25675889394:android:9ee3c23f3eb15e852bae6b",
-                    "fileOutput": "android/app/google-services.json"
-                }
-            },
-            "dart": {
-                "lib/firebase_options.dart": {
-                    "projectId": "fundipap-global",
-                    "configurations": {
-                        "android": "1:25675889394:android:9ee3c23f3eb15e852bae6b",
-                        "ios": "1:25675889394:ios:b19620dcb6f39c782bae6b",
-                        "macos": "1:25675889394:ios:b19620dcb6f39c782bae6b",
-                        "web": "1:25675889394:web:7dd4c0ac3b0a607a2bae6b",
-                        "windows": "1:25675889394:web:7dd4c0ac3b0a607a2bae6b"
-                    }
-                }
-            }
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "fundipap-global",
+          "appId": "1:25675889394:android:9ee3c23f3eb15e852bae6b",
+          "fileOutput": "android/app/google-services.json"
         }
-    },
-    "firestore": {
-        "rules": "firestore.rules",
-        "indexes": "firestore.indexes.json"
-    },
-    "functions": [
-        {
-            "source": "functions",
-            "codebase": "default",
-            "ignore": [
-                "node_modules",
-                ".git",
-                "firebase-debug.log",
-                "firebase-debug.*.log"
-            ],
-            "predeploy": [
-                "npm --prefix \"$RESOURCE_DIR\" run build"
-            ]
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "fundipap-global",
+          "configurations": {
+            "android": "1:25675889394:android:9ee3c23f3eb15e852bae6b",
+            "ios": "1:25675889394:ios:b19620dcb6f39c782bae6b",
+            "macos": "1:25675889394:ios:b19620dcb6f39c782bae6b",
+            "web": "1:25675889394:web:7dd4c0ac3b0a607a2bae6b",
+            "windows": "1:25675889394:web:7dd4c0ac3b0a607a2bae6b"
+          }
         }
-    ]
+      }
+    }
+  },
+  "firestore": {
+    "database": "(default)",
+    "location": "eur3",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ]
 }

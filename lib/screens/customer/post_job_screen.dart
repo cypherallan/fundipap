@@ -5,8 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import 'post_new_job_screen.dart';
 
-import 'package:cloud_functions/cloud_functions.dart';
-
 class PostJobScreen extends StatelessWidget {
   const PostJobScreen({super.key});
 
@@ -62,7 +60,52 @@ class PostJobScreen extends StatelessWidget {
     );
   }
 
-  // NEGOTIATION: Counter bid
+  Future<void> _handleCounterBid(
+    BuildContext context,
+    String jobId,
+    Map<String, dynamic> job,
+    double currentPrice,
+  ) async {
+    try {
+      String? bidId = job['acceptedBidId']?.toString();
+      DocumentReference bidRef;
+      if (bidId != null && bidId.isNotEmpty) {
+        bidRef = FirebaseFirestore.instance
+            .collection('jobs')
+            .doc(jobId)
+            .collection('bids')
+            .doc(bidId);
+      } else {
+        final assignedFundi = job['assignedFundi'];
+        if (assignedFundi == null) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('No assigned fundi')));
+          return;
+        }
+        final q = await FirebaseFirestore.instance
+            .collection('jobs')
+            .doc(jobId)
+            .collection('bids')
+            .where('fundiId', isEqualTo: assignedFundi)
+            .limit(1)
+            .get();
+        if (q.docs.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Bid not found for counter')),
+          );
+          return;
+        }
+        bidRef = q.docs.first.reference;
+      }
+      await _counterBid(context, bidRef, jobId, currentPrice);
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Counter error: $e')));
+    }
+  }
+
   Future<void> _counterBid(
     BuildContext context,
     DocumentReference bidRef,
@@ -84,12 +127,12 @@ class PostJobScreen extends StatelessWidget {
             TextField(
               controller: ctrl,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Your price KES'),
+              decoration: const InputDecoration(labelText: 'Your counter KES'),
             ),
             TextField(
               controller: msgCtrl,
               decoration: const InputDecoration(
-                labelText: 'Message (optional)',
+                labelText: 'Reason / breakdown',
               ),
             ),
           ],
@@ -113,6 +156,7 @@ class PostJobScreen extends StatelessWidget {
         .collection('users')
         .doc(uid)
         .get();
+
     await bidRef.collection('counterOffers').add({
       'price': newPrice,
       'by': uid,
@@ -124,20 +168,51 @@ class PostJobScreen extends StatelessWidget {
       'status': 'countered',
       'lastCounterPrice': newPrice,
       'lastCounterBy': uid,
-      'updatedAt': FieldValue.serverTimestamp(),
+      'lastCounterAt': FieldValue.serverTimestamp(),
     });
-    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
-      'status': 'negotiating',
-      'priceHistory': FieldValue.arrayUnion([
-        {
-          'price': newPrice,
-          'by': uid,
-          'at': DateTime.now().toIso8601String(),
-          'type': 'counter',
-        },
-      ]),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+
+    // Update job - IMPORTANT: client cannot confirm his own counter, fundi must
+    var jobSnap = await FirebaseFirestore.instance
+        .collection('jobs')
+        .doc(jobId)
+        .get();
+    var hasReneg = (jobSnap.data()?['renegotiation']?['requested'] == true);
+
+    if (hasReneg) {
+      // This is a renegotiation counter
+      await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+        'status': 'negotiating',
+        'renegotiation.status': 'countered_by_client',
+        'renegotiation.newPrice': newPrice,
+        'renegotiation.reason': msgCtrl.text.trim(),
+        'renegotiation.lastCounterBy': uid,
+        'renegotiation.lastCounterAt': FieldValue.serverTimestamp(),
+        'priceHistory': FieldValue.arrayUnion([
+          {
+            'price': newPrice,
+            'by': uid,
+            'type': 'counter_client',
+            'at': DateTime.now().toIso8601String(),
+          },
+        ]),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      // This is initial bidding counter
+      await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+        'status': 'negotiating',
+        'renegotiation': {'requested': false},
+        'priceHistory': FieldValue.arrayUnion([
+          {
+            'price': newPrice,
+            'by': uid,
+            'type': 'counter_client',
+            'at': DateTime.now().toIso8601String(),
+          },
+        ]),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
   }
 
   Future<void> _acceptBid(
@@ -159,6 +234,7 @@ class PostJobScreen extends StatelessWidget {
       'assignedFundi': bidData['fundiId'],
       'assignedFundiName': bidData['fundiName'],
       'assignedFundiPhone': bidData['fundiPhone'] ?? '',
+      'acceptedBidId': bidRef.id,
       'agreedPrice': finalPrice,
       'laborCost': finalPrice,
       'totalCost': finalPrice,
@@ -176,7 +252,6 @@ class PostJobScreen extends StatelessWidget {
       'updatedAt': FieldValue.serverTimestamp(),
     });
     await bidRef.update({'status': 'accepted'});
-    // reject others client side
     var otherBids = await jobRef
         .collection('bids')
         .where('status', whereIn: ['pending', 'countered', 'bidding'])
@@ -189,7 +264,6 @@ class PostJobScreen extends StatelessWidget {
         });
       }
     }
-    // create escrow tx simulated
     await FirebaseFirestore.instance
         .collection('escrowTransactions')
         .doc(jobId)
@@ -208,35 +282,27 @@ class PostJobScreen extends StatelessWidget {
     String jobId,
     double amount,
   ) async {
-    var uid = FirebaseAuth.instance.currentUser!.uid;
-    var userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
-    String phone = userDoc.data()?['phone'] ?? '';
-    // format 2547...
     try {
-      final callable = FirebaseFunctions.instance.httpsCallable(
-        'initiateMpesaPayment',
-      );
-      final res = await callable.call({
-        'jobId': jobId,
-        'phone': phone,
-        'amount': amount,
+      await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+        'escrowStatus': 'held',
+        'escrowAmount': amount,
+        'escrowHeldAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            res.data['simulated'] == true
-                ? 'Simulated held KES $amount'
-                : 'STK sent to $phone',
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('KES ${amount.toInt()} held in escrow (simulated)'),
+            backgroundColor: FundipapColors.greenSuccess,
           ),
-        ),
-      );
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 
@@ -263,7 +329,6 @@ class PostJobScreen extends StatelessWidget {
       'status': 'site_visit',
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    // if new price > old, create topup requirement
     if (newPrice > oldPrice) {
       await FirebaseFirestore.instance
           .collection('escrowTransactions')
@@ -515,6 +580,7 @@ class PostJobScreen extends StatelessWidget {
     List<QueryDocumentSnapshot> jobs,
     BuildContext context,
   ) {
+    var uid = FirebaseAuth.instance.currentUser!.uid;
     if (jobs.isEmpty) {
       return Center(child: Text('No pending jobs', style: GoogleFonts.inter()));
     }
@@ -564,6 +630,9 @@ class PostJobScreen extends StatelessWidget {
                         if (bid['status'] == 'rejected') {
                           return const SizedBox.shrink();
                         }
+                        bool isMyCounter = bid['lastCounterBy'] == uid;
+                        bool isCounteredByMe =
+                            bid['status'] == 'countered' && isMyCounter;
                         return Container(
                           margin: const EdgeInsets.only(top: 8),
                           padding: const EdgeInsets.all(10),
@@ -586,42 +655,57 @@ class PostJobScreen extends StatelessWidget {
                                   bid['message'],
                                   style: GoogleFonts.inter(fontSize: 11),
                                 ),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      onPressed: () => _counterBid(
-                                        context,
-                                        b.reference,
-                                        jobId,
-                                        (bid['lastCounterPrice'] ??
-                                                bid['price'])
-                                            .toDouble(),
-                                      ),
-                                      child: const Text('Counter'),
-                                    ),
+                              if (isCounteredByMe) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  'You countered KES ${bid['lastCounterPrice']}. Waiting for fundi to accept...',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    color: Colors.blue,
+                                    fontWeight: FontWeight.w600,
                                   ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                            FundipapColors.greenSuccess,
-                                      ),
-                                      onPressed: () => _acceptBid(
-                                        context,
-                                        b.reference,
-                                        jobId,
-                                        bid,
-                                      ),
-                                      child: const Text(
-                                        'Accept',
-                                        style: TextStyle(color: Colors.white),
+                                ),
+                                const SizedBox(height: 4),
+                                const LinearProgressIndicator(),
+                              ] else ...[
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: () => _counterBid(
+                                          context,
+                                          b.reference,
+                                          jobId,
+                                          (bid['lastCounterPrice'] ??
+                                                  bid['price'])
+                                              .toDouble(),
+                                        ),
+                                        child: const Text('Counter'),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              FundipapColors.greenSuccess,
+                                        ),
+                                        onPressed: () => _acceptBid(
+                                          context,
+                                          b.reference,
+                                          jobId,
+                                          bid,
+                                        ),
+                                        child: const Text(
+                                          'Accept',
+                                          style: TextStyle(color: Colors.white),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                         );
@@ -679,10 +763,10 @@ class PostJobScreen extends StatelessWidget {
         double agreed = (job['agreedPrice'] ?? job['budget'] ?? 0).toDouble();
         String escrow = job['escrowStatus'] ?? 'pending';
         var reneg = job['renegotiation'] as Map<String, dynamic>?;
-        bool hasReneg =
+        bool showRenegCard =
             reneg != null &&
             reneg['requested'] == true &&
-            reneg['status'] == 'pending';
+            reneg['status'] != 'accepted';
         return Card(
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -697,7 +781,7 @@ class PostJobScreen extends StatelessWidget {
                   'Agreed: KES $agreed • Escrow: $escrow • ${job['status']}',
                   style: GoogleFonts.inter(fontSize: 11),
                 ),
-                if (hasReneg)
+                if (showRenegCard)
                   Container(
                     margin: const EdgeInsets.only(top: 8),
                     padding: const EdgeInsets.all(10),
@@ -710,60 +794,91 @@ class PostJobScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Fundi requests new price after site visit',
+                          reneg['status'] == 'countered_by_client'
+                              ? 'You countered'
+                              : 'Fundi requests new price after site visit',
                           style: GoogleFonts.montserrat(
                             fontWeight: FontWeight.w700,
                             fontSize: 11,
                           ),
                         ),
+                        const SizedBox(height: 4),
                         Text(
                           'New: KES ${reneg['newPrice']} Reason: ${reneg['reason']}',
                           style: GoogleFonts.inter(fontSize: 11),
                         ),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () async {
-                                  await _acceptRenegotiation(
-                                    jobId,
-                                    reneg,
-                                    agreed,
-                                  );
-                                },
-                                child: const Text('Accept New Price'),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => _counterBid(
-                                  context,
-                                  FirebaseFirestore.instance
-                                      .collection('jobs')
-                                      .doc(jobId)
-                                      .collection('bids')
-                                      .doc(job['acceptedBidId'] ?? ''),
-                                  jobId,
-                                  (reneg['newPrice']).toDouble(),
+                        const SizedBox(height: 8),
+                        if (reneg['status'] == 'pending' ||
+                            reneg['status'] == 'countered_by_fundi')
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () async =>
+                                      await _acceptRenegotiation(
+                                        jobId,
+                                        reneg,
+                                        agreed,
+                                      ),
+                                  child: const Text('Accept New Price'),
                                 ),
-                                child: const Text('Counter'),
                               ),
-                            ),
-                          ],
-                        ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () => _handleCounterBid(
+                                    context,
+                                    jobId,
+                                    job,
+                                    (reneg['newPrice'] as num).toDouble(),
+                                  ),
+                                  child: const Text('Counter'),
+                                ),
+                              ),
+                            ],
+                          )
+                        else if (reneg['status'] == 'countered_by_client')
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Waiting for fundi to accept your KES ${reneg['newPrice']}...',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const LinearProgressIndicator(),
+                            ],
+                          ),
                       ],
                     ),
                   ),
                 const SizedBox(height: 8),
                 if (escrow == 'pending')
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: FundipapColors.primaryYellow,
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: FundipapColors.primaryYellow,
+                        foregroundColor: Colors.black,
+                      ),
+                      onPressed: () => _payEscrowSimulated(
+                        context,
+                        jobId,
+                        agreed.toDouble(),
+                      ),
+                      child: Text(
+                        'Pay KES $agreed to Escrow (Mpesa Simulated)',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                          color: Colors.black,
+                        ),
+                      ),
                     ),
-                    onPressed: () =>
-                        _payEscrowSimulated(context, jobId, agreed),
-                    child: Text('Pay KES $agreed to Escrow (Mpesa Simulated)'),
                   ),
                 if (job['status'] == 'pending_completion')
                   ElevatedButton(

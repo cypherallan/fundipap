@@ -35,8 +35,6 @@ class CustomerMyJobs extends StatelessWidget {
       ),
     );
     if (confirm != true) return;
-
-    // delete bids subcollection first
     var bids = await FirebaseFirestore.instance
         .collection('jobs')
         .doc(jobId)
@@ -56,7 +54,6 @@ class CustomerMyJobs extends StatelessWidget {
     final descCtrl = TextEditingController(text: job['description']);
     final minCtrl = TextEditingController(text: job['budgetMin'].toString());
     final maxCtrl = TextEditingController(text: job['budgetMax'].toString());
-
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -171,6 +168,45 @@ class CustomerMyJobs extends StatelessWidget {
     );
   }
 
+  Future<void> _payToEscrow(String jobId, double amount) async {
+    // Simulated Mpesa - in production call your Cloud Function
+    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'escrowStatus': 'held',
+      'escrowAmount': amount,
+      'escrowHeldAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _approveNewPrice(String jobId, double newPrice) async {
+    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'agreedPrice': newPrice,
+      'budget': newPrice,
+      'budgetMax': newPrice,
+      'renegotiation.status': 'approved',
+      'renegotiation.approvedAt': FieldValue.serverTimestamp(),
+      'status': 'assigned', // go back to assigned so fundi can START JOB
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _rejectNewPrice(String jobId) async {
+    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'renegotiation.status': 'rejected',
+      'renegotiation.rejectedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _confirmCompletion(String jobId) async {
+    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'status': 'completed',
+      'escrowStatus': 'released',
+      'clientConfirmedComplete': true,
+      'completedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     var uid = FirebaseAuth.instance.currentUser!.uid;
@@ -199,6 +235,11 @@ class CustomerMyJobs extends StatelessWidget {
             var doc = jobs[i];
             var j = doc.data() as Map<String, dynamic>;
             j['id'] = doc.id;
+            String status = j['status'] ?? 'open';
+            String escrow = j['escrowStatus'] ?? 'pending';
+            bool siteDone = j['siteVisitDone'] ?? false;
+            var reneg = j['renegotiation'] as Map<String, dynamic>?;
+
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
@@ -228,13 +269,13 @@ class CustomerMyJobs extends StatelessWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: j['status'] == 'open'
+                          color: status == 'open'
                               ? FundipapColors.greenSuccess.withOpacity(0.15)
                               : Colors.grey[200],
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          j['status'] ?? 'open',
+                          status,
                           style: GoogleFonts.montserrat(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
@@ -255,48 +296,259 @@ class CustomerMyJobs extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'KES ${j['budgetMin']} - ${j['budgetMax']}',
+                    'KES ${j['budgetMin']} - ${j['budgetMax']} • Agreed: KES ${j['agreedPrice'] ?? '-'}',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
                     ),
                   ),
+
+                  // SITE VISIT NOTIFICATION - NEW
+                  if (siteDone) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Fundi visited site',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                    color: Colors.green.shade800,
+                                  ),
+                                ),
+                                if (j['siteVisitFindings'] != null)
+                                  Text(
+                                    j['siteVisitFindings'],
+                                    style: GoogleFonts.inter(fontSize: 11),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // RENEGOTIATION - NEW
+                  if (reneg != null && reneg['status'] == 'pending') ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.amber),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Fundi requests new price: KES ${reneg['newPrice']}',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Reason: ${reneg['reason'] ?? ''}',
+                            style: GoogleFonts.inter(fontSize: 11),
+                          ),
+                          if (reneg['photos'] != null &&
+                              (reneg['photos'] as List).isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Site photos:',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 10,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            SizedBox(
+                              height: 80,
+                              child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: (reneg['photos'] as List).length,
+                                itemBuilder: (_, idx) => Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(
+                                      (reneg['photos'] as List)[idx],
+                                      width: 80,
+                                      height: 80,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () => _rejectNewPrice(doc.id),
+                                  child: const Text(
+                                    'Reject',
+                                    style: TextStyle(color: Colors.black),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor:
+                                        FundipapColors.greenSuccess,
+                                  ),
+                                  onPressed: () => _approveNewPrice(
+                                    doc.id,
+                                    (reneg['newPrice'] as num).toDouble(),
+                                  ),
+                                  child: const Text(
+                                    'Approve & Pay Diff',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // ESCROW PAY BUTTON
+                  if (status == 'assigned' && escrow != 'held') ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: FundipapColors.primaryYellow,
+                        ),
+                        onPressed: () => _payToEscrow(
+                          doc.id,
+                          (j['agreedPrice'] ?? j['budgetMax'] ?? 1000)
+                              .toDouble(),
+                        ),
+                        child: Text(
+                          'PAY KES ${j['agreedPrice'] ?? j['budgetMax']} TO ESCROW (Mpesa)',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  if (status == 'in_progress') ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Fundi started job. Parts: ${(j['parts'] ?? []).length} added',
+                        style: GoogleFonts.inter(fontSize: 11),
+                      ),
+                    ),
+                  ],
+
+                  if (status == 'pending_completion') ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: FundipapColors.greenSuccess,
+                        ),
+                        onPressed: () => _confirmCompletion(doc.id),
+                        child: const Text(
+                          'CONFIRM COMPLETION & RELEASE PAYMENT',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  if (status == 'completed') ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      '✓ Completed & Paid KES ${j['agreedPrice']}',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: Colors.green,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => _editJob(context, j),
-                          icon: const Icon(Icons.edit, size: 16),
-                          label: Text(
-                            'Edit',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                  if (status == 'open')
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _editJob(context, j),
+                            icon: const Icon(Icons.edit, size: 16),
+                            label: Text(
+                              'Edit',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: FundipapColors.redAlert,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: () => _deleteJob(context, doc.id),
-                          icon: const Icon(Icons.delete, size: 16),
-                          label: Text(
-                            'Delete',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: FundipapColors.redAlert,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () => _deleteJob(context, doc.id),
+                            icon: const Icon(Icons.delete, size: 16),
+                            label: Text(
+                              'Delete',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
                 ],
               ),
             );

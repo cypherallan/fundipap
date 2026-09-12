@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // USERS collection rules - YOUR EXISTING RULES UNCHANGED
+    match /users/{userId} {
+      allow create: if request.auth != null 
+                    && request.auth.uid == userId
+                    && (
+                      request.resource.data.role in ['client', 'fundi']
+                      || (request.resource.data.role == 'admin' && request.resource.data.email == 'agwonamallan@gmail.com')
+                    );
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null 
+                    && request.auth.uid == userId
+                    && !(request.resource.data.role == 'admin' && resource.data.role != 'admin');
+    }
+
+    // --- DARAJA / ESCROW RULES - NEW ---
+    match /escrowTransactions/{jobId} {
+      // client or fundi of this job can read
+      allow read: if request.auth != null && (
+        resource == null || // allow read for create check
+        resource.data.clientId == request.auth.uid || 
+        resource.data.fundiId == request.auth.uid
+      );
+      // client can create pending record (when accepting bid)
+      allow create: if request.auth != null && request.resource.data.clientId == request.auth.uid;
+      // NO ONE can update status from app - only Cloud Functions (admin SDK bypasses rules)
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // For other collections like jobs, allow logged in users for now
+    // EXCLUDE escrowTransactions so above rules are enforced
+    match /{document=**} {
+      allow read, write: if request.auth != null && !document.matches('escrowTransactions/.*');
+    }
+  }
+}
