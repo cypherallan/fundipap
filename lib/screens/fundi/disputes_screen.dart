@@ -17,9 +17,12 @@ class FundiDisputesScreen extends StatelessWidget {
       builder: (context, snap) {
         if (snap.hasError) {
           return Center(
-            child: Text(
-              'Error: ${snap.error}',
-              style: GoogleFonts.inter(fontSize: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: SelectableText(
+                'Error: ${snap.error}',
+                style: GoogleFonts.inter(fontSize: 11),
+              ),
             ),
           );
         }

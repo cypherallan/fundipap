@@ -24,6 +24,14 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage> {
   Map<String, dynamic>? fundi;
   Map<String, dynamic>? user;
   bool loading = true;
+  final List<String> rejectReasons = [
+    'Price too high',
+    'Found another fundi with better offer',
+    'Poor ratings / fraud cases',
+    'Not available quickly',
+    'Client cancelled / changed mind',
+    'Other',
+  ];
 
   @override
   void initState() {
@@ -70,6 +78,96 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage> {
       SnackBar(
         content: Text('${widget.bidData['fundiName']} confirmed!'),
         backgroundColor: FundipapColors.greenSuccess,
+      ),
+    );
+    Navigator.pop(context);
+  }
+
+  Future<void> _rejectFundi() async {
+    String selectedReason = rejectReasons[0];
+    final otherCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: Text(
+            'Reject ${widget.bidData['fundiName']}?',
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: selectedReason,
+                decoration: const InputDecoration(
+                  labelText: 'Reason',
+                  border: OutlineInputBorder(),
+                ),
+                items: rejectReasons
+                    .map(
+                      (r) => DropdownMenuItem(
+                        value: r,
+                        child: Text(r, style: GoogleFonts.inter(fontSize: 12)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setSt(() => selectedReason = v!),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: otherCtrl,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: selectedReason == 'Other'
+                      ? 'Explain reason *'
+                      : 'More details (optional)',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: FundipapColors.redAlert,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text(
+                'Reject',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    await FirebaseFirestore.instance
+        .collection('jobs')
+        .doc(widget.jobId)
+        .collection('bids')
+        .doc(widget.bidId)
+        .update({
+          'status': 'rejected',
+          'rejectionCategory': selectedReason,
+          'rejectionReason': otherCtrl.text.trim().isEmpty
+              ? selectedReason
+              : otherCtrl.text.trim(),
+          'rejectedAt': FieldValue.serverTimestamp(),
+          'rejectedBy': FirebaseAuth.instance.currentUser!.uid,
+        });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${widget.bidData['fundiName']} rejected'),
+        backgroundColor: FundipapColors.redAlert,
       ),
     );
     Navigator.pop(context);
@@ -182,26 +280,51 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(
-                height: 52,
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: FundipapColors.blackGray,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 52),
+                        side: const BorderSide(color: FundipapColors.redAlert),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onPressed: _rejectFundi,
+                      child: Text(
+                        'REJECT',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w800,
+                          color: FundipapColors.redAlert,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ),
-                  onPressed: _confirm,
-                  child: Text(
-                    'CONFIRM ${name.toUpperCase()} • KES ${widget.bidData['price']}',
-                    style: GoogleFonts.montserrat(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: FundipapColors.blackGray,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(0, 52),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onPressed: _confirm,
+                      child: Text(
+                        'CONFIRM • KES ${widget.bidData['price']}',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
               const SizedBox(height: 8),
               TextButton.icon(

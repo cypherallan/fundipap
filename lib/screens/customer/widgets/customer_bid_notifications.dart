@@ -40,10 +40,14 @@ class _CustomerBidNotificationsState extends State<CustomerBidNotifications> {
                 .orderBy('createdAt', descending: true)
                 .snapshots()
                 .listen((bidsSnap) {
-                  // remove old bids for this job
                   _allBids.removeWhere((b) => b['jobId'] == jobId);
                   for (var bidDoc in bidsSnap.docs) {
                     var bid = bidDoc.data();
+                    // HIDE REJECTED
+                    if (bid['status'] == 'rejected' ||
+                        bid['status'] == 'accepted' ||
+                        bid['deletedForFundi'] == true)
+                      continue;
                     _allBids.add({
                       'jobId': jobId,
                       'bidId': bidDoc.id,

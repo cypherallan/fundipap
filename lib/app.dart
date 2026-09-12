@@ -11,6 +11,7 @@ import 'screens/admin/admin_screen.dart';
 import 'services/auth_service.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/fundi/fundi_profile.dart';
+import 'screens/fundi/fundi_my_jobs_page.dart';
 
 class FundiPapApp extends StatelessWidget {
   const FundiPapApp({super.key});
@@ -46,7 +47,13 @@ class _HomeNavigatorState extends State<HomeNavigator> {
         PopupMenuButton<String>(
           onSelected: (value) async {
             if (value == 'profile') {
-              setState(() => _index = 3); // Profile is last now
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ProfileScreen(email: widget.email, role: widget.role),
+                ),
+              );
             } else if (value == 'settings') {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('${widget.role} Settings coming soon')),
@@ -104,9 +111,9 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     if (widget.role == 'fundi') {
       final fundiPages = [
         const FundiHome(),
-        const FundiProfile(),
+        const FundiMyJobsPage(), // <-- NEW My Jobs
+        const FundiProfile(), // My Advert
         const fundi_disputes.FundiDisputesScreen(),
-        ProfileScreen(email: widget.email, role: widget.role),
       ];
       return Scaffold(
         appBar: _buildAppBar(),
@@ -123,6 +130,11 @@ class _HomeNavigatorState extends State<HomeNavigator> {
               label: 'Home',
             ),
             NavigationDestination(
+              icon: Icon(Icons.work_outline),
+              selectedIcon: Icon(Icons.work),
+              label: 'My Jobs',
+            ),
+            NavigationDestination(
               icon: Icon(Icons.storefront_outlined),
               selectedIcon: Icon(Icons.storefront),
               label: 'My Advert',
@@ -131,11 +143,6 @@ class _HomeNavigatorState extends State<HomeNavigator> {
               icon: Icon(Icons.report_problem_outlined),
               selectedIcon: Icon(Icons.report_problem),
               label: 'Disputes',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person),
-              label: 'Profile',
             ),
           ],
         ),
