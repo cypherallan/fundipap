@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../confirm_fundi_page.dart';
+import '../confirm/confirm_fundi_page.dart';
 
 class CustomerBidNotifications extends StatefulWidget {
   const CustomerBidNotifications({super.key});
@@ -22,7 +22,6 @@ class _CustomerBidNotificationsState extends State<CustomerBidNotifications> {
   void initState() {
     super.initState();
     var uid = FirebaseAuth.instance.currentUser!.uid;
-    // listen to my jobs
     _jobsSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('customerId', isEqualTo: uid)
@@ -43,7 +42,6 @@ class _CustomerBidNotificationsState extends State<CustomerBidNotifications> {
                   _allBids.removeWhere((b) => b['jobId'] == jobId);
                   for (var bidDoc in bidsSnap.docs) {
                     var bid = bidDoc.data();
-                    // HIDE REJECTED
                     if (bid['status'] == 'rejected' ||
                         bid['status'] == 'accepted' ||
                         bid['deletedForFundi'] == true)
@@ -78,7 +76,9 @@ class _CustomerBidNotificationsState extends State<CustomerBidNotifications> {
   @override
   void dispose() {
     _jobsSub?.cancel();
-    _bidsSubs.values.forEach((s) => s.cancel());
+    for (var s in _bidsSubs.values) {
+      s.cancel();
+    }
     super.dispose();
   }
 
@@ -143,7 +143,9 @@ class _CustomerBidNotificationsState extends State<CustomerBidNotifications> {
                           radius: 18,
                           backgroundColor: FundipapColors.blackGray,
                           child: Text(
-                            (b['fundiName'][0] ?? 'F').toUpperCase(),
+                            (b['fundiName'] as String).isNotEmpty
+                                ? (b['fundiName'][0]).toUpperCase()
+                                : 'F',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,

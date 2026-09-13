@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../theme/app_theme.dart';
+import '../../../theme/app_theme.dart';
 
 class FundiEarningsCard extends StatelessWidget {
   final Map<String, dynamic>? me;
@@ -37,9 +37,7 @@ class FundiEarningsCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            me == null
-                ? 'KES --'
-                : 'KES ${totalEarned.toStringAsFixed(0)}',
+            me == null ? 'KES --' : 'KES ${totalEarned.toStringAsFixed(0)}',
             style: GoogleFonts.montserrat(
               fontSize: 36,
               fontWeight: FontWeight.w800,

@@ -2,9 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../theme/app_theme.dart';
+import '../../../theme/app_theme.dart';
 import 'fundi_bid_dialog.dart';
-import 'client_profile_screen.dart';
+import '../client_profile_screen.dart';
 
 class JobDetailsScreen extends StatelessWidget {
   final Map<String, dynamic> job;

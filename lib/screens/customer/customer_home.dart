@@ -5,7 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../theme/app_theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'customer_home_header.dart';
-import 'widgets/customer_bid_notifications.dart';
+import 'bid_widgets/customer_bid_notifications.dart';
 
 class CustomerHome extends StatefulWidget {
   const CustomerHome({super.key});

@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../theme/app_theme.dart';
+import '../../../theme/app_theme.dart';
 
 class FundiCompletedJobs extends StatelessWidget {
   const FundiCompletedJobs({super.key});
@@ -113,12 +113,14 @@ class FundiCompletedJobs extends StatelessWidget {
           .where('status', isEqualTo: 'completed')
           .snapshots(),
       builder: (_, snap) {
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
-        if (snap.data!.docs.isEmpty)
+        }
+        if (snap.data!.docs.isEmpty) {
           return Center(
             child: Text('No completed jobs yet', style: GoogleFonts.inter()),
           );
+        }
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: snap.data!.docs.length,

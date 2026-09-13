@@ -3,15 +3,15 @@ import 'theme/app_theme.dart';
 import 'screens/auth/role_select_screen.dart';
 import 'screens/auth/auth_gate.dart';
 import 'screens/customer/customer_home.dart';
-import 'screens/customer/post_job_screen.dart';
+import 'screens/customer/my_jobs/post_job_screen.dart';
 import 'screens/customer/disputes_screen.dart';
-import 'screens/fundi/fundi_home.dart';
+import 'screens/fundi/home/fundi_home.dart'; // <-- FIXED was screens/fundi/fundi_home.dart
 import 'screens/fundi/disputes_screen.dart' as fundi_disputes;
 import 'screens/admin/admin_screen.dart';
 import 'services/auth_service.dart';
 import 'screens/profile/profile_screen.dart';
-import 'screens/fundi/fundi_profile.dart';
-import 'screens/fundi/fundi_my_jobs_page.dart';
+import 'screens/fundi/fundi_profile.dart'; // keep this if FundiProfile still in fundi/ folder, if you moved it to home/ change to home/fundi_profile.dart
+import 'screens/fundi/my_jobs/fundi_my_jobs_page.dart';
 
 class FundiPapApp extends StatelessWidget {
   const FundiPapApp({super.key});
@@ -111,8 +111,8 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     if (widget.role == 'fundi') {
       final fundiPages = [
         const FundiHome(),
-        const FundiMyJobsPage(), // <-- NEW My Jobs
-        const FundiProfile(), // My Advert
+        const FundiMyJobsPage(),
+        const FundiProfile(),
         const fundi_disputes.FundiDisputesScreen(),
       ];
       return Scaffold(
@@ -151,10 +151,9 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     if (widget.role == 'admin') {
       return Scaffold(appBar: _buildAppBar(), body: const AdminScreen());
     }
-    // CLIENT - NEW 4 TABS: Home, Post Job, Disputes, Profile
     final pages = [
-      const CustomerHome(), // Home dashboard
-      const PostJobScreen(), // Post Job + pending + completed inside
+      const CustomerHome(),
+      const PostJobScreen(),
       const DisputesScreen(),
       ProfileScreen(email: widget.email, role: widget.role),
     ];
