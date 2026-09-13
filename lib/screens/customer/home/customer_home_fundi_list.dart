@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'customer_home_fundi_card.dart';
-import 'customer_home_sheets.dart';
 
 class CustomerHomeFundiList extends StatelessWidget {
   final Position? userPos;
@@ -89,11 +88,7 @@ class CustomerHomeFundiList extends StatelessWidget {
         return ListView.builder(
           padding: const EdgeInsets.all(12),
           itemCount: docs.length,
-          itemBuilder: (context, i) => CustomerHomeFundiCard(
-            fundi: docs[i],
-            onHire: () =>
-                CustomerHomeSheets.showHireSheet(context, docs[i], userPos),
-          ),
+          itemBuilder: (context, i) => CustomerHomeFundiCard(fundi: docs[i]),
         );
       },
     );

@@ -6,6 +6,9 @@ import 'fundi_home_actions.dart';
 import 'fundi_home_header_section.dart';
 import 'fundi_home_jobs_tab.dart';
 import 'fundi_home_completed_wrapper.dart';
+import '../../chats/chat_list_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});
@@ -39,7 +42,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Container(
         color: FundipapColors.blackGray,
         child: Column(
@@ -58,19 +61,72 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: TabBar(
+                indicatorSize: TabBarIndicatorSize.tab, // <- ADD THIS
+                indicatorPadding: EdgeInsets.zero, // <- ADD THIS
+                dividerColor: Colors.transparent,
                 indicator: BoxDecoration(
                   color: FundipapColors.primaryYellow,
                   borderRadius: BorderRadius.circular(12),
                 ),
+
                 labelColor: Colors.black,
                 unselectedLabelColor: Colors.white70,
                 labelStyle: GoogleFonts.montserrat(
                   fontWeight: FontWeight.w700,
                   fontSize: 12,
                 ),
-                tabs: const [
-                  Tab(text: 'Jobs Near You'),
-                  Tab(text: 'Completed • Rate Client'),
+                tabs: [
+                  Tab(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          right: BorderSide(color: Colors.white24, width: 1),
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text('Jobs Near You'),
+                    ),
+                  ),
+                  Tab(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          right: BorderSide(color: Colors.white24, width: 1),
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text('Completed • Rate Client'),
+                    ),
+                  ),
+                  Tab(
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('chats')
+                          .where(
+                            'participants',
+                            arrayContains:
+                                FirebaseAuth.instance.currentUser!.uid,
+                          )
+                          .snapshots(),
+                      builder: (_, snap) {
+                        int total = 0;
+                        String myId = FirebaseAuth.instance.currentUser!.uid;
+                        if (snap.hasData) {
+                          for (var doc in snap.data!.docs) {
+                            var map = doc.data() as Map<String, dynamic>;
+                            var counts =
+                                map['unreadCounts'] as Map<String, dynamic>?;
+                            total += ((counts?[myId] as num?)?.toInt() ?? 0);
+                          }
+                        }
+                        return Badge(
+                          isLabelVisible: total > 0,
+                          label: Text('$total'),
+                          child: const Text('Messages'),
+                        );
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -90,6 +146,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                     currentPos: currentPos,
                   ),
                   const FundiCompletedWrapper(),
+                  const ChatListScreen(),
                 ],
               ),
             ),

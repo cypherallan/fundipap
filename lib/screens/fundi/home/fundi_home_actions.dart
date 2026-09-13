@@ -42,15 +42,32 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
 
   Future<void> loadMe() async {
     final result = await FundiHomeLogic.loadMe();
-    if (mounted) {
-      setState(() {
-        me = result.me;
-        completedJobs = result.completedJobs;
-        totalEarned = result.totalEarned;
-        mySkill = result.mySkill;
-        profilePct = result.profilePct;
-      });
+    if (!mounted) return;
+
+    // Real earnings from completed jobs
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final snap = await FirebaseFirestore.instance
+        .collection('jobs')
+        .where('assignedFundi', isEqualTo: uid)
+        .where('status', isEqualTo: 'completed')
+        .get();
+
+    double sum = 0;
+    for (var doc in snap.docs) {
+      var data = doc.data();
+      sum +=
+          ((data['agreedPrice'] ?? data['budget'] ?? data['totalCost'] ?? 0)
+                  as num)
+              .toDouble();
     }
+
+    setState(() {
+      me = result.me;
+      completedJobs = snap.docs.length; // real count
+      totalEarned = sum; // real total
+      mySkill = result.mySkill;
+      profilePct = result.profilePct;
+    });
   }
 
   int relevanceScore(Map<String, dynamic> job) =>

@@ -139,6 +139,7 @@ class FundiCompletedJobs extends StatelessWidget {
                     : ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: FundipapColors.primaryYellow,
+                          foregroundColor: Colors.black,
                         ),
                         onPressed: () async {
                           var meDoc = await FirebaseFirestore.instance
@@ -157,6 +158,7 @@ class FundiCompletedJobs extends StatelessWidget {
                           style: GoogleFonts.montserrat(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
+                            color: Colors.black,
                           ),
                         ),
                       ),

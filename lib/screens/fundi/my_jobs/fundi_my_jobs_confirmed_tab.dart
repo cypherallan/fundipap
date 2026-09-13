@@ -269,7 +269,17 @@ class FundiConfirmedTab extends StatelessWidget {
                             Expanded(
                               child: OutlinedButton(
                                 onPressed: () => onAddParts(jobId),
-                                child: const Text('Add Part Receipt'),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Colors.black),
+                                ),
+                                child: Text(
+                                  'Add Part Receipt',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11,
+                                    color: Colors.black,
+                                  ),
+                                ),
                               ),
                             ),
                             const SizedBox(width: 6),
@@ -278,8 +288,16 @@ class FundiConfirmedTab extends StatelessWidget {
                                 onPressed: () => onMarkCompleted(jobId),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: FundipapColors.primaryYellow,
+                                  foregroundColor: Colors.black,
                                 ),
-                                child: const Text('Mark Completed'),
+                                child: Text(
+                                  'Mark Completed',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11,
+                                    color: Colors.black,
+                                  ),
+                                ),
                               ),
                             ),
                           ],

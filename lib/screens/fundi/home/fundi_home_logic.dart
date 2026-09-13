@@ -71,7 +71,7 @@ class FundiHomeLogic {
         .get();
     var jobsDone = await FirebaseFirestore.instance
         .collection('jobs')
-        .where('fundiId', isEqualTo: uid)
+        .where('assignedFundi', isEqualTo: uid)
         .where('status', isEqualTo: 'completed')
         .get();
 
