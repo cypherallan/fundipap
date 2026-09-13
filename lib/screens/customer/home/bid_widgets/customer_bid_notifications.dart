@@ -14,7 +14,7 @@ class CustomerBidNotifications extends StatefulWidget {
 }
 
 class _CustomerBidNotificationsState extends State<CustomerBidNotifications> {
-  List<Map<String, dynamic>> _allBids = [];
+  final List<Map<String, dynamic>> _allBids = [];
   StreamSubscription? _jobsSub;
   final Map<String, StreamSubscription> _bidsSubs = {};
 
@@ -44,8 +44,9 @@ class _CustomerBidNotificationsState extends State<CustomerBidNotifications> {
                     var bid = bidDoc.data();
                     if (bid['status'] == 'rejected' ||
                         bid['status'] == 'accepted' ||
-                        bid['deletedForFundi'] == true)
+                        bid['deletedForFundi'] == true) {
                       continue;
+                    }
                     _allBids.add({
                       'jobId': jobId,
                       'bidId': bidDoc.id,
@@ -76,7 +77,9 @@ class _CustomerBidNotificationsState extends State<CustomerBidNotifications> {
   @override
   void dispose() {
     _jobsSub?.cancel();
-    for (var s in _bidsSubs.values) s.cancel();
+    for (var s in _bidsSubs.values) {
+      s.cancel();
+    }
     super.dispose();
   }
 
