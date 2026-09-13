@@ -3,8 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../theme/app_theme.dart';
-import '../confirm/confirm_fundi_page.dart';
+import '../../../../theme/app_theme.dart';
+import '../../confirm/confirm_fundi_page.dart';
 
 class CustomerBidNotifications extends StatefulWidget {
   const CustomerBidNotifications({super.key});
@@ -76,9 +76,7 @@ class _CustomerBidNotificationsState extends State<CustomerBidNotifications> {
   @override
   void dispose() {
     _jobsSub?.cancel();
-    for (var s in _bidsSubs.values) {
-      s.cancel();
-    }
+    for (var s in _bidsSubs.values) s.cancel();
     super.dispose();
   }
 
@@ -93,7 +91,7 @@ class _CustomerBidNotificationsState extends State<CustomerBidNotifications> {
         children: [
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.notifications_active,
                 size: 16,
                 color: FundipapColors.blackGray,
@@ -133,7 +131,9 @@ class _CustomerBidNotificationsState extends State<CustomerBidNotifications> {
                     width: 260,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: FundipapColors.primaryYellow.withOpacity(0.18),
+                      color: FundipapColors.primaryYellow.withValues(
+                        alpha: 0.18,
+                      ),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: FundipapColors.primaryYellow),
                     ),

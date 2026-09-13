@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth/role_select_screen.dart';
 import 'screens/auth/auth_gate.dart';
-import 'screens/customer/customer_home.dart';
+import 'screens/customer/home/customer_home.dart';
 import 'screens/customer/my_jobs/post_job_screen.dart';
 import 'screens/customer/disputes_screen.dart';
 import 'screens/fundi/home/fundi_home.dart'; // <-- FIXED was screens/fundi/fundi_home.dart
