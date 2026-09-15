@@ -54,7 +54,6 @@ class FundiCompletedJobs extends StatelessWidget {
                 var uid = FirebaseAuth.instance.currentUser!.uid;
                 var clientId = job['customerId'] ?? job['clientId'];
 
-                // PASTE YOUR SNIPPET HERE - START
                 await FirebaseFirestore.instance
                     .collection('users')
                     .doc(clientId)
@@ -67,28 +66,36 @@ class FundiCompletedJobs extends StatelessWidget {
                       'jobId': jobId,
                       'createdAt': FieldValue.serverTimestamp(),
                     });
-                // calc new client average
+
+                // get current average correctly
                 var clientDoc = await FirebaseFirestore.instance
                     .collection('users')
                     .doc(clientId)
                     .get();
-                var oldCount =
-                    (clientDoc.data()?['clientRatingCount'] ?? 0) as int;
-                var oldAvg = (clientDoc.data()?['clientRating'] ?? 4.5)
-                    .toDouble();
-                var newAvg = ((oldAvg * oldCount) + rating) / (oldCount + 1);
+                var data = clientDoc.data() ?? {};
+                int oldCount = (data['clientRatingCount'] ?? 0) as int;
+                double oldAvg =
+                    ((data['clientRatingAvg'] ?? data['clientRating'] ?? 0)
+                            as num)
+                        .toDouble();
+
+                double newAvg = oldCount == 0
+                    ? rating.toDouble()
+                    : ((oldAvg * oldCount) + rating) / (oldCount + 1);
+
                 await FirebaseFirestore.instance
                     .collection('users')
                     .doc(clientId)
-                    .update({
+                    .set({
                       'clientRating': newAvg,
-                      'clientRatingCount': FieldValue.increment(1),
-                    });
+                      'clientRatingAvg': newAvg,
+                      'clientRatingCount': oldCount + 1,
+                    }, SetOptions(merge: true));
+
                 await FirebaseFirestore.instance
                     .collection('jobs')
                     .doc(jobId)
                     .update({'fundiRated': true});
-                // END
 
                 Navigator.pop(context);
                 ScaffoldMessenger.of(

@@ -40,6 +40,7 @@ class ClientCompletedTab extends StatelessWidget {
                 : ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: FundipapColors.primaryYellow,
+                      foregroundColor: Colors.black,
                     ),
                     onPressed: () => onRate(context, jobId, d),
                     child: Text(
@@ -47,6 +48,7 @@ class ClientCompletedTab extends StatelessWidget {
                       style: GoogleFonts.montserrat(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
+                        color: Colors.black,
                       ),
                     ),
                   ),

@@ -17,6 +17,10 @@ class CustomerHomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    double avg = ((me?['clientRatingAvg'] ?? me?['rating'] ?? 0) as num)
+        .toDouble();
+    int count = (me?['clientRatingCount'] ?? 0) as int;
+
     return Row(
       children: [
         CircleAvatar(
@@ -24,7 +28,10 @@ class CustomerHomeHeader extends StatelessWidget {
           backgroundColor: FundipapColors.primaryYellow,
           child: Text(
             (me?['name'] ?? 'C')[0],
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w800,
+              color: Colors.black,
+            ),
           ),
         ),
         const SizedBox(width: 12),
@@ -44,6 +51,25 @@ class CustomerHomeHeader extends StatelessWidget {
                 '$completedJobs jobs done • $profilePct% profile',
                 style: GoogleFonts.inter(fontSize: 11, color: Colors.white70),
               ),
+              if (count > 0)
+                Row(
+                  children: [
+                    const Icon(Icons.star, size: 12, color: Colors.amber),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${avg.toStringAsFixed(1)} ($count ${count == 1 ? 'review' : 'reviews'})',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Text(
+                  'No ratings yet',
+                  style: GoogleFonts.inter(fontSize: 10, color: Colors.white54),
+                ),
             ],
           ),
         ),

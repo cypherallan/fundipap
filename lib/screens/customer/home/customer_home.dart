@@ -21,6 +21,8 @@ class _CustomerHomeState extends State<CustomerHome> {
   Position? _userPos;
   bool _loadingLoc = true;
   Map<String, dynamic>? _me;
+  int _completedJobs = 0;
+  int _profilePct = 0;
 
   @override
   void initState() {
@@ -28,6 +30,7 @@ class _CustomerHomeState extends State<CustomerHome> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _getLocation();
       _loadMe();
+      _loadCompletedCount();
     });
   }
 
@@ -37,7 +40,43 @@ class _CustomerHomeState extends State<CustomerHome> {
         .collection('users')
         .doc(uid)
         .get();
-    if (doc.exists && mounted) setState(() => _me = doc.data());
+    if (doc.exists && mounted) {
+      setState(() {
+        _me = doc.data();
+        _profilePct = _calcProfilePct(_me);
+      });
+    }
+  }
+
+  int _calcProfilePct(Map<String, dynamic>? data) {
+    if (data == null) return 0;
+    int total = 5;
+    int done = 0;
+    if ((data['name'] ?? '').toString().isNotEmpty) done++;
+    if ((data['phone'] ?? '').toString().isNotEmpty) done++;
+    if ((data['photoUrl'] ?? data['profileImage'] ?? '')
+        .toString()
+        .isNotEmpty) {
+      done++;
+    }
+    if ((data['location'] ?? data['address'] ?? '').toString().isNotEmpty) {
+      done++;
+    }
+    if ((data['email'] ?? '').toString().isNotEmpty) done++;
+    return ((done / total) * 100).round();
+  }
+
+  Future<void> _loadCompletedCount() async {
+    var uid = FirebaseAuth.instance.currentUser!.uid;
+    // live count
+    FirebaseFirestore.instance
+        .collection('jobs')
+        .where('customerId', isEqualTo: uid)
+        .where('status', isEqualTo: 'completed')
+        .snapshots()
+        .listen((snap) {
+          if (mounted) setState(() => _completedJobs = snap.docs.length);
+        });
   }
 
   Future<void> _getLocation() async {
@@ -143,8 +182,8 @@ class _CustomerHomeState extends State<CustomerHome> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
           child: CustomerHomeHeader(
             me: _me,
-            profilePct: 75,
-            completedJobs: 0,
+            profilePct: _profilePct,
+            completedJobs: _completedJobs,
             onProfileTap: () {},
           ),
         ),

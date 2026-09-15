@@ -34,11 +34,15 @@ Future<void> showFundiBidDialog({
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(
+            'Cancel',
+            style: GoogleFonts.montserrat(color: Colors.black54),
+          ),
         ),
         ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: FundipapColors.primaryYellow,
+            foregroundColor: Colors.black,
           ),
           onPressed: () async {
             if (priceCtrl.text.isEmpty) return;
@@ -54,10 +58,9 @@ Future<void> showFundiBidDialog({
                   'rating': me?['rating'] ?? 4.5,
                   'jobsDone': completedJobs,
                   'price': int.tryParse(priceCtrl.text) ?? 0,
-                  'customerId':
-                      job['customerId'] ?? job['clientId'], // <-- ADDED
+                  'customerId': job['customerId'] ?? job['clientId'],
                   'createdAt': FieldValue.serverTimestamp(),
-                  'status': 'pending', // <-- ADDED for filtering
+                  'status': 'pending',
                 });
             if (!context.mounted) return;
             Navigator.pop(context);
@@ -67,7 +70,10 @@ Future<void> showFundiBidDialog({
           },
           child: Text(
             'Send Bid',
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w700,
+              color: Colors.black,
+            ),
           ),
         ),
       ],

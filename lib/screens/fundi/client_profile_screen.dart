@@ -23,18 +23,22 @@ class ClientProfileScreen extends StatelessWidget {
         builder: (_, snap) {
           if (!snap.hasData)
             return const Center(child: CircularProgressIndicator());
-          var raw = snap.data!.data();
-          var data = (raw as Map<String, dynamic>?) ?? {};
+          var data = (snap.data!.data() as Map<String, dynamic>?) ?? {};
 
           return StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
-                .collection('client_ratings')
-                .where('clientId', isEqualTo: clientId)
+                .collection('users')
+                .doc(clientId)
+                .collection('clientReviews')
+                .orderBy('createdAt', descending: true)
                 .snapshots(),
             builder: (_, rSnap) {
               var ratings = rSnap.data?.docs ?? [];
-              double avg = 4.5;
-              if (ratings.isNotEmpty) {
+              double avg =
+                  (data['clientRatingAvg'] ?? data['clientRating'] ?? 0)
+                      .toDouble();
+              int count = (data['clientRatingCount'] ?? ratings.length) as int;
+              if (avg == 0 && ratings.isNotEmpty) {
                 avg =
                     ratings
                         .map(
@@ -44,6 +48,7 @@ class ClientProfileScreen extends StatelessWidget {
                         .reduce((a, b) => a + b) /
                     ratings.length;
               }
+
               return ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
@@ -71,16 +76,27 @@ class ClientProfileScreen extends StatelessWidget {
                       children: [
                         const Icon(Icons.star, color: Colors.amber, size: 18),
                         Text(
-                          ' ${avg.toStringAsFixed(1)} (${ratings.length} ratings)',
+                          ' ${avg.toStringAsFixed(1)} ($count ${count == 1 ? 'rating' : 'ratings'})',
                           style: GoogleFonts.inter(),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    'Past Jobs: ${data['jobsPosted'] ?? 0}',
-                    style: GoogleFonts.inter(),
+                  // REAL past jobs count from jobs collection
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('jobs')
+                        .where('customerId', isEqualTo: clientId)
+                        .where('status', isEqualTo: 'completed')
+                        .snapshots(),
+                    builder: (_, jobSnap) {
+                      int done = jobSnap.data?.docs.length ?? 0;
+                      return Text(
+                        'Past Jobs: $done',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                      );
+                    },
                   ),
                   const Divider(height: 32),
                   Text(
@@ -88,6 +104,14 @@ class ClientProfileScreen extends StatelessWidget {
                     style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 8),
+                  if (ratings.isEmpty)
+                    Text(
+                      'No reviews yet',
+                      style: GoogleFonts.inter(
+                        color: Colors.black54,
+                        fontSize: 12,
+                      ),
+                    ),
                   ...ratings.map((doc) {
                     var rd = doc.data() as Map<String, dynamic>;
                     return Card(
@@ -97,7 +121,7 @@ class ClientProfileScreen extends StatelessWidget {
                           style: GoogleFonts.inter(fontSize: 12),
                         ),
                         subtitle: Text(
-                          '★ ${rd['rating']}',
+                          '★ ${rd['rating']} • ${rd['fundiName'] ?? 'Fundi'}',
                           style: GoogleFonts.inter(fontSize: 11),
                         ),
                       ),
