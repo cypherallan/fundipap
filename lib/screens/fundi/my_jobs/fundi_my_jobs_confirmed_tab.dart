@@ -1,11 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../theme/app_theme.dart';
+import 'fundi_add_part_receipt.dart';
 
 class FundiConfirmedTab extends StatelessWidget {
   final Stream<QuerySnapshot> jobsStream;
-  final Future<void> Function(String jobId) onMarkSiteVisited;
   final Future<void> Function(String jobId) onRequestNewPrice;
   final Future<void> Function(String jobId) onStartJob;
   final Future<void> Function(String jobId) onAddParts;
@@ -14,12 +16,24 @@ class FundiConfirmedTab extends StatelessWidget {
   const FundiConfirmedTab({
     super.key,
     required this.jobsStream,
-    required this.onMarkSiteVisited,
     required this.onRequestNewPrice,
     required this.onStartJob,
     required this.onAddParts,
     required this.onMarkCompleted,
   });
+
+  Future<void> _startSiteVisit(
+    BuildContext context,
+    String jobId,
+    Map<String, dynamic> job,
+  ) async {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _VisitCustomerScreen(jobId: jobId, job: job),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +64,7 @@ class FundiConfirmedTab extends StatelessWidget {
             ),
           );
         }
+
         return ListView.builder(
           padding: const EdgeInsets.all(12),
           itemCount: docs.length,
@@ -94,7 +109,7 @@ class FundiConfirmedTab extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        'Waiting for client to pay to escrow (Mpesa simulated). You cannot start until held.',
+                        'Waiting for client to pay to escrow. You cannot start until held.',
                         style: GoogleFonts.inter(
                           fontSize: 11,
                           color: Colors.orange.shade800,
@@ -106,11 +121,20 @@ class FundiConfirmedTab extends StatelessWidget {
                       Row(
                         children: [
                           Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => onMarkSiteVisited(jobId),
-                              child: const Text(
-                                'Mark Site Visited',
-                                style: TextStyle(color: Colors.black),
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: FundipapColors.blackGray,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () =>
+                                  _startSiteVisit(context, jobId, job),
+                              icon: const Icon(Icons.navigation, size: 16),
+                              label: Text(
+                                'Start Site Visit',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
                             ),
                           ),
@@ -268,7 +292,15 @@ class FundiConfirmedTab extends StatelessWidget {
                           children: [
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: () => onAddParts(jobId),
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => FundiAddPartReceiptScreen(
+                                      jobId: jobId,
+                                      job: job,
+                                    ),
+                                  ),
+                                ),
                                 style: OutlinedButton.styleFrom(
                                   side: const BorderSide(color: Colors.black),
                                 ),
@@ -318,6 +350,177 @@ class FundiConfirmedTab extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _VisitCustomerScreen extends StatefulWidget {
+  final String jobId;
+  final Map<String, dynamic> job;
+  const _VisitCustomerScreen({required this.jobId, required this.job});
+
+  @override
+  State<_VisitCustomerScreen> createState() => _VisitCustomerScreenState();
+}
+
+class _VisitCustomerScreenState extends State<_VisitCustomerScreen> {
+  Position? currentPos;
+  double distance = 999999;
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _track();
+  }
+
+  Future<void> _track() async {
+    var perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied) {
+      perm = await Geolocator.requestPermission();
+    }
+    Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+      ),
+    ).listen((p) {
+      double lat = (widget.job['customerLat'] ?? widget.job['lat'] ?? -0.0917)
+          .toDouble();
+      double lng = (widget.job['customerLng'] ?? widget.job['lng'] ?? 34.7680)
+          .toDouble();
+      double d = Geolocator.distanceBetween(p.latitude, p.longitude, lat, lng);
+      if (mounted) {
+        setState(() {
+          currentPos = p;
+          distance = d;
+          loading = false;
+        });
+      }
+    });
+  }
+
+  Future<void> _openMaps() async {
+    double lat = (widget.job['customerLat'] ?? widget.job['lat'] ?? -0.0917)
+        .toDouble();
+    double lng = (widget.job['customerLng'] ?? widget.job['lng'] ?? 34.7680)
+        .toDouble();
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+    );
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _confirmVisited() async {
+    if (distance > 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'You are ${distance.toStringAsFixed(0)}m away. Get within 100m',
+          ),
+        ),
+      );
+      return;
+    }
+    await FirebaseFirestore.instance
+        .collection('jobs')
+        .doc(widget.jobId)
+        .update({
+          'siteVisitDone': true,
+          'siteVisited': true,
+          'siteVisitedAt': FieldValue.serverTimestamp(),
+          'fundiLatAtVisit': currentPos?.latitude,
+          'fundiLngAtVisit': currentPos?.longitude,
+          'status': 'site_visit',
+        });
+    if (!mounted) return;
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('✓ Site visit confirmed with GPS')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    bool canMark = distance <= 100;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Visit ${widget.job['customerName'] ?? 'Customer'}'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.black12),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    widget.job['title'] ?? '',
+                    style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.job['location'] ?? '',
+                    style: GoogleFonts.inter(fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  if (loading)
+                    const CircularProgressIndicator()
+                  else
+                    Text(
+                      '${distance.toStringAsFixed(0)}m away',
+                      style: GoogleFonts.montserrat(
+                        fontWeight: FontWeight.w700,
+                        color: canMark ? Colors.green : Colors.red,
+                        fontSize: 18,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 52),
+                ),
+                onPressed: _openMaps,
+                icon: const Icon(Icons.directions),
+                label: const Text('Open Directions in Maps'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: canMark
+                      ? FundipapColors.primaryYellow
+                      : Colors.grey.shade300,
+                  foregroundColor: Colors.black,
+                  minimumSize: const Size(double.infinity, 52),
+                ),
+                onPressed: canMark ? _confirmVisited : null,
+                icon: Icon(canMark ? Icons.check_circle : Icons.location_off),
+                label: Text(
+                  canMark
+                      ? 'I have arrived - Mark Site Visited'
+                      : 'Move within 100m to mark',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

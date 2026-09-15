@@ -62,7 +62,6 @@ class _FundiMyJobsPageState extends State<FundiMyJobsPage>
           FundiPendingTab(bidsStream: bidsStream, onCounter: counterAsFundi),
           FundiConfirmedTab(
             jobsStream: jobsStream,
-            onMarkSiteVisited: markSiteVisited,
             onRequestNewPrice: requestNewPriceAfterVisit,
             onStartJob: startJob,
             onAddParts: addParts,
