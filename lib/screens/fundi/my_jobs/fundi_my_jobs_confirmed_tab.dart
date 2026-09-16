@@ -28,6 +28,15 @@ class FundiConfirmedTab extends StatelessWidget {
     String jobId,
     Map<String, dynamic> job,
   ) async {
+    // Mark as travelling so customer sees "Fundi is travelling" ONLY after you click this
+    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'travelling': true,
+      'siteVisitStarted': true,
+      'travellingAt': FieldValue.serverTimestamp(),
+      'status': 'travelling',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    if (!context.mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -619,27 +628,23 @@ class _VisitCustomerScreenState extends State<_VisitCustomerScreen> {
 
   Future<void> _track() async {
     var perm = await Geolocator.checkPermission();
-    if (perm == LocationPermission.denied) {
-      perm = await Geolocator.requestPermission();
-    }
+    if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
     Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 5,
-      ),
-    ).listen((p) {
-      double lat = (widget.job['customerLat'] ?? widget.job['lat'] ?? -0.0917)
-          .toDouble();
-      double lng = (widget.job['customerLng'] ?? widget.job['lng'] ?? 34.7680)
-          .toDouble();
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10),
+    ).listen((p) async {
+      double lat = (widget.job['customerLat'] ?? widget.job['lat'] ?? -0.0917).toDouble();
+      double lng = (widget.job['customerLng'] ?? widget.job['lng'] ?? 34.7680).toDouble();
       double d = Geolocator.distanceBetween(p.latitude, p.longitude, lat, lng);
-      if (mounted) {
-        setState(() {
-          currentPos = p;
-          distance = d;
-          loading = false;
+      if (mounted) setState(() { currentPos = p; distance = d; loading = false; });
+      // LIVE SHARE for customer tracking banner
+      try {
+        await FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).update({
+          'fundiLiveLat': p.latitude,
+          'fundiLiveLng': p.longitude,
+          'fundiLiveAt': FieldValue.serverTimestamp(),
+          'fundiLiveDistance': d,
         });
-      }
+      } catch (_) {}
     });
   }
 
@@ -674,6 +679,7 @@ class _VisitCustomerScreenState extends State<_VisitCustomerScreen> {
           'siteVisitedAt': FieldValue.serverTimestamp(),
           'fundiLatAtVisit': currentPos?.latitude,
           'fundiLngAtVisit': currentPos?.longitude,
+          'travelling': false, // stop travelling
           'status': 'site_visit',
         });
     if (!mounted) return;

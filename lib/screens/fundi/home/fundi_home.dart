@@ -10,7 +10,7 @@ import '../../chats/chat_list_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../notifications/notification_bell.dart';
-import '../../../notifications/notification_service.dart';
+import 'fundi_notifications_banner.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});
@@ -64,68 +64,8 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                 NotificationBell(userId: uid, iconColor: Colors.white),
               ],
             ),
-            // Banner for Client bought parts / Payment released
-            StreamBuilder<QuerySnapshot>(
-              stream: NotificationService.getUserNotificationsStream(uid),
-              builder: (_, snap) {
-                if (!snap.hasData || snap.data!.docs.isEmpty)
-                  return const SizedBox.shrink();
-                var unread = snap.data!.docs.where((d) {
-                  var m = d.data() as Map<String, dynamic>;
-                  return (m['isRead'] == false) &&
-                      [
-                        'parts_bought',
-                        'payment_released',
-                        'job_confirmed',
-                        'escrow_held',
-                      ].contains(m['type']);
-                }).toList();
-                if (unread.isEmpty) return const SizedBox.shrink();
-                var data = unread.first.data() as Map<String, dynamic>;
-                return Container(
-                  margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.notifications_active,
-                        size: 16,
-                        color: Colors.blue.shade800,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              data['title'] ?? '',
-                              style: GoogleFonts.montserrat(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 11,
-                              ),
-                            ),
-                            Text(
-                              data['body'] ?? '',
-                              style: GoogleFonts.inter(fontSize: 10),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 16),
-                        onPressed: () =>
-                            NotificationService.markAsRead(unread.first.id),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+            // This now slides like your CustomerBidNotifications
+            const FundiNotificationsBanner(),
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
@@ -133,14 +73,13 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: TabBar(
-                indicatorSize: TabBarIndicatorSize.tab, // <- ADD THIS
-                indicatorPadding: EdgeInsets.zero, // <- ADD THIS
+                indicatorSize: TabBarIndicatorSize.tab,
+                indicatorPadding: EdgeInsets.zero,
                 dividerColor: Colors.transparent,
                 indicator: BoxDecoration(
                   color: FundipapColors.primaryYellow,
                   borderRadius: BorderRadius.circular(12),
                 ),
-
                 labelColor: Colors.black,
                 unselectedLabelColor: Colors.white70,
                 labelStyle: GoogleFonts.montserrat(

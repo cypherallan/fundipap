@@ -198,19 +198,17 @@ class NotificationService {
   }
 
   static Stream<QuerySnapshot> getUserNotificationsStream(String userId) {
-    return _col
-        .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .limit(50)
-        .snapshots();
+    return _col.where('userId', isEqualTo: userId).limit(50).snapshots();
   }
 
   static Stream<int> getUnreadCountStream(String userId) {
     return _col
         .where('userId', isEqualTo: userId)
-        .where('isRead', isEqualTo: false)
         .snapshots()
-        .map((s) => s.docs.length);
+        .map(
+          (s) =>
+              s.docs.where((d) => (d.data() as Map)['isRead'] == false).length,
+        );
   }
 
   static Future<void> markAsRead(String notificationId) async {

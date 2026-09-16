@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
+import '../../../notifications/notification_service.dart';
 
 mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
   Map<String, dynamic>? get fundi;
@@ -57,6 +58,18 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
         .collection('bids')
         .doc(bidId)
         .update({'status': 'accepted'});
+
+    // === 1 NOTIFICATION FOR FUNDI WHEN CLIENT ACCEPTS BID ===
+    await NotificationService.notifyUser(
+      recipientId: bidData['fundiId'],
+      title: 'Bid Accepted! 🎉',
+      body:
+          'Client accepted your bid for ${jobData['title'] ?? 'job'} - KES ${bidData['price']}',
+      type: 'bid_accepted',
+      jobId: jobId,
+      jobTitle: jobData['title'],
+    );
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
