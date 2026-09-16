@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
+import '../../../notifications/notification_bell.dart';
+import '../../../notifications/notification_service.dart';
 import 'bid_widgets/customer_bid_notifications.dart';
 import 'customer_home_filter_bar.dart';
 import 'customer_home_fundi_list.dart';
@@ -68,7 +70,6 @@ class _CustomerHomeState extends State<CustomerHome> {
 
   Future<void> _loadCompletedCount() async {
     var uid = FirebaseAuth.instance.currentUser!.uid;
-    // live count
     FirebaseFirestore.instance
         .collection('jobs')
         .where('customerId', isEqualTo: uid)
@@ -175,17 +176,101 @@ class _CustomerHomeState extends State<CustomerHome> {
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
     return Column(
       children: [
         Container(
           color: FundipapColors.blackGray,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          child: CustomerHomeHeader(
-            me: _me,
-            profilePct: _profilePct,
-            completedJobs: _completedJobs,
-            onProfileTap: () {},
+          child: Row(
+            children: [
+              Expanded(
+                child: CustomerHomeHeader(
+                  me: _me,
+                  profilePct: _profilePct,
+                  completedJobs: _completedJobs,
+                  onProfileTap: () {},
+                ),
+              ),
+              // === NOTIFICATION BELL FOR CONFIRMED JOBS ===
+              NotificationBell(userId: uid, iconColor: Colors.white),
+            ],
           ),
+        ),
+        // Show confirmed jobs notifications banner (fundi working, job completed)
+        StreamBuilder<QuerySnapshot>(
+          stream: NotificationService.getUserNotificationsStream(uid),
+          builder: (_, snap) {
+            if (!snap.hasData || snap.data!.docs.isEmpty)
+              return const SizedBox.shrink();
+            // Only show latest unread confirmed-related notification
+            var latest = snap.data!.docs.where((d) {
+              var type = (d.data() as Map)['type'] ?? '';
+              return [
+                'fundi_working',
+                'job_completed',
+                'parts_confirmed',
+                'parts_bought',
+                'payment_released',
+              ].contains(type);
+            }).toList();
+            if (latest.isEmpty) return const SizedBox.shrink();
+            var data = latest.first.data() as Map<String, dynamic>;
+            bool isRead = data['isRead'] ?? false;
+            if (isRead) return const SizedBox.shrink();
+            return Container(
+              margin: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: data['type'] == 'job_completed'
+                    ? Colors.green.shade50
+                    : Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: data['type'] == 'job_completed'
+                      ? Colors.green.shade200
+                      : Colors.orange.shade200,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    data['type'] == 'job_completed'
+                        ? Icons.check_circle
+                        : Icons.construction,
+                    size: 16,
+                    color: data['type'] == 'job_completed'
+                        ? Colors.green.shade800
+                        : Colors.orange.shade800,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          data['title'] ?? '',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                          ),
+                        ),
+                        Text(
+                          data['body'] ?? '',
+                          style: GoogleFonts.inter(fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 16),
+                    onPressed: () =>
+                        NotificationService.markAsRead(latest.first.id),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
         const CustomerBidNotifications(),
         CustomerHomeFilterBar(
