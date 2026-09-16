@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../theme/app_theme.dart';
 import 'fundi_add_part_receipt.dart';
+import 'fundi_request_new_price.dart'; // <-- ADD
 
 class FundiConfirmedTab extends StatelessWidget {
   final Stream<QuerySnapshot> jobsStream;
@@ -35,17 +36,28 @@ class FundiConfirmedTab extends StatelessWidget {
     );
   }
 
+  void _openNewPrice(
+    BuildContext context,
+    String jobId,
+    Map<String, dynamic> job,
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FundiRequestNewPriceScreen(jobId: jobId, job: job),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream: jobsStream,
       builder: (_, snap) {
-        if (snap.hasError) {
+        if (snap.hasError)
           return Center(child: SelectableText('Error: ${snap.error}'));
-        }
-        if (!snap.hasData) {
+        if (!snap.hasData)
           return const Center(child: CircularProgressIndicator());
-        }
         var docs = snap.data!.docs
             .where(
               (d) => [
@@ -56,14 +68,13 @@ class FundiConfirmedTab extends StatelessWidget {
               ].contains((d.data() as Map)['status']),
             )
             .toList();
-        if (docs.isEmpty) {
+        if (docs.isEmpty)
           return Center(
             child: Text(
               'No confirmed jobs',
               style: GoogleFonts.inter(color: Colors.black45),
             ),
           );
-        }
 
         return ListView.builder(
           padding: const EdgeInsets.all(12),
@@ -118,48 +129,99 @@ class FundiConfirmedTab extends StatelessWidget {
                     ),
                   if (escrow == 'held') ...[
                     if (!siteDone) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: FundipapColors.blackGray,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 52),
+                          ),
+                          onPressed: () => _startSiteVisit(context, jobId, job),
+                          icon: const Icon(Icons.navigation, size: 20),
+                          label: Text(
+                            'Start Site Visit - Must Visit First',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.lock,
+                              size: 14,
+                              color: Colors.red.shade700,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Visit site & mark arrived to unlock price request & start job',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  color: Colors.red.shade800,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           Expanded(
-                            child: ElevatedButton.icon(
+                            child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: FundipapColors.blackGray,
-                                foregroundColor: Colors.white,
+                                backgroundColor: Colors.grey.shade300,
+                                foregroundColor: Colors.grey.shade600,
                               ),
-                              onPressed: () =>
-                                  _startSiteVisit(context, jobId, job),
-                              icon: const Icon(Icons.navigation, size: 16),
-                              label: Text(
-                                'Start Site Visit',
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                ),
+                              onPressed: null, // LOCKED
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.lock, size: 12),
+                                  const SizedBox(width: 4),
+                                  const Text(
+                                    'Request New Price',
+                                    style: TextStyle(fontSize: 10),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: ElevatedButton(
-                              onPressed: () => onRequestNewPrice(jobId),
-                              child: const Text(
-                                'Request New Price',
-                                style: TextStyle(fontSize: 11),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.grey.shade300,
+                                foregroundColor: Colors.grey.shade600,
+                              ),
+                              onPressed: null, // LOCKED
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.lock, size: 12),
+                                  const SizedBox(width: 4),
+                                  const Text(
+                                    'Start Job',
+                                    style: TextStyle(fontSize: 10),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 6),
-                      ElevatedButton(
-                        onPressed: () => onStartJob(jobId),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: FundipapColors.greenSuccess,
-                        ),
-                        child: const Text(
-                          'START JOB WITHOUT NEW PRICE',
-                          style: TextStyle(color: Colors.white, fontSize: 11),
-                        ),
                       ),
                     ],
                     if (siteDone) ...[
@@ -193,7 +255,7 @@ class FundiConfirmedTab extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Client countered: KES ${reneg['newPrice']}',
+                                  'Client countered: KES ${reneg['counterPrice'] ?? reneg['newLaborTotal'] ?? reneg['newPrice']}',
                                   style: GoogleFonts.montserrat(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 11,
@@ -213,11 +275,8 @@ class FundiConfirmedTab extends StatelessWidget {
                                               .collection('jobs')
                                               .doc(jobId)
                                               .update({
-                                                'agreedPrice':
-                                                    reneg['newPrice'],
-                                                'totalCost': reneg['newPrice'],
-                                                'escrowAmount':
-                                                    reneg['newPrice'],
+                                               'agreedPrice': reneg['counterPrice'] ?? reneg['newLaborTotal'] ?? reneg['newPrice'],
+'laborPrice': reneg['counterPrice'] ?? reneg['newLaborTotal'] ?? reneg['newPrice'],
                                                 'renegotiation': {
                                                   'requested': false,
                                                   'status': 'accepted',
@@ -234,33 +293,59 @@ class FundiConfirmedTab extends StatelessWidget {
                                     Expanded(
                                       child: OutlinedButton(
                                         onPressed: () =>
-                                            onRequestNewPrice(jobId),
+                                            _openNewPrice(context, jobId, job),
                                         child: const Text('Counter'),
                                       ),
-                                    ),
+                                    ), // <-- FIXED
                                   ],
                                 ),
                               ],
                             ),
                           )
                         else
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'You asked KES ${reneg['newPrice']}. Waiting client...',
-                                  style: GoogleFonts.inter(fontSize: 11),
+                          Builder(
+                            builder: (_) {
+                              int extra =
+                                  (reneg['extraLabor'] ??
+                                          reneg['pendingLabor'] ??
+                                          0)
+                                      as int;
+                              int newLab =
+                                  (reneg['newLaborTotal'] ??
+                                          reneg['newPrice'] ??
+                                          0)
+                                      as int;
+                              int parts =
+                                  (reneg['partsEstimateTotal'] ??
+                                          reneg['partsTotal'] ??
+                                          0)
+                                      as int;
+                              return Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
-                                const SizedBox(height: 4),
-                                const LinearProgressIndicator(),
-                              ],
-                            ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'You asked extra KES $extra. Total labor KES $newLab',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Parts est KES $parts (paid direct to shop) - Waiting client...',
+                                      style: GoogleFonts.inter(fontSize: 10),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    const LinearProgressIndicator(),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
                       ] else if (job['status'] == 'assigned' ||
                           job['status'] == 'site_visit')
@@ -281,10 +366,11 @@ class FundiConfirmedTab extends StatelessWidget {
                             const SizedBox(width: 6),
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: () => onRequestNewPrice(jobId),
+                                onPressed: () =>
+                                    _openNewPrice(context, jobId, job),
                                 child: const Text('Request New Price'),
                               ),
-                            ),
+                            ), // <-- FIXED
                           ],
                         ),
                       if (job['status'] == 'in_progress')
@@ -354,11 +440,11 @@ class FundiConfirmedTab extends StatelessWidget {
   }
 }
 
+// _VisitCustomerScreen stays same as you have...
 class _VisitCustomerScreen extends StatefulWidget {
   final String jobId;
   final Map<String, dynamic> job;
   const _VisitCustomerScreen({required this.jobId, required this.job});
-
   @override
   State<_VisitCustomerScreen> createState() => _VisitCustomerScreenState();
 }
@@ -367,7 +453,6 @@ class _VisitCustomerScreenState extends State<_VisitCustomerScreen> {
   Position? currentPos;
   double distance = 999999;
   bool loading = true;
-
   @override
   void initState() {
     super.initState();
