@@ -5,7 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../theme/app_theme.dart';
 import 'fundi_add_part_receipt.dart';
-import 'fundi_request_new_price.dart'; // <-- ADD
+import 'fundi_request_new_price.dart';
 
 class FundiConfirmedTab extends StatelessWidget {
   final Stream<QuerySnapshot> jobsStream;
@@ -54,27 +54,35 @@ class FundiConfirmedTab extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: jobsStream,
       builder: (_, snap) {
-        if (snap.hasError)
+        if (snap.hasError) {
           return Center(child: SelectableText('Error: ${snap.error}'));
-        if (!snap.hasData)
+        }
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
-        var docs = snap.data!.docs
-            .where(
-              (d) => [
-                'assigned',
-                'site_visit',
-                'in_progress',
-                'pending_completion',
-              ].contains((d.data() as Map)['status']),
-            )
-            .toList();
-        if (docs.isEmpty)
+        }
+
+        final allDocs = snap.data!.docs;
+        var docs = allDocs.where((d) {
+          final data = d.data() as Map<String, dynamic>;
+          final s = data['status']?.toString() ?? '';
+          return [
+            'confirmed',
+            'assigned',
+            'site_visit',
+            'in_progress',
+            'pending_completion',
+            'job_completed',
+          ].contains(s);
+        }).toList();
+
+        if (docs.isEmpty) {
           return Center(
             child: Text(
               'No confirmed jobs',
               style: GoogleFonts.inter(color: Colors.black45),
             ),
           );
+        }
 
         return ListView.builder(
           padding: const EdgeInsets.all(12),
@@ -85,6 +93,7 @@ class FundiConfirmedTab extends StatelessWidget {
             String escrow = job['escrowStatus'] ?? 'pending';
             bool siteDone = job['siteVisitDone'] ?? false;
             var reneg = job['renegotiation'] as Map<String, dynamic>?;
+
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(14),
@@ -177,52 +186,6 @@ class FundiConfirmedTab extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.grey.shade300,
-                                foregroundColor: Colors.grey.shade600,
-                              ),
-                              onPressed: null, // LOCKED
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.lock, size: 12),
-                                  const SizedBox(width: 4),
-                                  const Text(
-                                    'Request New Price',
-                                    style: TextStyle(fontSize: 10),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.grey.shade300,
-                                foregroundColor: Colors.grey.shade600,
-                              ),
-                              onPressed: null, // LOCKED
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.lock, size: 12),
-                                  const SizedBox(width: 4),
-                                  const Text(
-                                    'Start Job',
-                                    style: TextStyle(fontSize: 10),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                     if (siteDone) ...[
                       Container(
@@ -242,7 +205,10 @@ class FundiConfirmedTab extends StatelessWidget {
                       const SizedBox(height: 8),
                       if (reneg != null &&
                           reneg['requested'] == true &&
-                          reneg['status'] != 'accepted') ...[
+                          !(reneg['status']?.toString().startsWith(
+                                'accepted',
+                              ) ??
+                              false)) ...[
                         if (reneg['status'] == 'countered_by_client')
                           Container(
                             padding: const EdgeInsets.all(8),
@@ -275,8 +241,14 @@ class FundiConfirmedTab extends StatelessWidget {
                                               .collection('jobs')
                                               .doc(jobId)
                                               .update({
-                                               'agreedPrice': reneg['counterPrice'] ?? reneg['newLaborTotal'] ?? reneg['newPrice'],
-'laborPrice': reneg['counterPrice'] ?? reneg['newLaborTotal'] ?? reneg['newPrice'],
+                                                'agreedPrice':
+                                                    reneg['counterPrice'] ??
+                                                    reneg['newLaborTotal'] ??
+                                                    reneg['newPrice'],
+                                                'laborPrice':
+                                                    reneg['counterPrice'] ??
+                                                    reneg['newLaborTotal'] ??
+                                                    reneg['newPrice'],
                                                 'renegotiation': {
                                                   'requested': false,
                                                   'status': 'accepted',
@@ -296,7 +268,7 @@ class FundiConfirmedTab extends StatelessWidget {
                                             _openNewPrice(context, jobId, job),
                                         child: const Text('Counter'),
                                       ),
-                                    ), // <-- FIXED
+                                    ),
                                   ],
                                 ),
                               ],
@@ -347,7 +319,157 @@ class FundiConfirmedTab extends StatelessWidget {
                               );
                             },
                           ),
-                      ] else if (job['status'] == 'assigned' ||
+                      ],
+                      if (reneg != null &&
+                          reneg['status']?.toString().startsWith('accepted') ==
+                              true)
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.green),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (reneg['currentPhase'] ==
+                                  'waiting_for_client_to_buy_parts')
+                                Text(
+                                  '✓ Accepted. Waiting for client to buy parts.',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: Colors.green.shade800,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              if (reneg['currentPhase'] ==
+                                  'client_claims_parts_bought') ...[
+                                Text(
+                                  'Client says parts bought. Confirm you have seen them.',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: Colors.green.shade800,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor:
+                                          FundipapColors.greenSuccess,
+                                    ),
+                                    onPressed: () async {
+                                      await FirebaseFirestore.instance
+                                          .collection('jobs')
+                                          .doc(jobId)
+                                          .update({
+                                            'renegotiation.currentPhase':
+                                                'parts_confirmed_by_fundi',
+                                            'renegotiation.partsConfirmedByFundi':
+                                                true,
+                                            'renegotiation.partsConfirmedAt':
+                                                FieldValue.serverTimestamp(),
+                                          });
+                                    },
+                                    child: const Text(
+                                      'CONFIRM PARTS AVAILABLE',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              if (reneg['currentPhase'] ==
+                                  'parts_confirmed_by_fundi') ...[
+                                Text(
+                                  '✓ You confirmed parts. You can now start work.',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: Colors.green.shade800,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.black,
+                                    ),
+                                    onPressed: () async {
+                                      await FirebaseFirestore.instance
+                                          .collection('jobs')
+                                          .doc(jobId)
+                                          .update({
+                                            'status': 'in_progress',
+                                            'renegotiation.currentPhase':
+                                                'fundi_working',
+                                            'workStartedAt':
+                                                FieldValue.serverTimestamp(),
+                                          });
+                                      onStartJob(jobId);
+                                    },
+                                    child: const Text(
+                                      'START JOB NOW',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              if (reneg['currentPhase'] == 'fundi_working') ...[
+                                Row(
+                                  children: [
+                                    const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'WORKING...',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 12,
+                                        color: Colors.green.shade800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                const LinearProgressIndicator(),
+                              ],
+                              if (reneg['currentPhase'] ==
+                                      'completed_by_fundi' ||
+                                  job['status'] == 'job_completed')
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle,
+                                      size: 16,
+                                      color: Colors.green.shade800,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'JOB COMPLETED',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 12,
+                                        color: Colors.green.shade800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          ),
+                        ),
+                      if (job['status'] == 'assigned' ||
                           job['status'] == 'site_visit')
                         Row(
                           children: [
@@ -370,10 +492,11 @@ class FundiConfirmedTab extends StatelessWidget {
                                     _openNewPrice(context, jobId, job),
                                 child: const Text('Request New Price'),
                               ),
-                            ), // <-- FIXED
+                            ),
                           ],
                         ),
-                      if (job['status'] == 'in_progress')
+                      if (job['status'] == 'in_progress' &&
+                          reneg?['currentPhase'] == 'fundi_working')
                         Row(
                           children: [
                             Expanded(
@@ -403,7 +526,19 @@ class FundiConfirmedTab extends StatelessWidget {
                             const SizedBox(width: 6),
                             Expanded(
                               child: ElevatedButton(
-                                onPressed: () => onMarkCompleted(jobId),
+                                onPressed: () async {
+                                  await FirebaseFirestore.instance
+                                      .collection('jobs')
+                                      .doc(jobId)
+                                      .update({
+                                        'status': 'job_completed',
+                                        'renegotiation.currentPhase':
+                                            'completed_by_fundi',
+                                        'completedAt':
+                                            FieldValue.serverTimestamp(),
+                                      });
+                                  onMarkCompleted(jobId);
+                                },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: FundipapColors.primaryYellow,
                                   foregroundColor: Colors.black,
@@ -420,12 +555,35 @@ class FundiConfirmedTab extends StatelessWidget {
                             ),
                           ],
                         ),
-                      if (job['status'] == 'pending_completion')
-                        Text(
-                          'Waiting for client to confirm completion to release KES ${job['agreedPrice']}',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: Colors.green,
+                      if (job['status'] == 'job_completed' ||
+                          job['status'] == 'pending_completion' ||
+                          reneg?['currentPhase'] == 'completed_by_fundi')
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.green.shade300),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.check_circle,
+                                size: 16,
+                                color: Colors.green.shade800,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Job Completed - Waiting for client to release KES ${reneg?['newLaborTotal'] ?? job['agreedPrice'] ?? 0}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.green.shade800,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                     ],
@@ -440,7 +598,6 @@ class FundiConfirmedTab extends StatelessWidget {
   }
 }
 
-// _VisitCustomerScreen stays same as you have...
 class _VisitCustomerScreen extends StatefulWidget {
   final String jobId;
   final Map<String, dynamic> job;
@@ -453,6 +610,7 @@ class _VisitCustomerScreenState extends State<_VisitCustomerScreen> {
   Position? currentPos;
   double distance = 999999;
   bool loading = true;
+
   @override
   void initState() {
     super.initState();

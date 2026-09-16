@@ -33,21 +33,16 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
           .collection('jobs')
           .doc(widget.jobId)
           .update({
-            'agreedPrice': reneg['newLaborTotal'], // labor only!
+            'agreedPrice': reneg['newLaborTotal'],
             'laborPrice': reneg['newLaborTotal'],
-            'status': 'confirmed', // KEEP IT IN CONFIRMED
+            'status': 'in_progress', // <- keeps it in fundi + client confirmed
             'renegotiation.status': 'accepted_client_buys_parts',
             'renegotiation.whoBuysParts': 'client',
             'renegotiation.currentPhase': 'waiting_for_client_to_buy_parts',
             'renegotiation.acceptedAt': FieldValue.serverTimestamp(),
-            'renegotiation.acceptedBy': 'client',
           });
       if (!mounted) return;
       Navigator.pop(context);
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -62,21 +57,16 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
           .update({
             'agreedPrice': reneg['newLaborTotal'],
             'laborPrice': reneg['newLaborTotal'],
-            'status': 'confirmed', // KEEP IT IN CONFIRMED
+            'status': 'in_progress', // <- keeps it in fundi + client confirmed
             'renegotiation.status': 'accepted_fundi_buys_at_client_risk',
             'renegotiation.whoBuysParts': 'fundi',
             'renegotiation.partsPaidTo': 'shop_direct',
             'renegotiation.currentPhase': 'fundi_buying_parts',
             'renegotiation.riskAccepted': true,
             'renegotiation.acceptedAt': FieldValue.serverTimestamp(),
-            'renegotiation.acceptedBy': 'client',
           });
       if (!mounted) return;
       Navigator.pop(context);
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => loading = false);
     }

@@ -25,6 +25,7 @@ class ClientConfirmedTab extends StatelessWidget {
     required this.onPayEscrow,
     required this.onConfirmCompletion,
   });
+
   @override
   Widget build(BuildContext context) {
     if (docs.isEmpty) {
@@ -46,12 +47,110 @@ class ClientConfirmedTab extends StatelessWidget {
             reneg != null &&
             reneg['requested'] == true &&
             reneg['status'] != 'accepted';
+
         return Card(
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // === HEADER: JOB COMPLETED vs FUNDI WORKING ===
+                if (reneg != null &&
+                    (reneg['currentPhase'] == 'completed_by_fundi' ||
+                        job['status'] == 'job_completed' ||
+                        job['status'] == 'pending_completion'))
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          size: 18,
+                          color: Colors.green.shade800,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Job Completed - Review & Release Payment',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                              color: Colors.green.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (reneg != null &&
+                    (reneg['currentPhase'] == 'fundi_working' ||
+                        reneg['currentPhase'] == 'parts_confirmed_by_fundi'))
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: reneg['currentPhase'] == 'fundi_working'
+                          ? Colors.green.shade50
+                          : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: reneg['currentPhase'] == 'fundi_working'
+                            ? Colors.green.shade300
+                            : Colors.orange.shade300,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          reneg['currentPhase'] == 'fundi_working'
+                              ? Icons.construction
+                              : Icons.check_circle,
+                          size: 18,
+                          color: reneg['currentPhase'] == 'fundi_working'
+                              ? Colors.green.shade800
+                              : Colors.orange.shade800,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                reneg['currentPhase'] == 'fundi_working'
+                                    ? 'Fundi is working...'
+                                    : 'Fundi confirmed parts - starting work',
+                                style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12,
+                                  color:
+                                      reneg['currentPhase'] == 'fundi_working'
+                                      ? Colors.green.shade800
+                                      : Colors.orange.shade800,
+                                ),
+                              ),
+                              Text(
+                                'Labor KES ${reneg['newLaborTotal'] ?? agreed.toInt()} in escrow • Parts: ${(job['parts'] ?? []).length}',
+                                style: GoogleFonts.inter(fontSize: 10),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (reneg['currentPhase'] == 'fundi_working')
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                      ],
+                    ),
+                  ),
+
                 Text(
                   job['title'] ?? '',
                   style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
@@ -60,6 +159,7 @@ class ClientConfirmedTab extends StatelessWidget {
                   'Agreed: KES $agreed • Escrow: $escrow • ${job['status']}',
                   style: GoogleFonts.inter(fontSize: 11),
                 ),
+
                 if (showRenegCard)
                   Container(
                     margin: const EdgeInsets.only(top: 8),
@@ -94,7 +194,6 @@ class ClientConfirmedTab extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 6),
-                        // NEW STRUCTURE SUPPORT
                         if (reneg['reasons'] != null)
                           Wrap(
                             spacing: 4,
@@ -120,9 +219,7 @@ class ClientConfirmedTab extends StatelessWidget {
                             'Reason: ${reneg['reason']}',
                             style: GoogleFonts.inter(fontSize: 11),
                           ),
-
                         const SizedBox(height: 6),
-                        // NEW BREAKDOWN PREVIEW
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
@@ -256,9 +353,120 @@ class ClientConfirmedTab extends StatelessWidget {
                             },
                           ),
                         ),
-
+                        if (reneg['status'] ==
+                            'accepted_client_buys_parts') ...[
+                          const SizedBox(height: 8),
+                          if (reneg['currentPhase'] ==
+                              'waiting_for_client_to_buy_parts')
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.black,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: () async {
+                                  await FirebaseFirestore.instance
+                                      .collection('jobs')
+                                      .doc(jobId)
+                                      .update({
+                                        'renegotiation.currentPhase':
+                                            'client_claims_parts_bought',
+                                        'renegotiation.clientPartsBought': true,
+                                        'renegotiation.clientPartsBoughtAt':
+                                            FieldValue.serverTimestamp(),
+                                      });
+                                },
+                                child: Text(
+                                  'I HAVE BOUGHT PARTS - Notify Fundi',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (reneg['currentPhase'] ==
+                              'client_claims_parts_bought')
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'You marked parts as bought. Waiting for fundi to confirm parts available...',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: Colors.blue.shade800,
+                                ),
+                              ),
+                            ),
+                          if (reneg['currentPhase'] ==
+                              'parts_confirmed_by_fundi')
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '✓ Fundi confirmed parts available. He will start work now.',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: Colors.green.shade800,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          if (reneg['currentPhase'] == 'fundi_working')
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Fundi is working...',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: Colors.green.shade800,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (reneg['currentPhase'] == 'completed_by_fundi' ||
+                              job['status'] == 'job_completed')
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.green),
+                              ),
+                              child: Text(
+                                '✓ Job Completed - Fundi finished. Please confirm to release KES ${reneg['newLaborTotal'] ?? agreed.toInt()}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: Colors.green.shade800,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                        ],
                         const SizedBox(height: 8),
-                        // OPEN DETAILED SCREEN
                         if (reneg['status'] == 'pending' ||
                             reneg['status'] == 'countered_by_fundi')
                           SizedBox(
@@ -307,6 +515,7 @@ class ClientConfirmedTab extends StatelessWidget {
                       ],
                     ),
                   ),
+
                 const SizedBox(height: 8),
                 if (escrow == 'pending')
                   SizedBox(
@@ -328,21 +537,20 @@ class ClientConfirmedTab extends StatelessWidget {
                       ),
                     ),
                   ),
-                if (job['status'] == 'pending_completion')
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: FundipapColors.greenSuccess,
+                if (job['status'] == 'pending_completion' ||
+                    job['status'] == 'job_completed')
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: FundipapColors.greenSuccess,
+                      ),
+                      onPressed: () => onConfirmCompletion(jobId),
+                      child: const Text(
+                        'Confirm Completion & Release Payment',
+                        style: TextStyle(color: Colors.white),
+                      ),
                     ),
-                    onPressed: () => onConfirmCompletion(jobId),
-                    child: const Text(
-                      'Confirm Completion & Release Payment',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                if (job['status'] == 'in_progress')
-                  Text(
-                    'Fundi is working... parts: ${(job['parts'] ?? []).length} items',
-                    style: GoogleFonts.inter(fontSize: 11, color: Colors.blue),
                   ),
               ],
             ),
