@@ -7,6 +7,7 @@ import '../../../../theme/app_theme.dart';
 import '../confirm/confirm_fundi_page.dart';
 import '../tracking/customer_tracking_screen.dart';
 import '../../customer/my_jobs/customer_confirmed_jobs_page.dart';
+import '../confirm/client_price_approval_screen.dart';
 
 class CustomerUnifiedBanner extends StatefulWidget {
   const CustomerUnifiedBanner({super.key});
@@ -93,6 +94,7 @@ class _CustomerUnifiedBannerState extends State<CustomerUnifiedBanner> {
             var reneg = job['renegotiation'] as Map<String, dynamic>?;
             String? title;
             String? body;
+            String? action;
             IconData? icon;
             Color? bg;
 
@@ -109,6 +111,7 @@ class _CustomerUnifiedBannerState extends State<CustomerUnifiedBanner> {
                   '${job['assignedFundiName'] ?? 'Fundi'} is on the way to ${job['title']}';
               icon = Icons.directions_bike;
               bg = Colors.blue.shade50;
+              action = 'tracking';
             }
             // Site visited
             else if (job['siteVisitDone'] == true &&
@@ -118,6 +121,7 @@ class _CustomerUnifiedBannerState extends State<CustomerUnifiedBanner> {
               body = '${job['assignedFundiName']} visited • ${job['title']}';
               icon = Icons.location_on;
               bg = Colors.blue.shade50;
+              action = 'site_visited';
             }
             // New price requested
             else if (reneg != null &&
@@ -128,6 +132,7 @@ class _CustomerUnifiedBannerState extends State<CustomerUnifiedBanner> {
                   '${reneg['reason'] ?? 'Needs review'} • KES ${reneg['newPrice'] ?? ''}';
               icon = Icons.request_quote;
               bg = Colors.orange.shade50;
+              action = 'new_price';
             }
             // Parts confirmed
             else if (reneg != null &&
@@ -136,6 +141,7 @@ class _CustomerUnifiedBannerState extends State<CustomerUnifiedBanner> {
               body = 'Parts available • ${job['title']}';
               icon = Icons.check_circle;
               bg = Colors.green.shade50;
+              action = 'parts_confirmed';
             }
             // Working
             else if (reneg != null &&
@@ -144,11 +150,13 @@ class _CustomerUnifiedBannerState extends State<CustomerUnifiedBanner> {
               body = '${job['assignedFundiName']} working on ${job['title']}';
               icon = Icons.build;
               bg = Colors.green.shade50;
+              action = 'working';
             } else if (job['status'] == 'in_progress') {
               title = 'Fundi is working';
               body = '${job['assignedFundiName']} • ${job['title']}';
               icon = Icons.construction;
               bg = Colors.green.shade50;
+              action = 'working';
             }
             // Completed
             else if (reneg != null &&
@@ -157,15 +165,17 @@ class _CustomerUnifiedBannerState extends State<CustomerUnifiedBanner> {
               body = '${job['title']} • Confirm completion';
               icon = Icons.task_alt;
               bg = Colors.green.shade100;
+              action = 'completed';
             } else if (job['status'] == 'job_completed' ||
                 job['status'] == 'pending_completion') {
               title = 'Fundi completed job';
               body = '${job['title']} • Review & release';
               icon = Icons.verified;
               bg = Colors.green.shade100;
+              action = 'completed';
             }
 
-            if (title != null) {
+            if (title != null && action != null) {
               _activeJobs.add({
                 'type': 'job',
                 'jobId': jobId,
@@ -175,6 +185,7 @@ class _CustomerUnifiedBannerState extends State<CustomerUnifiedBanner> {
                 'body': body!,
                 'icon': icon!,
                 'bg': bg!,
+                'action': action,
                 'fundiName': job['assignedFundiName'] ?? 'Fundi',
               });
             }
@@ -240,30 +251,47 @@ class _CustomerUnifiedBannerState extends State<CustomerUnifiedBanner> {
                         MaterialPageRoute(
                           builder: (_) => ConfirmFundiPage(
                             jobId: item['jobId'],
-                            jobData: item['jobData'],
+                            jobData:
+                                item['jobData'], // <-- ConfirmFundiPage uses jobData (correct)
                             bidId: item['bidId'],
                             bidData: item['bidData'],
                           ),
                         ),
                       );
                     } else {
-                      String t = (item['title'] as String).toLowerCase();
-                      if (t.contains('travelling')) {
+                      final action = item['action'] as String? ?? '';
+                      final jobId = item['jobId'] as String;
+                      final jobData = item['jobData'] as Map<String, dynamic>;
+
+                      if (action == 'tracking') {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (_) => CustomerTrackingScreen(
-                              jobId: item['jobId'],
-                              job: item['jobData'],
+                              jobId: jobId,
+                              job: jobData, // <-- FIXED: job not jobData
+                            ),
+                          ),
+                        );
+                      } else if (action == 'new_price') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ClientPriceApprovalScreen(
+                              jobId: jobId,
+                              job: jobData, // <-- FIXED: was jobData
                             ),
                           ),
                         );
                       } else {
-                        // new price, site visited, working, completed -> open confirmed tab
+                        // site_visited, parts_confirmed, working, completed
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const CustomerConfirmedJobsPage(),
+                            builder: (_) => CustomerConfirmedJobsPage(
+                              initialJobId: jobId,
+                              initialAction: action,
+                            ),
                           ),
                         );
                       }

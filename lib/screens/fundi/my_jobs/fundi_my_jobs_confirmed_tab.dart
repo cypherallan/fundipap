@@ -130,7 +130,7 @@ class FundiConfirmedTab extends StatelessWidget {
                     style: GoogleFonts.inter(fontSize: 11),
                   ),
                   const SizedBox(height: 8),
-                  if (escrow != 'held')
+                  if (escrow != 'held' && escrow != 'paid')
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
@@ -145,7 +145,7 @@ class FundiConfirmedTab extends StatelessWidget {
                         ),
                       ),
                     ),
-                  if (escrow == 'held') ...[
+                  if (escrow == 'held' || escrow == 'paid') ...[
                     if (!siteDone) ...[
                       SizedBox(
                         width: double.infinity,
@@ -628,22 +628,36 @@ class _VisitCustomerScreenState extends State<_VisitCustomerScreen> {
 
   Future<void> _track() async {
     var perm = await Geolocator.checkPermission();
-    if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
+    if (perm == LocationPermission.denied)
+      perm = await Geolocator.requestPermission();
     Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10),
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10,
+      ),
     ).listen((p) async {
-      double lat = (widget.job['customerLat'] ?? widget.job['lat'] ?? -0.0917).toDouble();
-      double lng = (widget.job['customerLng'] ?? widget.job['lng'] ?? 34.7680).toDouble();
+      double lat = (widget.job['customerLat'] ?? widget.job['lat'] ?? -0.0917)
+          .toDouble();
+      double lng = (widget.job['customerLng'] ?? widget.job['lng'] ?? 34.7680)
+          .toDouble();
       double d = Geolocator.distanceBetween(p.latitude, p.longitude, lat, lng);
-      if (mounted) setState(() { currentPos = p; distance = d; loading = false; });
+      if (mounted)
+        setState(() {
+          currentPos = p;
+          distance = d;
+          loading = false;
+        });
       // LIVE SHARE for customer tracking banner
       try {
-        await FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).update({
-          'fundiLiveLat': p.latitude,
-          'fundiLiveLng': p.longitude,
-          'fundiLiveAt': FieldValue.serverTimestamp(),
-          'fundiLiveDistance': d,
-        });
+        await FirebaseFirestore.instance
+            .collection('jobs')
+            .doc(widget.jobId)
+            .update({
+              'fundiLiveLat': p.latitude,
+              'fundiLiveLng': p.longitude,
+              'fundiLiveAt': FieldValue.serverTimestamp(),
+              'fundiLiveDistance': d,
+            });
       } catch (_) {}
     });
   }

@@ -8,7 +8,6 @@ import '../../../notifications/notification_bell.dart';
 import 'customer_home_filter_bar.dart';
 import 'customer_home_fundi_list.dart';
 import 'customer_home_header.dart';
-import 'customer_unified_banner.dart';
 
 class CustomerHome extends StatefulWidget {
   const CustomerHome({super.key});
@@ -99,11 +98,12 @@ class _CustomerHomeState extends State<CustomerHome> {
       Position pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _userPos = pos;
           _loadingLoc = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingLoc = false);
     }
@@ -190,7 +190,7 @@ class _CustomerHomeState extends State<CustomerHome> {
             ],
           ),
         ),
-        const CustomerUnifiedBanner(),
+        // REMOVED const CustomerUnifiedBanner() - now in Notifications tab
         CustomerHomeFilterBar(
           radius: _radius,
           filter: _filter,

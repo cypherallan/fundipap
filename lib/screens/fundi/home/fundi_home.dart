@@ -9,8 +9,6 @@ import 'fundi_home_completed_wrapper.dart';
 import '../../chats/chat_list_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../notifications/notification_bell.dart';
-import 'fundi_notifications_banner.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});
@@ -43,29 +41,19 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
     return DefaultTabController(
       length: 3,
       child: Container(
         color: FundipapColors.blackGray,
         child: Column(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: FundiHomeHeaderSection(
-                    me: me,
-                    profilePct: profilePct,
-                    completedJobs: completedJobs,
-                    totalEarned: totalEarned,
-                    onReloadMe: loadMe,
-                  ),
-                ),
-                NotificationBell(userId: uid, iconColor: Colors.white),
-              ],
+            FundiHomeHeaderSection(
+              me: me,
+              profilePct: profilePct,
+              completedJobs: completedJobs,
+              totalEarned: totalEarned,
+              onReloadMe: loadMe,
             ),
-            // This now slides like your CustomerBidNotifications
-            const FundiNotificationsBanner(),
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 20),
               decoration: BoxDecoration(
