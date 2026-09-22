@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
 import '../confirm/confirm_fundi_page.dart';
 import '../tracking/customer_tracking_screen.dart';
+import '../../customer/my_jobs/customer_confirmed_jobs_page.dart';
 
 class CustomerUnifiedBanner extends StatefulWidget {
   const CustomerUnifiedBanner({super.key});
@@ -246,8 +247,8 @@ class _CustomerUnifiedBannerState extends State<CustomerUnifiedBanner> {
                         ),
                       );
                     } else {
-                      String phaseTitle = item['title'] as String;
-                      if (phaseTitle.contains('travelling')) {
+                      String t = (item['title'] as String).toLowerCase();
+                      if (t.contains('travelling')) {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -258,10 +259,11 @@ class _CustomerUnifiedBannerState extends State<CustomerUnifiedBanner> {
                           ),
                         );
                       } else {
-                        // For other phases, just show details for now - you can wire to your actual job detail page later
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('${item['title']}: ${item['body']}'),
+                        // new price, site visited, working, completed -> open confirmed tab
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CustomerConfirmedJobsPage(),
                           ),
                         );
                       }
