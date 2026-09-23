@@ -275,7 +275,7 @@ class ClientConfirmedTab extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        'REVIEW BREAKDOWN - Extra KES ${reneg?['extraLabor'] ?? 0}',
+                        'REVIEW BREAKDOWN - Extra KES ${reneg['extraLabor'] ?? 0}',
                         style: GoogleFonts.montserrat(
                           fontWeight: FontWeight.w800,
                           fontSize: 10,
