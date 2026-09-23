@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../../customer/confirm/client_price_approval_screen.dart';
 import '../tracking/customer_tracking_screen.dart';
+import '../confirm/confirm_fundi_page.dart';
 
 class CustomerNotificationsPage extends StatefulWidget {
   const CustomerNotificationsPage({super.key});
@@ -50,8 +51,11 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
                       continue;
                     _bids.add({
                       'jobId': jobId,
+                      'bidId': b.id,
                       'jobTitle': jobDoc.data()['title'] ?? '',
+                      'jobData': jobDoc.data(),
                       'bid': bid,
+                      'bidData': bid,
                       'fundiName': bid['fundiName'] ?? 'Fundi',
                       'price': bid['price'] ?? 0,
                     });
@@ -219,11 +223,22 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
       }
     }
 
-    // 2. BIDS
+    // 2. BIDS - FIXED
     for (var b in _bids) {
       cards.add(
         Card(
           child: ListTile(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ConfirmFundiPage(
+                  jobId: b['jobId'],
+                  jobData: b['jobData'],
+                  bidId: b['bidId'],
+                  bidData: b['bidData'],
+                ),
+              ),
+            ),
             leading: CircleAvatar(
               backgroundColor: FundipapColors.blackGray,
               child: Text(
