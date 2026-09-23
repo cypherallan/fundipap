@@ -205,7 +205,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   }
 }
 
-// CLIENT BADGE
+// CLIENT BADGE - FIXED TO CLEAR ON READ
 class ClientNotifBadgeIcon extends StatefulWidget {
   final bool isSelected;
   const ClientNotifBadgeIcon({super.key, required this.isSelected});
@@ -217,11 +217,9 @@ class _ClientNotifBadgeIconState extends State<ClientNotifBadgeIcon> {
   int _count = 0;
   StreamSubscription? _jobsSub;
   StreamSubscription? _activeSub;
-  StreamSubscription? _escrowSub;
   final Map<String, StreamSubscription> _bidsSubs = {};
   final Map<String, int> _bidsPerJob = {};
   int _activeCount = 0;
-  int _escrowCount = 0;
 
   @override
   void initState() {
@@ -249,88 +247,44 @@ class _ClientNotifBadgeIconState extends State<ClientNotifBadgeIcon> {
                         d['status'] == 'accepted' ||
                         d['deletedForFundi'] == true)
                       continue;
+                    if (d['isReadByCustomer'] == true) continue;
                     c++;
                   }
                   _bidsPerJob[jobId] = c;
                   _recalc();
                 });
           }
+          var currentJobIds = jobsSnap.docs.map((d) => d.id).toSet();
+          _bidsSubs.keys
+              .where((k) => !currentJobIds.contains(k))
+              .toList()
+              .forEach((k) {
+                _bidsSubs[k]?.cancel();
+                _bidsSubs.remove(k);
+                _bidsPerJob.remove(k);
+              });
         });
-    _escrowSub = FirebaseFirestore.instance
-        .collection('jobs')
-        .where('customerId', isEqualTo: uid)
-        .where('status', whereIn: ['assigned', 'confirmed'])
-        .snapshots()
-        .listen((snap) {
-          int c = 0;
-          for (var doc in snap.docs) {
-            var esc = (doc.data()['escrowStatus'] ?? 'pending').toString();
-            if (esc == 'pending') c++;
-          }
-          _escrowCount = c;
-          _recalc();
-        });
+
     _activeSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('customerId', isEqualTo: uid)
-        .where(
-          'status',
-          whereIn: [
-            'travelling',
-            'site_visit',
-            'in_progress',
-            'pending_completion',
-            'job_completed',
-          ],
-        )
+        .where('customerHasUnread', isEqualTo: true)
         .snapshots()
         .listen((snap) {
-          int active = 0;
-          for (var doc in snap.docs) {
-            var job = doc.data();
-            var reneg = job['renegotiation'] as Map<String, dynamic>?;
-            bool travelling =
-                (job['travelling'] == true) ||
-                (job['siteVisitStarted'] == true) ||
-                (job['status'] == 'travelling');
-            if (travelling && job['siteVisitDone'] != true)
-              active++;
-            else if (job['siteVisitDone'] == true &&
-                job['status'] == 'site_visit' &&
-                (reneg == null || reneg['requested'] != true))
-              active++;
-            else if (reneg != null &&
-                reneg['requested'] == true &&
-                reneg['status'] == 'pending')
-              active++;
-            else if (reneg != null &&
-                reneg['currentPhase'] == 'parts_confirmed_by_fundi')
-              active++;
-            else if (reneg != null &&
-                (reneg['currentPhase'] == 'fundi_working' ||
-                    reneg['currentPhase'] == 'completed_by_fundi'))
-              active++;
-            else if (job['status'] == 'in_progress' ||
-                job['status'] == 'pending_completion' ||
-                job['status'] == 'job_completed')
-              active++;
-          }
-          _activeCount = active;
+          _activeCount = snap.docs.length;
           _recalc();
         });
   }
 
   void _recalc() {
     int bidsTotal = _bidsPerJob.values.fold(0, (a, b) => a + b);
-    if (mounted)
-      setState(() => _count = bidsTotal + _activeCount + _escrowCount);
+    if (mounted) setState(() => _count = bidsTotal + _activeCount);
   }
 
   @override
   void dispose() {
     _jobsSub?.cancel();
     _activeSub?.cancel();
-    _escrowSub?.cancel();
     for (var s in _bidsSubs.values) {
       s.cancel();
     }
@@ -412,8 +366,9 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
   }
 
   void _recalc() {
-    if (mounted)
+    if (mounted) {
       setState(() => _count = _bidsAccepted + _jobsCountered + _escrowPaid);
+    }
   }
 
   @override

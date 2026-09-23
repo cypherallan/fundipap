@@ -170,6 +170,7 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
         .doc(widget.jobId)
         .update({
           'siteVisited': true,
+          'siteVisitDone': true,
           'siteVisitedAt': FieldValue.serverTimestamp(),
           'siteVisitedBy': FirebaseAuth.instance.currentUser!.uid,
           'fundiLatAtVisit': pos?.latitude,

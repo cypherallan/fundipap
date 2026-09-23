@@ -4,9 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../../customer/confirm/client_price_approval_screen.dart';
-import '../tracking/customer_tracking_screen.dart';
 import '../confirm/confirm_fundi_page.dart';
+import 'customer_fundi_timeline_page.dart';
 
 class CustomerNotificationsPage extends StatefulWidget {
   const CustomerNotificationsPage({super.key});
@@ -26,11 +25,10 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
   void initState() {
     super.initState();
     var uid = FirebaseAuth.instance.currentUser!.uid;
-
     _jobsSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('customerId', isEqualTo: uid)
-        .where('status', whereIn: ['open', 'bidding'])
+        .where('status', whereIn: ['open', 'bidding', 'assigned', 'confirmed'])
         .snapshots()
         .listen((jobsSnap) {
           for (var jobDoc in jobsSnap.docs) {
@@ -45,26 +43,25 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
                   _bids.removeWhere((b) => b['jobId'] == jobId);
                   for (var b in bidsSnap.docs) {
                     var bid = b.data();
-                    if (bid['status'] == 'rejected' ||
-                        bid['status'] == 'accepted' ||
-                        bid['deletedForFundi'] == true)
-                      continue;
+                    if (bid['deletedForFundi'] == true) continue;
                     _bids.add({
                       'jobId': jobId,
                       'bidId': b.id,
                       'jobTitle': jobDoc.data()['title'] ?? '',
                       'jobData': jobDoc.data(),
-                      'bid': bid,
                       'bidData': bid,
                       'fundiName': bid['fundiName'] ?? 'Fundi',
-                      'price': bid['price'] ?? 0,
+                      'fundiId': (bid['fundiId'] ?? bid['fundiName'])
+                          .toString(),
+                      'status': bid['status'] ?? 'pending',
+                      'createdAt': bid['createdAt'],
+                      'isRead': bid['isReadByCustomer'] == true,
                     });
                   }
                   if (mounted) setState(() {});
                 });
           }
         });
-
     _activeSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('customerId', isEqualTo: uid)
@@ -78,6 +75,7 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
             'in_progress',
             'pending_completion',
             'job_completed',
+            'completed',
           ],
         )
         .snapshots()
@@ -86,416 +84,261 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
         });
   }
 
-  Future<void> _payEscrow(
-    BuildContext context,
-    String jobId,
-    double amount,
-  ) async {
-    try {
-      await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
-        'escrowStatus': 'held', // <-- was 'paid', now 'held' to match fundi tab
-        'escrowAmount': amount,
-        'escrowPaidAt': FieldValue.serverTimestamp(),
-        'escrowHeld': true,
-      });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Escrow locked KES ${amount.toInt()} - Fundi can now start travelling',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed: $e')));
-    }
-  }
-
-  Future<void> _confirmCompletion(String jobId) async {
-    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
-      'status': 'completed',
+  Future<void> _markThisFundiAsRead(String fundiKey) async {
+    setState(() {
+      for (var b in _bids) {
+        if (b['fundiId'] == fundiKey || b['fundiName'] == fundiKey)
+          b['isRead'] = true;
+      }
     });
+    try {
+      var batch = FirebaseFirestore.instance.batch();
+      for (var b in _bids.where(
+        (e) => e['fundiId'] == fundiKey || e['fundiName'] == fundiKey,
+      )) {
+        batch.update(
+          FirebaseFirestore.instance
+              .collection('jobs')
+              .doc(b['jobId'])
+              .collection('bids')
+              .doc(b['bidId']),
+          {'isReadByCustomer': true},
+        );
+      }
+      for (var d in _activeJobs) {
+        var j = d.data() as Map<String, dynamic>;
+        var assignedKey = (j['assignedFundiId'] ?? j['assignedFundiName'] ?? '')
+            .toString();
+        if (assignedKey == fundiKey) {
+          batch.update(d.reference, {
+            'customerHasUnread': false,
+            'customerLastSeenAt': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+      await batch.commit();
+    } catch (e) {
+      debugPrint('clear fundi failed $e');
+    }
   }
 
   @override
   void dispose() {
     _jobsSub?.cancel();
     _activeSub?.cancel();
-    for (var s in _bidsSubs.values) {
-      s.cancel();
-    }
+    for (var s in _bidsSubs.values) s.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_bids.isEmpty && _activeJobs.isEmpty) {
-      return Center(
-        child: Text('No notifications', style: GoogleFonts.inter()),
-      );
+    final activeJobIds = _activeJobs.map((d) => d.id).toSet();
+    Map<String, Map<String, dynamic>> grouped = {};
+
+    for (var b in _bids) {
+      if (activeJobIds.contains(b['jobId'])) continue;
+      String key = "${b['jobId']}_${b['fundiId']}";
+      grouped[key] = {
+        'jobId': b['jobId'],
+        'fundiName': b['fundiName'],
+        'fundiId': b['fundiId'],
+        'category': (b['jobData']['category'] ?? b['jobTitle'] ?? 'Job')
+            .toString(),
+        'jobData': b['jobData'],
+        'bidData': b['bidData'],
+        'bidId': b['bidId'],
+        'latestAt': (b['createdAt'] is Timestamp)
+            ? (b['createdAt'] as Timestamp).toDate()
+            : DateTime.now(),
+        'type': 'bid',
+        'isPendingBid': b['status'] == 'pending',
+        'isRead': b['isRead'] == true,
+      };
     }
 
-    List<Widget> cards = [];
-
-    // 1. ESCROW PENDING
     for (var doc in _activeJobs) {
       var job = doc.data() as Map<String, dynamic>;
-      var jobId = doc.id;
-      var escrow = (job['escrowStatus'] ?? 'pending').toString();
-      var status = (job['status'] ?? '').toString();
-      if ((status == 'assigned' || status == 'confirmed') &&
-          escrow == 'pending') {
-        double agreed = (job['agreedPrice'] ?? job['budget'] ?? 0).toDouble();
-        cards.add(
-          Card(
-            color: Colors.yellow.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.lock, size: 18),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Fundi confirmed - Lock payment to escrow',
-                          style: GoogleFonts.montserrat(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    job['title'] ?? '',
-                    style: GoogleFonts.montserrat(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
-                  Text(
-                    'Agreed: KES ${agreed.toInt()} • Escrow: $escrow',
-                    style: GoogleFonts.inter(fontSize: 11),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: FundipapColors.primaryYellow),
-                    ),
-                    child: Text(
-                      'Pay KES ${agreed.toInt()} to escrow before fundi starts travelling. Money stays locked until you confirm completion.',
-                      style: GoogleFonts.inter(fontSize: 11),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: FundipapColors.primaryYellow,
-                        foregroundColor: Colors.black,
-                      ),
-                      onPressed: () => _payEscrow(context, jobId, agreed),
-                      child: Text(
-                        'Pay KES ${agreed.toInt()} to Escrow (Mpesa Simulated)',
-                        style: GoogleFonts.montserrat(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      }
+      var fundiId =
+          (job['assignedFundiId'] ?? job['assignedFundiName'] ?? 'Fundi')
+              .toString();
+      grouped[doc.id] = {
+        'jobId': doc.id,
+        'fundiName': (job['assignedFundiName'] ?? 'Fundi').toString(),
+        'fundiId': fundiId,
+        'category': (job['category'] ?? job['title'] ?? 'Job').toString(),
+        'jobData': job,
+        'latestAt': (job['updatedAt'] is Timestamp)
+            ? (job['updatedAt'] as Timestamp).toDate()
+            : DateTime.now(),
+        'type': 'active',
+        'isRead': job['customerHasUnread'] != true,
+      };
     }
 
-    // 2. BIDS - FIXED
-    for (var b in _bids) {
-      cards.add(
-        Card(
-          child: ListTile(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ConfirmFundiPage(
-                  jobId: b['jobId'],
-                  jobData: b['jobData'],
-                  bidId: b['bidId'],
-                  bidData: b['bidData'],
+    var list = grouped.values.toList()
+      ..sort(
+        (a, b) =>
+            (b['latestAt'] as DateTime).compareTo(a['latestAt'] as DateTime),
+      );
+
+    Map<String, int> fundiUnreadCounts = {};
+    for (var g in list) {
+      if (g['isRead'] == false) {
+        fundiUnreadCounts[g['fundiId']] =
+            (fundiUnreadCounts[g['fundiId']] ?? 0) + 1;
+      }
+    }
+    int totalTabCounter = fundiUnreadCounts.values.fold(0, (a, b) => a + b);
+
+    return Column(
+      children: [
+        Container(
+          color: totalTabCounter > 0
+              ? FundipapColors.primaryYellow.withOpacity(0.2)
+              : Colors.grey.shade100,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Icon(
+                totalTabCounter > 0
+                    ? Icons.notifications_active
+                    : Icons.notifications_none,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                totalTabCounter > 0
+                    ? '$totalTabCounter new notifications'
+                    : 'No new notifications',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
                 ),
               ),
-            ),
-            leading: CircleAvatar(
-              backgroundColor: FundipapColors.blackGray,
-              child: Text(
-                b['fundiName'].toString().isNotEmpty
-                    ? b['fundiName'][0].toUpperCase()
-                    : 'F',
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-            title: Text(
-              '${b['fundiName']} sent a bid',
-              style: GoogleFonts.montserrat(
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-              ),
-            ),
-            subtitle: Text(
-              '${b['jobTitle']} • KES ${b['price']}',
-              style: GoogleFonts.inter(fontSize: 11),
-            ),
-            trailing: const Icon(Icons.chevron_right),
+            ],
           ),
         ),
-      );
-    }
+        Expanded(
+          child: list.isEmpty
+              ? Center(
+                  child: Text(
+                    'No jobs yet',
+                    style: GoogleFonts.inter(color: Colors.black54),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: list.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) {
+                    var g = list[i];
+                    String fundiKey = g['fundiId'] as String;
+                    int badgeCount = fundiUnreadCounts[fundiKey] ?? 0;
+                    bool isUnreadGroup = badgeCount > 0;
 
-    // 3. OTHER ACTIVE
-    for (var doc in _activeJobs) {
-      var job = doc.data() as Map<String, dynamic>;
-      var jobId = doc.id;
-      var escrow = (job['escrowStatus'] ?? 'pending').toString();
-      var status = (job['status'] ?? '').toString();
-      if ((status == 'assigned' || status == 'confirmed') &&
-          escrow == 'pending')
-        continue;
-
-      if ((status == 'assigned' || status == 'confirmed') &&
-          (escrow == 'held' || escrow == 'paid')) {
-        cards.add(
-          _simpleCard(
-            'Escrow locked - Waiting for fundi to start',
-            job['title'] ?? '',
-            Icons.lock_open,
-            Colors.green.shade50,
-          ),
-        );
-        continue;
-      }
-
-      var reneg = job['renegotiation'] as Map<String, dynamic>?;
-      bool travelling =
-          (job['travelling'] == true) ||
-          (job['siteVisitStarted'] == true) ||
-          status == 'travelling';
-      bool isArrived =
-          job['siteVisitDone'] == true &&
-          status == 'site_visit' &&
-          (reneg == null || reneg['requested'] != true);
-      bool showReneg =
-          reneg != null &&
-          reneg['requested'] == true &&
-          reneg['status'] != 'accepted';
-      bool isCompleted =
-          (reneg != null &&
-          (reneg['currentPhase'] == 'completed_by_fundi' ||
-              status == 'job_completed' ||
-              status == 'pending_completion'));
-      bool isWorking =
-          (reneg != null &&
-          (reneg['currentPhase'] == 'fundi_working' ||
-              reneg['currentPhase'] == 'parts_confirmed_by_fundi'));
-
-      if (travelling && job['siteVisitDone'] != true) {
-        cards.add(
-          InkWell(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => CustomerTrackingScreen(jobId: jobId, job: job),
-              ),
-            ),
-            child: _simpleCard(
-              'Fundi is travelling - TAP TO TRACK LIVE',
-              '${job['title'] ?? ''} • ${(job['fundiLiveDistance'] ?? 0).toStringAsFixed(0)}m away • Live',
-              Icons.location_on,
-              Colors.blue.shade50,
-            ),
-          ),
-        );
-      } else if (isArrived) {
-        // NEW: Fundi arrived notification
-        cards.add(
-          Card(
-            color: Colors.green.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.green.shade800),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Fundi has arrived at your location!',
+                    return Card(
+                      color: isUnreadGroup
+                          ? Colors.yellow.shade50
+                          : Colors.white,
+                      shape: RoundedRectangleBorder(
+                        side: BorderSide(
+                          color: isUnreadGroup
+                              ? FundipapColors.primaryYellow
+                              : Colors.black12,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: ListTile(
+                        leading: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            CircleAvatar(
+                              radius: 22,
+                              backgroundColor: FundipapColors.blackGray,
+                              child: Text(
+                                (g['fundiName'] as String)[0].toUpperCase(),
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                            if (badgeCount > 0)
+                              Positioned(
+                                right: -4,
+                                bottom: -4,
+                                child: Container(
+                                  padding: const EdgeInsets.all(5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '$badgeCount',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        title: Text(
+                          g['category'],
                           style: GoogleFonts.montserrat(
                             fontWeight: FontWeight.w800,
-                            fontSize: 12,
-                            color: Colors.green.shade800,
+                            fontSize: 13,
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${job['title'] ?? ''} • He marked arrived with GPS • Inspecting site now',
+                        subtitle: Text(
+                          g['fundiName'],
                           style: GoogleFonts.inter(fontSize: 11),
                         ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      } else if (showReneg) {
-        // your existing reneg card...
-        cards.add(
-          Card(
-            color: Colors.orange.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Fundi requests new price after visit',
-                    style: GoogleFonts.montserrat(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 11,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        foregroundColor: Colors.white,
+                        trailing: isUnreadGroup
+                            ? const Icon(
+                                Icons.circle,
+                                color: Colors.red,
+                                size: 10,
+                              )
+                            : const Icon(Icons.chevron_right),
+                        onTap: () async {
+                          await _markThisFundiAsRead(fundiKey);
+                          if (!context.mounted) return;
+                          if (g['type'] == 'bid' && g['isPendingBid'] == true) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ConfirmFundiPage(
+                                  jobId: g['jobId'],
+                                  jobData: g['jobData'],
+                                  bidId: g['bidId'],
+                                  bidData: g['bidData'],
+                                ),
+                              ),
+                            );
+                          } else {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CustomerFundiTimelinePage(
+                                  jobId: g['jobId'],
+                                  fundiName: g['fundiName'],
+                                  trade: g['category'],
+                                  jobData: g['jobData'],
+                                ),
+                              ),
+                            );
+                          }
+                        },
                       ),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              ClientPriceApprovalScreen(jobId: jobId, job: job),
-                        ),
-                      ),
-                      child: Text(
-                        'REVIEW BREAKDOWN & PHOTOS',
-                        style: GoogleFonts.montserrat(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      } else if (isWorking) {
-        String title = reneg['currentPhase'] == 'fundi_working'
-            ? 'Fundi is working...'
-            : 'Fundi confirmed parts';
-        cards.add(
-          _simpleCard(
-            title,
-            job['title'] ?? '',
-            Icons.construction,
-            Colors.green.shade50,
-          ),
-        );
-      } else if (isCompleted) {
-        cards.add(
-          Card(
-            color: Colors.green.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Job Completed - Review & Release Payment',
-                    style: GoogleFonts.montserrat(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12,
-                      color: Colors.green.shade800,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    job['title'] ?? '',
-                    style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: FundipapColors.greenSuccess,
-                      ),
-                      onPressed: () => _confirmCompletion(jobId),
-                      child: const Text(
-                        'Confirm Completion & Release Payment',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      }
-    }
-
-    return ListView(padding: const EdgeInsets.all(12), children: cards);
-  }
-
-  Widget _simpleCard(String title, String body, IconData icon, Color bg) {
-    return Card(
-      color: bg,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Icon(icon, size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.montserrat(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
-                  ),
-                  Text(body, style: GoogleFonts.inter(fontSize: 11)),
-                ],
-              ),
-            ),
-          ],
+                    );
+                  },
+                ),
         ),
-      ),
+      ],
     );
   }
 }
