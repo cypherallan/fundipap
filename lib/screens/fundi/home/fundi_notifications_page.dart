@@ -66,6 +66,64 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     );
   }
 
+  bool _isWaiting(Map<String, dynamic> job) {
+    var status = (job['status'] ?? '').toString();
+    var escrow = (job['escrowStatus'] ?? 'pending').toString();
+    var reneg = job['renegotiation'] as Map<String, dynamic>?;
+    String rs = (reneg?['status'] ?? '').toString();
+
+    // completed jobs are NEVER waiting - push to bottom
+    const completed = [
+      'completed',
+      'job_completed',
+      'cancelled',
+      'closed',
+      'disputed',
+    ];
+    if (completed.contains(status)) return false;
+
+    // ANY renegotiation that needs action is waiting - HIGHEST PRIORITY
+    if (reneg != null && reneg['requested'] == true) {
+      if (rs == 'pending')
+        return true; // you are waiting for client to confirm price review
+      if (rs == 'countered_by_client') return true;
+    }
+
+    // active flow - all these are waiting/active and must be above completed
+    const active = [
+      'accepted',
+      'assigned',
+      'confirmed',
+      'travelling',
+      'site_visit',
+      'in_progress',
+      'pending_completion',
+    ];
+    if (active.contains(status)) return true;
+
+    // escrow not locked yet but bid accepted = waiting for payment
+    bool locked = escrow == 'held' || escrow == 'paid' || escrow == 'locked';
+    if (!locked && status == 'accepted') return true;
+
+    return false;
+  }
+
+  int _waitingPriority(Map<String, dynamic> job) {
+    var reneg = job['renegotiation'] as Map<String, dynamic>?;
+    String rs = (reneg?['status'] ?? '').toString();
+    String status = (job['status'] ?? '').toString();
+    if (reneg != null && rs == 'pending')
+      return 0; // waiting for client to confirm price review - TOP
+    if (reneg != null && rs == 'countered_by_client') return 1;
+    if (status == 'accepted') return 2; // waiting for escrow
+    if (status == 'assigned' || status == 'confirmed') return 3;
+    if (status == 'travelling') return 4;
+    if (status == 'site_visit') return 5;
+    if (status == 'in_progress') return 6;
+    if (status == 'pending_completion') return 7;
+    return 10; // completed
+  }
+
   Future<void> _markThisClientAsRead(String clientKey) async {
     setState(() {
       for (var b in _acceptedBids) {
@@ -155,11 +213,35 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         'isRead': job['fundiHasUnread'] != true,
       };
     }
-    var list = grouped.values.toList()
-      ..sort(
-        (a, b) =>
-            (b['latestAt'] as DateTime).compareTo((a['latestAt'] as DateTime)),
-      );
+
+    var list = grouped.values.toList();
+    list.sort((a, b) {
+      var aJob = a['jobData'] as Map<String, dynamic>;
+      var bJob = b['jobData'] as Map<String, dynamic>;
+      bool aWaiting = _isWaiting(aJob);
+      bool bWaiting = _isWaiting(bJob);
+
+      // 1. WAITING FIRST - always on top, even if read
+      if (aWaiting && !bWaiting) return -1;
+      if (!aWaiting && bWaiting) return 1;
+
+      // 2. Inside waiting group, sort by priority (pending price review = top)
+      if (aWaiting && bWaiting) {
+        int pa = _waitingPriority(aJob);
+        int pb = _waitingPriority(bJob);
+        if (pa != pb) return pa.compareTo(pb);
+      }
+
+      // 3. Unread first
+      bool aUnread = a['isRead'] == false;
+      bool bUnread = b['isRead'] == false;
+      if (aUnread && !bUnread) return -1;
+      if (!aUnread && bUnread) return 1;
+
+      // 4. Latest first
+      return (b['latestAt'] as DateTime).compareTo((a['latestAt'] as DateTime));
+    });
+
     Map<String, int> clientUnreadCounts = {};
     for (var g in list) {
       if (g['isRead'] == false)
@@ -167,6 +249,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
             (clientUnreadCounts[g['clientId']] ?? 0) + 1;
     }
     int total = clientUnreadCounts.values.fold(0, (a, b) => a + b);
+
     return Column(
       children: [
         Container(
@@ -206,33 +289,42 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                     var g = list[i];
                     String clientKey = g['clientId'];
                     int badge = clientUnreadCounts[clientKey] ?? 0;
-                    bool unread = badge > 0;
-                    bool isDone =
-                        (g['jobData']['siteVisitDone'] == true) ||
-                        (g['jobData']['status'] == 'in_progress') ||
-                        (g['jobData']['status'] == 'job_completed');
-                    String escrow = (g['jobData']['escrowStatus'] ?? 'pending')
-                        .toString();
-                    bool locked =
-                        escrow == 'held' ||
-                        escrow == 'paid' ||
-                        escrow == 'locked';
-                    Color bg;
-                    Color border;
-                    if (isDone || locked) {
-                      bg = Colors.green.shade50;
-                      border = Colors.green;
-                    } else if (unread) {
-                      bg = Colors.yellow.shade50;
-                      border = FundipapColors.primaryYellow;
+                    bool isUnreadGroup = badge > 0;
+                    var jobData = g['jobData'] as Map<String, dynamic>;
+                    var reneg =
+                        jobData['renegotiation'] as Map<String, dynamic>?;
+                    bool isPendingPrice =
+                        reneg != null &&
+                        reneg['requested'] == true &&
+                        reneg['status'] == 'pending';
+                    bool isCountered =
+                        reneg != null &&
+                        reneg['status'] == 'countered_by_client';
+                    bool isWaiting = _isWaiting(jobData);
+
+                    Color cardColor;
+                    Color borderColor;
+                    if (isPendingPrice) {
+                      cardColor = Colors.orange.shade50;
+                      borderColor = Colors.orange;
+                    } else if (isCountered) {
+                      cardColor = Colors.blue.shade50;
+                      borderColor = Colors.blue;
+                    } else if (isWaiting) {
+                      cardColor = Colors.yellow.shade50;
+                      borderColor = FundipapColors.primaryYellow;
                     } else {
-                      bg = Colors.white;
-                      border = Colors.black12;
+                      cardColor = Colors.white;
+                      borderColor = Colors.black12;
                     }
+
                     return Card(
-                      color: bg,
+                      color: cardColor,
                       shape: RoundedRectangleBorder(
-                        side: BorderSide(color: border),
+                        side: BorderSide(
+                          color: borderColor,
+                          width: isWaiting ? 1.6 : 1,
+                        ),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: ListTile(
@@ -280,11 +372,34 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                             fontSize: 13,
                           ),
                         ),
-                        subtitle: Text(
-                          g['clientName'],
-                          style: GoogleFonts.inter(fontSize: 11),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              g['clientName'],
+                              style: GoogleFonts.inter(fontSize: 11),
+                            ),
+                            if (isPendingPrice)
+                              Text(
+                                'Waiting for client to confirm price review',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  color: Colors.orange.shade800,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            if (isCountered)
+                              Text(
+                                'Client countered price',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  color: Colors.blue.shade700,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                          ],
                         ),
-                        trailing: unread
+                        trailing: isUnreadGroup
                             ? const Icon(
                                 Icons.circle,
                                 color: Colors.red,

@@ -23,18 +23,75 @@ class CustomerFundiTimelinePage extends StatefulWidget {
 }
 
 class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
+  int _toInt(dynamic v, [int fb = 0]) {
+    if (v == null) return fb;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? fb;
+  }
+
+  double _toDouble(dynamic v, [double fb = 0]) {
+    if (v == null) return fb;
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? fb;
+  }
+
   Future<void> _payEscrow(String jobId, double amount) async {
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'escrowStatus': 'held',
       'escrowAmount': amount,
       'escrowPaidAt': FieldValue.serverTimestamp(),
       'escrowHeld': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _payExtraEscrow(
+    String jobId,
+    int extra,
+    int newTotal,
+    String currentRenegStatus,
+  ) async {
+    String finalStatus = currentRenegStatus.replaceAll(
+      '_pending_extra_escrow',
+      '',
+    );
+    bool clientBuys = finalStatus.contains('client_buys');
+    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'escrowStatus': 'held',
+      'escrowAmount': newTotal,
+      'extraEscrowStatus': 'paid',
+      'extraEscrowPaidAt': FieldValue.serverTimestamp(),
+      'status': 'site_visit', // fundi left, must start work after parts
+      'renegotiation.status': finalStatus,
+      'renegotiation.requested': false,
+      'renegotiation.currentPhase': clientBuys
+          ? 'waiting_for_client_to_buy_parts'
+          : 'fundi_buying_parts',
+      'fundiHasUnread': true,
+      'customerHasUnread': false,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _confirmPartsBought(String jobId) async {
+    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'renegotiation.currentPhase': 'client_claims_parts_bought',
+      'renegotiation.clientPartsBought': true,
+      'renegotiation.clientPartsBoughtAt': FieldValue.serverTimestamp(),
+      'fundiHasUnread': true,
+      'customerHasUnread': false,
+      'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
   Future<void> _confirmCompletion(String jobId) async {
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'status': 'completed',
+      'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -62,6 +119,11 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               .toString();
           bool siteDone =
               (job['siteVisitDone'] == true) || (job['siteVisited'] == true);
+
+          var reneg = job['renegotiation'] as Map<String, dynamic>?;
+          String renegStatus = (reneg?['status'] ?? '').toString();
+          String phase = (reneg?['currentPhase'] ?? '').toString();
+          bool needsExtraEscrow = renegStatus.contains('pending_extra_escrow');
 
           List<Widget> timeline = [];
 
@@ -117,14 +179,16 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           );
 
           bool escrowDone = escrow == 'held' || escrow == 'paid';
-          double agreed = (job['agreedPrice'] ?? job['budget'] ?? 0).toDouble();
+          double agreed = _toDouble(job['agreedPrice'] ?? job['budget'] ?? 0);
+          int alreadyLocked = _toInt(job['escrowAmount'] ?? agreed);
+
           timeline.add(
             _timelineCard(
               title: escrowDone
                   ? 'Escrow locked - Done'
                   : 'Lock payment to escrow',
               body: escrowDone
-                  ? 'KES ${agreed.toInt()} secured'
+                  ? 'KES $alreadyLocked secured'
                   : 'Secure KES ${agreed.toInt()} to start',
               icon: Icons.lock,
               isDone: escrowDone,
@@ -141,7 +205,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             ),
           );
 
-          // SINGLE CARD FOR TRAVEL + ARRIVAL
           bool shouldShowTravel =
               (job['travelling'] == true) ||
               status == 'travelling' ||
@@ -159,7 +222,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     ? 'At $location • Inspecting site now'
                     : 'Tap to track live location',
                 icon: siteDone ? Icons.check_circle : Icons.location_on,
-                isDone: siteDone, // turns green only when arrived
+                isDone: siteDone,
                 onTap: siteDone
                     ? null
                     : () => Navigator.push(
@@ -175,14 +238,47 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
 
-          var reneg = job['renegotiation'] as Map<String, dynamic>?;
-          if (reneg != null &&
+          // EXTRA ESCROW REQUIRED
+          if (needsExtraEscrow) {
+            int extra = _toInt(
+              job['extraLaborAmount'] ?? job['extraEscrowAmount'] ?? 0,
+            );
+            if (extra == 0) {
+              int oldL = _toInt(reneg?['oldLabor'] ?? 0);
+              int newL = _toInt(reneg?['newLaborTotal'] ?? 0);
+              if (oldL > 0 && newL > 0) extra = newL - oldL;
+            }
+            int newTotal = _toInt(job['agreedPrice'] ?? alreadyLocked + extra);
+            timeline.add(
+              _timelineCard(
+                title: 'Lock extra KES $extra in escrow',
+                body:
+                    'You accepted new price KES $newTotal. Already locked KES $alreadyLocked. Lock extra KES $extra before fundi continues.',
+                icon: Icons.lock_open,
+                isDone: false,
+                action: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => _payExtraEscrow(
+                    widget.jobId,
+                    extra,
+                    newTotal,
+                    renegStatus,
+                  ),
+                  child: Text('LOCK EXTRA KES $extra NOW'),
+                ),
+              ),
+            );
+          } else if (reneg != null &&
               reneg['requested'] == true &&
-              reneg['status'] != 'accepted') {
+              renegStatus == 'pending') {
             timeline.add(
               _timelineCard(
                 title: 'Fundi requests price review',
-                body: '${reneg['reasonDetails'] ?? ''}',
+                body:
+                    '${reneg['reasonDetails'] ?? ''}\nExtra labor: KES ${_toInt(reneg['extraLabor'])}',
                 icon: Icons.request_quote,
                 isDone: false,
                 action: ElevatedButton(
@@ -201,7 +297,52 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
 
-          if (status == 'in_progress') {
+          // CLIENT BOUGHT PARTS CONFIRMATION
+          if (phase == 'waiting_for_client_to_buy_parts') {
+            timeline.add(
+              _timelineCard(
+                title: 'You will buy parts - Confirm when bought',
+                body:
+                    'Extra KES ${_toInt(job['extraLaborAmount'])} locked. Buy the listed parts/materials then confirm below. Fundi will verify parts before starting work.',
+                icon: Icons.shopping_cart,
+                isDone: false,
+                action: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => _confirmPartsBought(widget.jobId),
+                  child: Text(
+                    'I HAVE BOUGHT PARTS - Notify Fundi',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          } else if (phase == 'client_claims_parts_bought') {
+            timeline.add(
+              _timelineCard(
+                title: 'Parts bought - Waiting for fundi to confirm',
+                body:
+                    'You marked parts as bought. Waiting for ${widget.fundiName} to confirm parts are correct & available.',
+                icon: Icons.hourglass_top,
+                isDone: false,
+              ),
+            );
+          } else if (phase == 'parts_confirmed_by_fundi') {
+            timeline.add(
+              _timelineCard(
+                title: 'Fundi confirmed parts - Starting work',
+                body:
+                    'Fundi confirmed your parts are available. He will start work now.',
+                icon: Icons.check_circle,
+                isDone: true,
+              ),
+            );
+          } else if (phase == 'fundi_working' || status == 'in_progress') {
             timeline.add(
               _timelineCard(
                 title: 'Fundi is working',

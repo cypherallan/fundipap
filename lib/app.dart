@@ -49,7 +49,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
       actions: [
         PopupMenuButton<String>(
           onSelected: (value) async {
-            if (value == 'profile')
+            if (value == 'profile') {
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -57,7 +57,8 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                       ProfileScreen(email: widget.email, role: widget.role),
                 ),
               );
-            else if (value == 'settings')
+            } else if (value == 'settings')
+              // ignore: curly_braces_in_flow_control_structures
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('${widget.role} Settings coming soon')),
               );
@@ -208,7 +209,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   }
 }
 
-// CLIENT BADGE - NOW COUNTS RENEGOTIATION PENDING
+// CLIENT BADGE
 class ClientNotifBadgeIcon extends StatefulWidget {
   final bool isSelected;
   const ClientNotifBadgeIcon({super.key, required this.isSelected});
@@ -223,7 +224,6 @@ class _ClientNotifBadgeIconState extends State<ClientNotifBadgeIcon> {
   final Map<String, StreamSubscription> _bidsSubs = {};
   final Map<String, int> _bidsPerJob = {};
   int _activeCount = 0;
-
   @override
   void initState() {
     super.initState();
@@ -267,7 +267,6 @@ class _ClientNotifBadgeIconState extends State<ClientNotifBadgeIcon> {
                 _bidsPerJob.remove(k);
               });
         });
-
     _activeSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('customerId', isEqualTo: uid)
@@ -324,6 +323,7 @@ class _ClientNotifBadgeIconState extends State<ClientNotifBadgeIcon> {
   }
 }
 
+// FUNDI BADGE - NOW EXACT COPY OF CLIENT LOGIC
 class FundiNotifBadgeIcon extends StatefulWidget {
   final bool isSelected;
   const FundiNotifBadgeIcon({super.key, required this.isSelected});
@@ -336,8 +336,7 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
   StreamSubscription? _bidsSub;
   StreamSubscription? _jobsSub;
   int _bidsAccepted = 0;
-  int _jobsCountered = 0;
-  int _escrowPaid = 0;
+  int _activeCount = 0;
 
   @override
   void initState() {
@@ -356,42 +355,29 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
           _bidsAccepted = c;
           _recalc();
         });
-    _jobsSub = FirebaseFirestore.instance.collection('jobs').snapshots().listen(
-      (snap) {
-        int countered = 0;
-        int escrow = 0;
-        for (var doc in snap.docs) {
-          var job = doc.data();
-          bool isMine =
-              job['assignedFundiId'] == uid ||
-              job['assignedFundi'] == uid ||
-              job['fundiId'] == uid ||
-              job['acceptedFundiId'] == uid;
-          if (!isMine) continue;
-          var reneg = job['renegotiation'] as Map<String, dynamic>?;
-          var escrowStatus = (job['escrowStatus'] ?? 'pending').toString();
-          var status = (job['status'] ?? '').toString();
-          if ((escrowStatus == 'paid' || escrowStatus == 'held') &&
-              (status == 'assigned' || status == 'confirmed') &&
-              job['fundiHasUnread'] == true)
-            escrow++;
-          if (reneg != null &&
-              (reneg['status'] == 'countered_by_client' ||
-                  reneg['status'] == 'accepted_client_buys_parts' ||
-                  reneg['status'] == 'accepted_fundi_buys_at_client_risk') &&
-              job['fundiHasUnread'] == true)
-            countered++;
-        }
-        _jobsCountered = countered;
-        _escrowPaid = escrow;
-        _recalc();
-      },
-    );
+    _jobsSub = FirebaseFirestore.instance
+        .collection('jobs')
+        .where('fundiHasUnread', isEqualTo: true)
+        .snapshots()
+        .listen((snap) {
+          int c = 0;
+          for (var doc in snap.docs) {
+            var job = doc.data();
+            bool isMine =
+                job['assignedFundiId'] == uid ||
+                job['assignedFundi'] == uid ||
+                job['fundiId'] == uid ||
+                job['acceptedFundiId'] == uid;
+            if (!isMine) continue;
+            c++;
+          }
+          _activeCount = c;
+          _recalc();
+        });
   }
 
   void _recalc() {
-    if (mounted)
-      setState(() => _count = _bidsAccepted + _jobsCountered + _escrowPaid);
+    if (mounted) setState(() => _count = _bidsAccepted + _activeCount);
   }
 
   @override

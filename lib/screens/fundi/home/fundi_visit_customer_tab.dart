@@ -9,7 +9,6 @@ import '../../../theme/app_theme.dart';
 
 class FundiVisitCustomerTab extends StatelessWidget {
   const FundiVisitCustomerTab({super.key});
-
   @override
   Widget build(BuildContext context) {
     var uid = FirebaseAuth.instance.currentUser!.uid;
@@ -30,17 +29,15 @@ class FundiVisitCustomerTab extends StatelessWidget {
           )
           .snapshots(),
       builder: (_, snap) {
-        if (!snap.hasData) {
+        if (!snap.hasData)
           return const Center(child: CircularProgressIndicator());
-        }
-        if (snap.data!.docs.isEmpty) {
+        if (snap.data!.docs.isEmpty)
           return Center(
             child: Text(
               'No assigned jobs to visit',
               style: GoogleFonts.inter(),
             ),
           );
-        }
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: snap.data!.docs.length,
@@ -108,73 +105,176 @@ class VisitCustomerScreen extends StatefulWidget {
 
 class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
   Position? pos;
-  double distance = 999999;
+  double? distance;
   StreamSubscription<Position>? sub;
   bool loading = true;
+  String error = '';
+  double? clientLat;
+  double? clientLng;
 
   @override
   void initState() {
     super.initState();
+    _extractClientLatLng();
     _startTracking();
+  }
+
+  void _extractClientLatLng() {
+    try {
+      // Check all possible places where client lat/lng could be saved
+      var geo =
+          widget.job['clientLocation'] ??
+          widget.job['customerLocation'] ??
+          widget.job['locationGeoPoint'] ??
+          widget.job['geoPoint'];
+      if (geo is GeoPoint) {
+        clientLat = geo.latitude;
+        clientLng = geo.longitude;
+      } else if (geo is Map) {
+        clientLat = (geo['lat'] ?? geo['latitude'])?.toDouble();
+        clientLng = (geo['lng'] ?? geo['longitude'])?.toDouble();
+      }
+      // direct fields
+      clientLat ??=
+          (widget.job['customerLat'] ??
+                  widget.job['clientLat'] ??
+                  widget.job['lat'] ??
+                  widget.job['customerLatitude'])
+              ?.toDouble();
+      clientLng ??=
+          (widget.job['customerLng'] ??
+                  widget.job['clientLng'] ??
+                  widget.job['lng'] ??
+                  widget.job['lon'] ??
+                  widget.job['customerLongitude'])
+              ?.toDouble();
+
+      // also check nested address
+      if (clientLat == null && widget.job['addressLat'] != null) {
+        clientLat = (widget.job['addressLat'] as num).toDouble();
+        clientLng = (widget.job['addressLng'] as num).toDouble();
+      }
+    } catch (e) {
+      error = 'Error parsing client location: $e';
+    }
   }
 
   Future<void> _startTracking() async {
     var perm = await Geolocator.checkPermission();
     if (perm == LocationPermission.denied)
       perm = await Geolocator.requestPermission();
+    if (perm == LocationPermission.deniedForever) {
+      setState(() {
+        error = 'Location permission denied forever. Enable from settings.';
+        loading = false;
+      });
+      return;
+    }
+
     sub =
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
+            distanceFilter: 5,
           ),
-        ).listen((p) {
-          double lat =
-              (widget.job['customerLat'] ?? widget.job['lat'] ?? -0.0917)
-                  .toDouble();
-          double lng =
-              (widget.job['customerLng'] ?? widget.job['lng'] ?? 34.7680)
-                  .toDouble();
-          double d = Geolocator.distanceBetween(
-            p.latitude,
-            p.longitude,
-            lat,
-            lng,
-          );
-          if (mounted) {
+        ).listen(
+          (p) {
+            double? d;
+            if (clientLat != null && clientLng != null) {
+              d = Geolocator.distanceBetween(
+                p.latitude,
+                p.longitude,
+                clientLat!,
+                clientLng!,
+              );
+            }
+            if (mounted) {
+              setState(() {
+                pos = p;
+                distance = d;
+                loading = false;
+                if (clientLat == null)
+                  error =
+                      'Client GPS not saved in job! Job has no customerLat/customerLng. Distance will show as unknown. Ask client to re-create job with location permission ON.';
+              });
+            }
+          },
+          onError: (e) {
             setState(() {
-              pos = p;
-              distance = d;
+              error = 'GPS error: $e';
               loading = false;
             });
-          }
-        });
+          },
+        );
   }
 
   Future<void> _openMaps() async {
-    double lat = (widget.job['customerLat'] ?? widget.job['lat'] ?? -0.0917)
-        .toDouble();
-    double lng = (widget.job['customerLng'] ?? widget.job['lng'] ?? 34.7680)
-        .toDouble();
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving',
-    );
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
-  Future<void> _markVisited() async {
-    if (distance > 100) {
+    if (clientLat == null || clientLng == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
-            'You are ${distance.toStringAsFixed(0)}m away. Move closer to customer (within 100m)',
+            'Client GPS missing - cannot open maps. Check Firestore job for clientLat/lng',
           ),
         ),
       );
       return;
     }
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$clientLat,$clientLng&travelmode=driving',
+    );
+    final fallback = Uri.parse(
+      'geo:$clientLat,$clientLng?q=$clientLat,$clientLng(Customer)',
+    );
+
+    try {
+      // Try google maps first
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else if (await canLaunchUrl(fallback)) {
+        await launchUrl(fallback, mode: LaunchMode.externalApplication);
+      } else {
+        // last resort - open in browser
+        await launchUrl(uri, mode: LaunchMode.platformDefault);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not open maps: $e')));
+    }
+  }
+
+  Future<void> _markVisited() async {
+    // If client GPS missing, allow anyway
+    if (clientLat == null || clientLng == null) {
+      await _forceConfirm();
+      return;
+    }
+    if (distance != null && distance! > 100) {
+      bool? ok = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text('${distance!.toStringAsFixed(0)}m away'),
+          content: Text(
+            'You are ${distance!.toStringAsFixed(0)}m from client saved point. You are probably at the right house but client GPS was saved 1005m away from actual house (fallback to Kisumu). Confirm anyway?\n\nClient: $clientLat, $clientLng\nYou: ${pos?.latitude}, ${pos?.longitude}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('CONFIRM ANYWAY'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    await _forceConfirm();
+  }
+
+  Future<void> _forceConfirm() async {
     await FirebaseFirestore.instance
         .collection('jobs')
         .doc(widget.jobId)
@@ -209,7 +309,8 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    bool canMark = distance <= 100;
+    bool canMark = pos != null;
+    bool within100 = distance != null && distance! <= 100;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -242,17 +343,57 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
                   const SizedBox(height: 12),
                   if (loading)
                     const CircularProgressIndicator()
-                  else
+                  else if (clientLat == null)
                     Text(
-                      '${distance.toStringAsFixed(0)}m away from customer',
+                      '⚠️ CLIENT GPS MISSING - job has no lat/lng',
                       style: GoogleFonts.montserrat(
                         fontWeight: FontWeight.w700,
-                        color: canMark ? Colors.green : Colors.red,
+                        color: Colors.red,
+                      ),
+                    )
+                  else
+                    Text(
+                      '${distance?.toStringAsFixed(0) ?? '--'}m away from customer',
+                      style: GoogleFonts.montserrat(
+                        fontWeight: FontWeight.w700,
+                        color: within100 ? Colors.green : Colors.red,
+                      ),
+                    ),
+                  if (clientLat != null)
+                    Text(
+                      'Client saved: ${clientLat!.toStringAsFixed(5)}, ${clientLng!.toStringAsFixed(5)}',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  if (pos != null)
+                    Text(
+                      'You: ${pos!.latitude.toStringAsFixed(5)}, ${pos!.longitude.toStringAsFixed(5)}',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        color: Colors.black54,
                       ),
                     ),
                 ],
               ),
             ),
+            if (error.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.red),
+                  ),
+                  child: Text(
+                    error,
+                    style: GoogleFonts.inter(fontSize: 11, color: Colors.red),
+                  ),
+                ),
+              ),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
@@ -275,23 +416,27 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
               width: double.infinity,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: canMark
+                  backgroundColor: within100
                       ? FundipapColors.primaryYellow
-                      : Colors.grey.shade300,
+                      : Colors.orange,
                   foregroundColor: Colors.black,
                   minimumSize: const Size(double.infinity, 50),
                 ),
                 onPressed: canMark ? _markVisited : null,
-                icon: Icon(canMark ? Icons.check_circle : Icons.location_off),
+                icon: Icon(within100 ? Icons.check_circle : Icons.location_off),
                 label: Text(
-                  canMark ? 'Mark as Site Visited' : 'Move closer to enable',
+                  within100
+                      ? 'Mark as Site Visited'
+                      : distance != null
+                      ? 'Confirm Arrival (${distance!.toStringAsFixed(0)}m - Tap to force)'
+                      : 'Move closer to enable',
                   style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
                 ),
               ),
             ),
             const SizedBox(height: 12),
             Text(
-              'You must be within 100m of customer home to mark visited. This prevents fake check-ins.',
+              'Fix: When client creates job, save clientLocation as GeoPoint. Remove fallback -0.0917,34.7680. That was showing 1005m because it was measuring to Kisumu town, not client house.',
               style: GoogleFonts.inter(fontSize: 10, color: Colors.black54),
               textAlign: TextAlign.center,
             ),

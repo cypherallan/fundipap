@@ -21,8 +21,8 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
   final descC = TextEditingController();
   final budgetC = TextEditingController();
   String category = 'electrical';
-  List<File> photos = []; // new picked
-  List<String> existingPhotos = []; // urls from firestore
+  List<File> photos = [];
+  List<String> existingPhotos = [];
   bool loading = false;
 
   bool get isEdit => widget.jobId != null;
@@ -49,8 +49,12 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
   }
 
   Future<void> submit() async {
-    if (titleC.text.isEmpty || descC.text.isEmpty || budgetC.text.isEmpty)
+    if (titleC.text.isEmpty || descC.text.isEmpty || budgetC.text.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Fill all fields')));
       return;
+    }
     setState(() => loading = true);
     try {
       var uid = FirebaseAuth.instance.currentUser!.uid;
@@ -59,9 +63,23 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
           .doc(uid)
           .get();
       var uData = userDoc.data() ?? {};
-      var pos = await LocationService.determinePosition(context);
 
-      // upload only new files
+      // THIS WAS RETURNING NULL FOR YOU -> causing 1005m bug
+      var pos = await LocationService.determinePosition(context);
+      if (pos == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Could not get GPS. Enable location and try again.',
+              ),
+            ),
+          );
+          setState(() => loading = false);
+        }
+        return;
+      }
+
       List<String> newUrls = [];
       for (var f in photos) {
         var ref = FirebaseStorage.instance.ref().child(
@@ -73,7 +91,6 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
       List<String> allPhotos = [...existingPhotos, ...newUrls];
 
       if (isEdit) {
-        // EDIT - update same doc, no new doc
         await FirebaseFirestore.instance
             .collection('jobs')
             .doc(widget.jobId)
@@ -86,10 +103,20 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
               'budgetMin': int.tryParse(budgetC.text) ?? 1500,
               'photos': allPhotos,
               'images': allPhotos,
+              // FIX: update GPS on edit too
+              'customerLat': pos.latitude,
+              'customerLng': pos.longitude,
+              'clientLat': pos.latitude,
+              'clientLng': pos.longitude,
+              'lat': pos.latitude,
+              'lng': pos.longitude,
+              'clientLocation': GeoPoint(pos.latitude, pos.longitude),
+              'customerLocation': GeoPoint(pos.latitude, pos.longitude),
+              'location':
+                  'Kisumu ${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}',
               'updatedAt': FieldValue.serverTimestamp(),
             });
       } else {
-        // NEW
         await FirebaseFirestore.instance.collection('jobs').add({
           'customerId': uid,
           'clientId': uid,
@@ -103,16 +130,36 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
           'offeredPrice': int.tryParse(budgetC.text) ?? 1500,
           'budgetMin': int.tryParse(budgetC.text) ?? 1500,
           'budgetMax': null,
-          'location': 'Kisumu',
-          'lat': pos?.latitude,
-          'lng': pos?.longitude,
+          // FIX: save real address + ALL GPS field names
+          'location':
+              'Kisumu ${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}',
+          'lat': pos.latitude,
+          'lng': pos.longitude,
+          'customerLat': pos.latitude,
+          'customerLng': pos.longitude,
+          'clientLat': pos.latitude,
+          'clientLng': pos.longitude,
+          'addressLat': pos.latitude,
+          'addressLng': pos.longitude,
+          'clientLocation': GeoPoint(pos.latitude, pos.longitude),
+          'customerLocation': GeoPoint(pos.latitude, pos.longitude),
+          'locationGeoPoint': GeoPoint(pos.latitude, pos.longitude),
           'photos': allPhotos,
           'images': allPhotos,
           'status': 'open',
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Job posted with GPS ${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}',
+            ),
+          ),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(
         context,
