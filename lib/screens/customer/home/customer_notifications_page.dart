@@ -165,6 +165,12 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
       var fundiId =
           (job['assignedFundiId'] ?? job['assignedFundiName'] ?? 'Fundi')
               .toString();
+      var reneg = job['renegotiation'] as Map<String, dynamic>?;
+      bool isNewPrice =
+          reneg != null &&
+          reneg['requested'] == true &&
+          reneg['status'] == 'pending';
+
       grouped[doc.id] = {
         'jobId': doc.id,
         'fundiName': (job['assignedFundiName'] ?? 'Fundi').toString(),
@@ -175,7 +181,8 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
             ? (job['updatedAt'] as Timestamp).toDate()
             : DateTime.now(),
         'type': 'active',
-        'isRead': job['customerHasUnread'] != true,
+        'isRead': (job['customerHasUnread'] != true) && !isNewPrice,
+        'isNewPrice': isNewPrice,
       };
     }
 
@@ -239,16 +246,25 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
                     String fundiKey = g['fundiId'] as String;
                     int badgeCount = fundiUnreadCounts[fundiKey] ?? 0;
                     bool isUnreadGroup = badgeCount > 0;
+                    bool isNewPrice = g['isNewPrice'] == true;
+
+                    Color cardColor;
+                    Color borderColor;
+                    if (isNewPrice) {
+                      cardColor = Colors.orange.shade50;
+                      borderColor = Colors.orange;
+                    } else if (isUnreadGroup) {
+                      cardColor = Colors.yellow.shade50;
+                      borderColor = FundipapColors.primaryYellow;
+                    } else {
+                      cardColor = Colors.white;
+                      borderColor = Colors.black12;
+                    }
+
                     return Card(
-                      color: isUnreadGroup
-                          ? Colors.yellow.shade50
-                          : Colors.white,
+                      color: cardColor,
                       shape: RoundedRectangleBorder(
-                        side: BorderSide(
-                          color: isUnreadGroup
-                              ? FundipapColors.primaryYellow
-                              : Colors.black12,
-                        ),
+                        side: BorderSide(color: borderColor),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: ListTile(
@@ -296,9 +312,23 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
                             fontSize: 13,
                           ),
                         ),
-                        subtitle: Text(
-                          g['fundiName'],
-                          style: GoogleFonts.inter(fontSize: 11),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              g['fundiName'],
+                              style: GoogleFonts.inter(fontSize: 11),
+                            ),
+                            if (isNewPrice)
+                              Text(
+                                'New price requested',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  color: Colors.orange.shade800,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                          ],
                         ),
                         trailing: isUnreadGroup
                             ? const Icon(

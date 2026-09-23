@@ -12,7 +12,6 @@ import 'screens/customer/disputes_screen.dart';
 import 'screens/fundi/home/fundi_home.dart';
 import 'screens/fundi/home/fundi_notifications_page.dart';
 import 'screens/fundi/disputes_screen.dart' as fundi_disputes;
-import 'screens/admin/admin_screen.dart';
 import 'services/auth_service.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/fundi/fundi_profile.dart';
@@ -157,8 +156,12 @@ class _HomeNavigatorState extends State<HomeNavigator> {
         ),
       );
     }
-    if (widget.role == 'admin')
-      return Scaffold(appBar: _buildAppBar(), body: const AdminScreen());
+    if (widget.role == 'admin') {
+      return Scaffold(
+        appBar: _buildAppBar(),
+        body: const Center(child: Text('Admin - coming soon')),
+      );
+    }
     final pages = [
       const CustomerHome(),
       const CustomerNotificationsPage(),
@@ -205,7 +208,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   }
 }
 
-// CLIENT BADGE - FIXED TO CLEAR ON READ
+// CLIENT BADGE - NOW COUNTS RENEGOTIATION PENDING
 class ClientNotifBadgeIcon extends StatefulWidget {
   final bool isSelected;
   const ClientNotifBadgeIcon({super.key, required this.isSelected});
@@ -268,10 +271,32 @@ class _ClientNotifBadgeIconState extends State<ClientNotifBadgeIcon> {
     _activeSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('customerId', isEqualTo: uid)
-        .where('customerHasUnread', isEqualTo: true)
+        .where(
+          'status',
+          whereIn: [
+            'assigned',
+            'confirmed',
+            'travelling',
+            'site_visit',
+            'in_progress',
+            'pending_completion',
+            'job_completed',
+            'completed',
+          ],
+        )
         .snapshots()
         .listen((snap) {
-          _activeCount = snap.docs.length;
+          int c = 0;
+          for (var doc in snap.docs) {
+            var j = doc.data();
+            var reneg = j['renegotiation'] as Map<String, dynamic>?;
+            bool isNewPrice =
+                reneg != null &&
+                reneg['requested'] == true &&
+                reneg['status'] == 'pending';
+            if (j['customerHasUnread'] == true || isNewPrice) c++;
+          }
+          _activeCount = c;
           _recalc();
         });
   }
@@ -285,9 +310,7 @@ class _ClientNotifBadgeIconState extends State<ClientNotifBadgeIcon> {
   void dispose() {
     _jobsSub?.cancel();
     _activeSub?.cancel();
-    for (var s in _bidsSubs.values) {
-      s.cancel();
-    }
+    for (var s in _bidsSubs.values) s.cancel();
     super.dispose();
   }
 
@@ -301,7 +324,6 @@ class _ClientNotifBadgeIconState extends State<ClientNotifBadgeIcon> {
   }
 }
 
-// FUNDI BADGE - THIS WAS MISSING
 class FundiNotifBadgeIcon extends StatefulWidget {
   final bool isSelected;
   const FundiNotifBadgeIcon({super.key, required this.isSelected});
@@ -329,7 +351,7 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
           int c = 0;
           for (var doc in snap.docs) {
             var b = doc.data();
-            if (b['status'] == 'accepted') c++;
+            if (b['status'] == 'accepted' && b['isReadByFundi'] != true) c++;
           }
           _bidsAccepted = c;
           _recalc();
@@ -350,12 +372,14 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
           var escrowStatus = (job['escrowStatus'] ?? 'pending').toString();
           var status = (job['status'] ?? '').toString();
           if ((escrowStatus == 'paid' || escrowStatus == 'held') &&
-              (status == 'assigned' || status == 'confirmed'))
+              (status == 'assigned' || status == 'confirmed') &&
+              job['fundiHasUnread'] == true)
             escrow++;
           if (reneg != null &&
               (reneg['status'] == 'countered_by_client' ||
                   reneg['status'] == 'accepted_client_buys_parts' ||
-                  reneg['status'] == 'accepted_fundi_buys_at_client_risk'))
+                  reneg['status'] == 'accepted_fundi_buys_at_client_risk') &&
+              job['fundiHasUnread'] == true)
             countered++;
         }
         _jobsCountered = countered;
@@ -366,9 +390,8 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
   }
 
   void _recalc() {
-    if (mounted) {
+    if (mounted)
       setState(() => _count = _bidsAccepted + _jobsCountered + _escrowPaid);
-    }
   }
 
   @override

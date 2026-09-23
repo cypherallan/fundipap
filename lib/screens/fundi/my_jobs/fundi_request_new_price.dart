@@ -125,7 +125,6 @@ class _FundiRequestNewPriceScreenState
           )
           .toList();
 
-      // --- PASTE HERE START ---
       final int pendingExtra = extraLabor;
       final int newLaborTotalLocal = oldLabor + extraLabor;
 
@@ -135,7 +134,7 @@ class _FundiRequestNewPriceScreenState
           .update({
             'renegotiation': {
               'requested': true,
-              'status': 'pending',
+              'status': 'pending', // pending = new notification for client
               'reasons': selectedReasons.toList(),
               'reasonDetails': detailsCtrl.text.trim(),
               'oldLabor': oldLabor,
@@ -152,6 +151,10 @@ class _FundiRequestNewPriceScreenState
               'createdAt': FieldValue.serverTimestamp(),
             },
             'status': 'site_visit',
+            'customerHasUnread': true, // <-- makes client see new badge
+            'fundiHasUnread': false,
+            'updatedAt': FieldValue.serverTimestamp(),
+            'customerLastSeenAt': FieldValue.delete(),
           });
 
       if (!mounted) return;
