@@ -142,8 +142,12 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
         'jobId': b['jobId'],
         'fundiName': b['fundiName'],
         'fundiId': b['fundiId'],
-        'category': (b['jobData']['category'] ?? b['jobTitle'] ?? 'Job')
-            .toString(),
+        'category':
+            (b['jobData']['title'] ??
+                    b['jobTitle'] ??
+                    b['jobData']['category'] ??
+                    'Job')
+                .toString(),
         'jobData': b['jobData'],
         'bidData': b['bidData'],
         'bidId': b['bidId'],
@@ -165,7 +169,7 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
         'jobId': doc.id,
         'fundiName': (job['assignedFundiName'] ?? 'Fundi').toString(),
         'fundiId': fundiId,
-        'category': (job['category'] ?? job['title'] ?? 'Job').toString(),
+        'category': (job['title'] ?? job['category'] ?? 'Job').toString(),
         'jobData': job,
         'latestAt': (job['updatedAt'] is Timestamp)
             ? (job['updatedAt'] as Timestamp).toDate()
@@ -178,7 +182,7 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
     var list = grouped.values.toList()
       ..sort(
         (a, b) =>
-            (b['latestAt'] as DateTime).compareTo(a['latestAt'] as DateTime),
+            (b['latestAt'] as DateTime).compareTo((a['latestAt'] as DateTime)),
       );
 
     Map<String, int> fundiUnreadCounts = {};
@@ -235,7 +239,6 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
                     String fundiKey = g['fundiId'] as String;
                     int badgeCount = fundiUnreadCounts[fundiKey] ?? 0;
                     bool isUnreadGroup = badgeCount > 0;
-
                     return Card(
                       color: isUnreadGroup
                           ? Colors.yellow.shade50

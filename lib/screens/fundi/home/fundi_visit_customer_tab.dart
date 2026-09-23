@@ -17,7 +17,17 @@ class FundiVisitCustomerTab extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection('jobs')
           .where('assignedFundi', isEqualTo: uid)
-          .where('status', whereIn: ['accepted', 'assigned', 'in_progress'])
+          .where(
+            'status',
+            whereIn: [
+              'accepted',
+              'assigned',
+              'confirmed',
+              'travelling',
+              'site_visit',
+              'in_progress',
+            ],
+          )
           .snapshots(),
       builder: (_, snap) {
         if (!snap.hasData) {
@@ -37,7 +47,8 @@ class FundiVisitCustomerTab extends StatelessWidget {
           itemBuilder: (_, i) {
             var doc = snap.data!.docs[i];
             var data = doc.data() as Map<String, dynamic>;
-            bool visited = data['siteVisited'] == true;
+            bool visited =
+                data['siteVisited'] == true || data['siteVisitDone'] == true;
             return Card(
               color: visited ? Colors.green.shade50 : Colors.white,
               child: ListTile(
@@ -49,7 +60,7 @@ class FundiVisitCustomerTab extends StatelessWidget {
                   ),
                 ),
                 subtitle: Text(
-                  '${data['location'] ?? ''}\n${visited ? '✓ Site visited' : 'Not visited yet'}',
+                  '${data['location'] ?? ''}\n${visited ? '✓ Site visited - Go to Notifications to Start Job' : 'Not visited yet'}',
                   style: GoogleFonts.inter(fontSize: 11),
                 ),
                 trailing: visited
@@ -91,7 +102,6 @@ class VisitCustomerScreen extends StatefulWidget {
     required this.jobId,
     required this.job,
   });
-
   @override
   State<VisitCustomerScreen> createState() => _VisitCustomerScreenState();
 }
@@ -175,12 +185,19 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
           'siteVisitedBy': FirebaseAuth.instance.currentUser!.uid,
           'fundiLatAtVisit': pos?.latitude,
           'fundiLngAtVisit': pos?.longitude,
-          'status': 'in_progress',
+          'travelling': false,
+          'status': 'site_visit',
+          'updatedAt': FieldValue.serverTimestamp(),
+          'customerHasUnread': true,
         });
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Site visited confirmed ✓')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Site visited confirmed ✓ - Now go to Notifications to Start Job or Request New Price',
+        ),
+      ),
+    );
     Navigator.pop(context);
   }
 
