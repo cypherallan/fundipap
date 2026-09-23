@@ -65,7 +65,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
       'escrowAmount': newTotal,
       'extraEscrowStatus': 'paid',
       'extraEscrowPaidAt': FieldValue.serverTimestamp(),
-      'status': 'site_visit', // fundi left, must start work after parts
+      'status': 'site_visit',
       'renegotiation.status': finalStatus,
       'renegotiation.requested': false,
       'renegotiation.currentPhase': clientBuys
@@ -88,11 +88,112 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
     });
   }
 
+  // FIXED: Release INITIAL + EXTRA = TOTAL + SUCCESS MESSAGE
   Future<void> _confirmCompletion(String jobId) async {
-    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+    var jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
+    var snap = await jobRef.get();
+    var j = snap.data() as Map<String, dynamic>;
+    var reneg = j['renegotiation'] as Map<String, dynamic>?;
+
+    int initialAmount =
+        (j['escrowAmount'] ?? j['agreedPrice'] ?? j['budgetMax'] ?? 0).toInt();
+    int extraAmount =
+        (j['extraLaborAmount'] ??
+                reneg?['extraLabor'] ??
+                reneg?['pendingLabor'] ??
+                0)
+            .toInt();
+    int newLaborTotal = (reneg?['newLaborTotal'] ?? 0).toInt();
+    int totalRelease = newLaborTotal > 0
+        ? newLaborTotal
+        : initialAmount + extraAmount;
+    if (totalRelease == 0) totalRelease = initialAmount;
+
+    await jobRef.update({
       'status': 'completed',
+      'escrowStatus': 'released',
+      'extraEscrowStatus': 'released',
+      'clientConfirmedComplete': true,
+      'completedAt': FieldValue.serverTimestamp(),
+      'totalReleasedAmount': totalRelease,
+      'fundiPayoutAmount': totalRelease,
+      'initialEscrowReleased': initialAmount,
+      'extraEscrowReleased': extraAmount,
+      'fundiHasUnread': true,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    try {
+      await FirebaseFirestore.instance
+          .collection('escrowTransactions')
+          .doc(jobId)
+          .update({
+            'status': 'released',
+            'amount': totalRelease,
+            'initialAmount': initialAmount,
+            'extraAmount': extraAmount,
+            'releasedAt': FieldValue.serverTimestamp(),
+          });
+    } catch (_) {}
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.green, size: 28),
+            const SizedBox(width: 8),
+            Text(
+              'Payment Released! 🎉',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Job marked as completed.',
+              style: GoogleFonts.inter(fontSize: 13),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'KES $totalRelease released to ${widget.fundiName}',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Initial: KES $initialAmount + Extra: KES $extraAmount = Total KES $totalRelease',
+                    style: GoogleFonts.inter(fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -119,14 +220,12 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               .toString();
           bool siteDone =
               (job['siteVisitDone'] == true) || (job['siteVisited'] == true);
-
           var reneg = job['renegotiation'] as Map<String, dynamic>?;
           String renegStatus = (reneg?['status'] ?? '').toString();
           String phase = (reneg?['currentPhase'] ?? '').toString();
           bool needsExtraEscrow = renegStatus.contains('pending_extra_escrow');
 
           List<Widget> timeline = [];
-
           timeline.add(
             Container(
               color: Colors.white,
@@ -168,7 +267,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             ),
           );
           timeline.add(const Divider(height: 1));
-
           timeline.add(
             _timelineCard(
               title: 'Bid accepted - Done',
@@ -181,7 +279,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           bool escrowDone = escrow == 'held' || escrow == 'paid';
           double agreed = _toDouble(job['agreedPrice'] ?? job['budget'] ?? 0);
           int alreadyLocked = _toInt(job['escrowAmount'] ?? agreed);
-
           timeline.add(
             _timelineCard(
               title: escrowDone
@@ -238,7 +335,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
 
-          // EXTRA ESCROW REQUIRED
           if (needsExtraEscrow) {
             int extra = _toInt(
               job['extraLaborAmount'] ?? job['extraEscrowAmount'] ?? 0,
@@ -297,13 +393,12 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
 
-          // CLIENT BOUGHT PARTS CONFIRMATION
           if (phase == 'waiting_for_client_to_buy_parts') {
             timeline.add(
               _timelineCard(
                 title: 'You will buy parts - Confirm when bought',
                 body:
-                    'Extra KES ${_toInt(job['extraLaborAmount'])} locked. Buy the listed parts/materials then confirm below. Fundi will verify parts before starting work.',
+                    'Extra KES ${_toInt(job['extraLaborAmount'])} locked. Buy the listed parts/materials then confirm below.',
                 icon: Icons.shopping_cart,
                 isDone: false,
                 action: ElevatedButton(
@@ -357,25 +452,46 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               status == 'pending_completion' ||
               status == 'completed') {
             bool isDone = status == 'completed';
+            int initialAmt = _toInt(
+              job['escrowAmount'] ?? job['agreedPrice'] ?? 0,
+            );
+            int extraAmt = _toInt(
+              job['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0,
+            );
+            int newTotal = _toInt(reneg?['newLaborTotal'] ?? 0);
+            int totalToRelease = newTotal > 0
+                ? newTotal
+                : initialAmt + extraAmt;
+            if (totalToRelease == 0) totalToRelease = initialAmt;
+
             timeline.add(
               _timelineCard(
                 title: isDone
-                    ? 'Job Completed - Done'
-                    : 'Job completed - Confirm',
+                    ? 'Job Completed - KES $totalToRelease released to ${widget.fundiName}'
+                    : 'Job Completed - Confirm & Release KES $totalToRelease to ${widget.fundiName}',
                 body: isDone
-                    ? 'Payment released'
-                    : 'Tap to confirm and release',
+                    ? 'Payment of KES $totalToRelease released to ${widget.fundiName} (Initial KES $initialAmt + Extra KES $extraAmt)'
+                    : 'Fundi marked job as complete. Confirm to release KES $totalToRelease to ${widget.fundiName} (Initial KES $initialAmt + Extra KES $extraAmt)',
                 icon: Icons.verified,
                 isDone: isDone,
                 action: !isDone
-                    ? ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: FundipapColors.greenSuccess,
-                        ),
-                        onPressed: () => _confirmCompletion(widget.jobId),
-                        child: const Text(
-                          'Confirm Completion',
-                          style: TextStyle(color: Colors.white),
+                    ? SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: FundipapColors.greenSuccess,
+                          ),
+                          onPressed: () => _confirmCompletion(widget.jobId),
+                          child: Text(
+                            'CONFIRM COMPLETION & RELEASE KES $totalToRelease TO ${widget.fundiName.toUpperCase()}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
                         ),
                       )
                     : null,

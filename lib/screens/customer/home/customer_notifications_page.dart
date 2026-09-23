@@ -341,7 +341,7 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
                           await _markThisFundiAsRead(fundiKey);
                           if (!context.mounted) return;
                           if (g['type'] == 'bid' && g['isPendingBid'] == true) {
-                            Navigator.push(
+                            final confirmed = await Navigator.push<bool>(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => ConfirmFundiPage(
@@ -352,6 +352,10 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
                                 ),
                               ),
                             );
+                            if (confirmed == true && context.mounted) {
+                              // DO NOT push CustomerFundiTimelinePage here - stay on notifications list
+                              return;
+                            }
                           } else {
                             Navigator.push(
                               context,

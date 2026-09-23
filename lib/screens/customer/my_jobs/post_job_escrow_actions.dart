@@ -26,11 +26,10 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
         );
       }
     } catch (e) {
-      if (context.mounted) {
+      if (context.mounted)
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
     }
   }
 
@@ -69,27 +68,63 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
+  // FIXED: Release INITIAL + NEW REVIEWED COST = TOTAL
   Future<void> confirmCompletionClient(String jobId) async {
     var jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
     var snap = await jobRef.get();
-    bool fundiDone = (snap.data()?['fundiConfirmedComplete'] ?? false);
+    var j = snap.data() as Map<String, dynamic>;
+    var reneg = j['renegotiation'] as Map<String, dynamic>?;
+
+    int initialAmount =
+        (j['escrowAmount'] ?? j['agreedPrice'] ?? j['budgetMax'] ?? 0).toInt();
+    int extraAmount =
+        (j['extraLaborAmount'] ??
+                reneg?['extraLabor'] ??
+                reneg?['pendingLabor'] ??
+                0)
+            .toInt();
+    int newLaborTotal = (reneg?['newLaborTotal'] ?? 0).toInt();
+
+    // TOTAL = newLaborTotal OR initial + extra
+    int totalRelease = newLaborTotal > 0
+        ? newLaborTotal
+        : initialAmount + extraAmount;
+    if (totalRelease == 0) totalRelease = initialAmount;
+
+    bool fundiDone =
+        (j['fundiConfirmedComplete'] ?? false) ||
+        j['status'] == 'job_completed' ||
+        reneg?['currentPhase'] == 'completed_by_fundi';
+
     await jobRef.update({
       'clientConfirmedComplete': true,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
     if (fundiDone) {
       await jobRef.update({
         'status': 'completed',
         'escrowStatus': 'released',
+        'extraEscrowStatus': 'released',
         'completedAt': FieldValue.serverTimestamp(),
+        'totalReleasedAmount': totalRelease,
+        'fundiPayoutAmount': totalRelease,
+        'initialEscrowReleased': initialAmount,
+        'extraEscrowReleased': extraAmount,
+        'fundiHasUnread': true,
       });
-      await FirebaseFirestore.instance
-          .collection('escrowTransactions')
-          .doc(jobId)
-          .update({
-            'status': 'released',
-            'releasedAt': FieldValue.serverTimestamp(),
-          });
+      try {
+        await FirebaseFirestore.instance
+            .collection('escrowTransactions')
+            .doc(jobId)
+            .update({
+              'status': 'released',
+              'amount': totalRelease,
+              'initialAmount': initialAmount,
+              'extraAmount': extraAmount,
+              'releasedAt': FieldValue.serverTimestamp(),
+            });
+      } catch (_) {}
     } else {
       await jobRef.update({'status': 'pending_completion'});
     }

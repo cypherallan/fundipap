@@ -169,7 +169,6 @@ class CustomerMyJobs extends StatelessWidget {
   }
 
   Future<void> _payToEscrow(String jobId, double amount) async {
-    // Simulated Mpesa - in production call your Cloud Function
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'escrowStatus': 'held',
       'escrowAmount': amount,
@@ -185,7 +184,7 @@ class CustomerMyJobs extends StatelessWidget {
       'budgetMax': newPrice,
       'renegotiation.status': 'approved',
       'renegotiation.approvedAt': FieldValue.serverTimestamp(),
-      'status': 'assigned', // go back to assigned so fundi can START JOB
+      'status': 'assigned',
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -198,12 +197,43 @@ class CustomerMyJobs extends StatelessWidget {
     });
   }
 
+  // FIXED: Release INITIAL + NEW REVIEWED COST
   Future<void> _confirmCompletion(String jobId) async {
+    var doc = await FirebaseFirestore.instance
+        .collection('jobs')
+        .doc(jobId)
+        .get();
+    var j = doc.data() as Map<String, dynamic>;
+    var reneg = j['renegotiation'] as Map<String, dynamic>?;
+
+    int initialAmount =
+        (j['escrowAmount'] ?? j['agreedPrice'] ?? j['budgetMax'] ?? 0).toInt();
+    int extraAmount =
+        (j['extraLaborAmount'] ??
+                reneg?['extraLabor'] ??
+                reneg?['pendingLabor'] ??
+                0)
+            .toInt();
+    int newLaborTotal = (reneg?['newLaborTotal'] ?? 0).toInt();
+
+    // Total to release = newLaborTotal if exists, else initial + extra
+    int totalRelease = newLaborTotal > 0
+        ? newLaborTotal
+        : initialAmount + extraAmount;
+    if (totalRelease == 0) totalRelease = initialAmount;
+
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'status': 'completed',
       'escrowStatus': 'released',
+      'extraEscrowStatus': 'released',
       'clientConfirmedComplete': true,
       'completedAt': FieldValue.serverTimestamp(),
+      'totalReleasedAmount': totalRelease,
+      'fundiPayoutAmount': totalRelease,
+      'initialEscrowReleased': initialAmount,
+      'extraEscrowReleased': extraAmount,
+      'fundiHasUnread': true,
+      'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -239,6 +269,15 @@ class CustomerMyJobs extends StatelessWidget {
             String escrow = j['escrowStatus'] ?? 'pending';
             bool siteDone = j['siteVisitDone'] ?? false;
             var reneg = j['renegotiation'] as Map<String, dynamic>?;
+            int initialAmt =
+                (j['escrowAmount'] ?? j['agreedPrice'] ?? j['budgetMax'] ?? 0)
+                    .toInt();
+            int extraAmt = (j['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0)
+                .toInt();
+            int newTotal = (reneg?['newLaborTotal'] ?? 0).toInt();
+            int totalToRelease = newTotal > 0
+                ? newTotal
+                : initialAmt + extraAmt;
 
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -296,14 +335,13 @@ class CustomerMyJobs extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'KES ${j['budgetMin']} - ${j['budgetMax']} • Agreed: KES ${j['agreedPrice'] ?? '-'}',
+                    'KES ${j['budgetMin']} - ${j['budgetMax']} • Agreed: KES ${j['agreedPrice'] ?? '-'} • Extra: KES $extraAmt • Total: KES $totalToRelease',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
                     ),
                   ),
 
-                  // SITE VISIT NOTIFICATION - NEW
                   if (siteDone) ...[
                     const SizedBox(height: 10),
                     Container(
@@ -346,7 +384,6 @@ class CustomerMyJobs extends StatelessWidget {
                     ),
                   ],
 
-                  // RENEGOTIATION - NEW
                   if (reneg != null && reneg['status'] == 'pending') ...[
                     const SizedBox(height: 10),
                     Container(
@@ -438,7 +475,6 @@ class CustomerMyJobs extends StatelessWidget {
                     ),
                   ],
 
-                  // ESCROW PAY BUTTON
                   if (status == 'assigned' && escrow != 'held') ...[
                     const SizedBox(height: 10),
                     SizedBox(
@@ -469,32 +505,66 @@ class CustomerMyJobs extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
+                        color: Colors.orange.shade50,
                         borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange),
                       ),
                       child: Text(
-                        'Fundi started job. Parts: ${(j['parts'] ?? []).length} added',
-                        style: GoogleFonts.inter(fontSize: 11),
+                        'Fundi is working... Initial KES $initialAmt + Extra KES $extraAmt = Total KES $totalToRelease in escrow',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: Colors.orange.shade800,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
 
-                  if (status == 'pending_completion') ...[
+                  if (status == 'job_completed' ||
+                      status == 'pending_completion') ...[
                     const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.green),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Fundi marked job as completed',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                              color: Colors.green.shade800,
+                            ),
+                          ),
+                          Text(
+                            'Initial: KES $initialAmt + Extra: KES $extraAmt = Total KES $totalToRelease will be released to fundi',
+                            style: GoogleFonts.inter(fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: FundipapColors.greenSuccess,
+                          minimumSize: const Size(double.infinity, 48),
                         ),
                         onPressed: () => _confirmCompletion(doc.id),
-                        child: const Text(
-                          'CONFIRM COMPLETION & RELEASE PAYMENT',
-                          style: TextStyle(
+                        child: Text(
+                          'CONFIRM COMPLETION & RELEASE KES $totalToRelease TO FUNDI',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
                           ),
+                          textAlign: TextAlign.center,
                         ),
                       ),
                     ),
@@ -503,7 +573,7 @@ class CustomerMyJobs extends StatelessWidget {
                   if (status == 'completed') ...[
                     const SizedBox(height: 10),
                     Text(
-                      '✓ Completed & Paid KES ${j['agreedPrice']}',
+                      '✓ Completed & Paid KES ${j['totalReleasedAmount'] ?? totalToRelease} (Initial $initialAmt + Extra $extraAmt)',
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         color: Colors.green,

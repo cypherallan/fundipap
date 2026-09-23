@@ -61,6 +61,17 @@ class FundiCustomerTimelinePage extends StatelessWidget {
     });
   }
 
+  Future<void> _completeJob() async {
+    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'status': 'job_completed',
+      'renegotiation.currentPhase': 'completed_by_fundi',
+      'completedAt': FieldValue.serverTimestamp(),
+      'customerHasUnread': true,
+      'fundiHasUnread': false,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
@@ -89,7 +100,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
 
         List<Widget> timeline = [];
 
-        // === PRIORITY 1: WAITING STATES MUST BE ON TOP ===
+        // 1. WAITING STATES ON TOP
         if (phase == 'waiting_for_client_to_buy_parts') {
           timeline.add(
             _card(
@@ -99,7 +110,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               iconColor: Colors.orange.shade800,
               title: 'Waiting for client to buy materials',
               message:
-                  'Client locked KES $extraAmt. Waiting for $clientName to buy ${parts.length} materials. START WORK is hidden until client buys.',
+                  'Client locked KES $extraAmt. Waiting for ${parts.length} items.',
               time: 'Now',
               isCurrent: true,
             ),
@@ -112,8 +123,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               icon: Icons.inventory,
               iconColor: Colors.blue.shade800,
               title: 'Client says materials bought',
-              message:
-                  'Client says he bought parts. Confirm to show START WORK.',
+              message: 'Confirm to show START WORK',
               time: 'Now',
               isCurrent: true,
               action: ElevatedButton(
@@ -137,8 +147,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               icon: Icons.lock,
               iconColor: Colors.orange.shade800,
               title: 'Waiting for client to lock extra KES $extraAmt',
-              message:
-                  'Client must lock extra to escrow before buying materials.',
+              message: 'Waiting',
               time: 'Now',
               isCurrent: true,
             ),
@@ -151,13 +160,31 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               icon: Icons.pending_actions,
               iconColor: Colors.orange.shade800,
               title: 'Waiting for client to confirm price review',
-              message: 'You requested new price. Waiting for $clientName.',
+              message: 'Waiting for $clientName',
               time: 'Now',
               isCurrent: true,
             ),
           );
         }
-        // === PRIORITY 2: CONFIRMED -> START WORK ===
+        // 2. COMPLETED - LAST STEP
+        else if (phase == 'completed_by_fundi' ||
+            status == 'job_completed' ||
+            status == 'pending_completion') {
+          timeline.add(
+            _card(
+              color: Colors.green.shade50,
+              border: Colors.green,
+              icon: Icons.check_circle,
+              iconColor: Colors.green.shade800,
+              title: 'Job Completed - Waiting for client confirmation',
+              message:
+                  'You marked $jobTitle as completed. Client notified to review & release KES. Waiting for client to confirm.',
+              time: 'Now',
+              isCurrent: true,
+            ),
+          );
+        }
+        // 3. MATERIALS CONFIRMED -> START WORK
         else if (phase == 'parts_confirmed_by_fundi') {
           timeline.add(
             _card(
@@ -166,7 +193,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               icon: Icons.check_circle,
               iconColor: Colors.green.shade800,
               title: 'Materials confirmed',
-              message: 'You confirmed materials. Now you can start work.',
+              message: 'Press START WORK to start.',
               time: 'Now',
               isCurrent: true,
               action: ElevatedButton(
@@ -186,7 +213,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             ),
           );
         }
-        // === PRIORITY 3: WORKING (only after START WORK pressed) ===
+        // 4. WORKING -> SHOW MARK JOB AS COMPLETED
         else if (status == 'in_progress' || phase == 'fundi_working') {
           timeline.add(
             _card(
@@ -195,13 +222,28 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               icon: Icons.construction,
               iconColor: Colors.orange.shade800,
               title: 'You are working',
-              message: 'You are working on $jobTitle for $clientName',
+              message:
+                  'You are working on $jobTitle. When done, mark as completed to notify $clientName.',
               time: 'Now',
               isCurrent: true,
+              action: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: FundipapColors.greenSuccess,
+                  minimumSize: const Size(double.infinity, 52),
+                ),
+                onPressed: _completeJob,
+                child: const Text(
+                  'MARK JOB AS COMPLETED',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
             ),
           );
         }
-        // === PRIORITY 4: SITE VISIT FLOW ===
+        // 5. SITE FLOW
         else if (!siteDone && travelling) {
           timeline.add(
             _card(
@@ -210,7 +252,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               icon: Icons.directions_bike,
               iconColor: Colors.blue,
               title: 'You are on the way',
-              message: 'Travelling to $clientName',
+              message: 'Travelling',
               time: 'Now',
               isCurrent: true,
               action: ElevatedButton.icon(
@@ -228,7 +270,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               icon: Icons.location_on,
               iconColor: Colors.black,
               title: 'Start site visit',
-              message: 'Must visit site first before START JOB',
+              message: 'Must visit first',
               time: 'Now',
               isCurrent: true,
               action: SizedBox(

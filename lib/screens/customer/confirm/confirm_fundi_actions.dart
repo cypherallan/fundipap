@@ -51,6 +51,7 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
       'assignedFundiName': bidData['fundiName'],
       'agreedPrice': bidData['price'],
       'updatedAt': FieldValue.serverTimestamp(),
+      'fundiHasUnread': true,
     });
     await FirebaseFirestore.instance
         .collection('jobs')
@@ -59,7 +60,6 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
         .doc(bidId)
         .update({'status': 'accepted'});
 
-    // === 1 NOTIFICATION FOR FUNDI WHEN CLIENT ACCEPTS BID ===
     await NotificationService.notifyUser(
       recipientId: bidData['fundiId'],
       title: 'Bid Accepted! 🎉',
@@ -77,7 +77,7 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
         backgroundColor: FundipapColors.greenSuccess,
       ),
     );
-    Navigator.pop(context);
+    Navigator.pop(context, true); // <-- true = stay on notifications page
   }
 
   Future<void> rejectFundi() async {
@@ -161,13 +161,7 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
           'rejectedBy': FirebaseAuth.instance.currentUser!.uid,
         });
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${bidData['fundiName']} rejected'),
-        backgroundColor: FundipapColors.redAlert,
-      ),
-    );
-    Navigator.pop(context);
+    Navigator.pop(context, false);
   }
 
   Future<void> reportFraud() async {
