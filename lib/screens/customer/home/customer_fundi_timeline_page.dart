@@ -290,8 +290,17 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
 
-          // WAITING FOR FUNDI TO START TRAVELLING - ORANGE
-          if (!isTravelling && !siteDone) {
+          // === CUMULATIVE FLOW - EVERY WAITING TURNS GREEN WHEN DONE ===
+
+          // STAGE 1: Waiting for fundi to start travelling
+          if (!isTravelling &&
+              !siteDone &&
+              status != 'site_visit' &&
+              status != 'in_progress' &&
+              status != 'job_completed' &&
+              status != 'pending_completion' &&
+              status != 'completed' &&
+              phase != 'fundi_working') {
             timeline.add(
               OrangeAnimatedWaitingCard(
                 title: 'Waiting for fundi to start travelling',
@@ -299,18 +308,25 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     'Escrow of KES $alreadyLocked secured. ${widget.fundiName} has NOT started travelling yet. You will be notified when he taps Start Site Visit.',
               ),
             );
-            return ListView(
-              padding: const EdgeInsets.all(12),
-              children: timeline,
+          } else {
+            // Once fundi started, previous waiting becomes GREEN DONE
+            timeline.add(
+              _timelineCard(
+                title: 'Fundi started travelling - Done',
+                body: '${widget.fundiName} tapped Start Site Visit',
+                icon: Icons.check_circle,
+                isDone: true,
+              ),
             );
           }
-          // FUNDI IS ON THE WAY - STILL WAITING (ORANGE) UNTIL ARRIVAL
+
+          // STAGE 2: Fundi is on the way (only after travelling started, before arrival)
           if (isTravelling && !siteDone) {
             timeline.add(
               OrangeAnimatedWaitingCard(
                 title: 'Fundi is on the way - Waiting to arrive',
                 message:
-                    '${widget.fundiName} started site visit and is travelling to $location. Tap to track. Turns GREEN only when fundi arrives.',
+                    '${widget.fundiName} is travelling to $location. Tracking live. Will turn GREEN when arrives.',
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -335,17 +351,23 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ),
               ),
             );
-            return ListView(
-              padding: const EdgeInsets.all(12),
-              children: timeline,
+          } else if (siteDone) {
+            timeline.add(
+              _timelineCard(
+                title: 'Fundi was on the way - Done',
+                body: 'Travelling completed',
+                icon: Icons.check_circle,
+                isDone: true,
+              ),
             );
           }
 
+          // STAGE 3: Arrival
           if (siteDone) {
             timeline.add(
               _timelineCard(
-                title: 'Fundi arrived - Currently on site',
-                body: 'At $location • Inspecting site now',
+                title: 'Fundi arrived - Currently on site - Done',
+                body: 'At $location • Inspecting site now - Done',
                 icon: Icons.check_circle,
                 isDone: true,
               ),
@@ -358,6 +380,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
 
+          // STAGE 4: Extra escrow & price review
           if (needsExtraEscrow) {
             int extra = _toInt(
               job['extraLaborAmount'] ?? job['extraEscrowAmount'] ?? 0,
@@ -398,23 +421,30 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               reneg['requested'] == true &&
               renegStatus == 'pending') {
             timeline.add(
-              _timelineCard(
-                title: 'Fundi requests price review',
-                body:
-                    '${reneg['reasonDetails'] ?? ''}\nExtra labor: KES ${_toInt(reneg['extraLabor'])}',
-                icon: Icons.request_quote,
-                isDone: false,
-                action: ElevatedButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ClientPriceApprovalScreen(
-                        jobId: widget.jobId,
-                        job: job,
+              OrangeAnimatedWaitingCard(
+                title:
+                    'Fundi requests price review - Waiting for you to review',
+                message:
+                    '${reneg['reasonDetails'] ?? 'Fundi sent new breakdown'}\nExtra labor: KES ${_toInt(reneg['extraLabor'])}\nWaiting for you to tap REVIEW BREAKDOWN. This stays in waiting state (orange) until you act.',
+                action: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ClientPriceApprovalScreen(
+                          jobId: widget.jobId,
+                          job: job,
+                        ),
                       ),
                     ),
+                    child: const Text('REVIEW BREAKDOWN'),
                   ),
-                  child: const Text('REVIEW BREAKDOWN'),
                 ),
               ),
             );
@@ -424,6 +454,25 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
 
+          // Once reviewed, show it as GREEN DONE before next step
+          if (reneg != null &&
+              (renegStatus.contains('accepted') ||
+                  renegStatus.contains('pending_extra_escrow') ||
+                  phase == 'waiting_for_client_to_buy_parts' ||
+                  phase == 'fundi_buying_parts')) {
+            if (reneg['requested'] == false || renegStatus != 'pending') {
+              timeline.add(
+                _timelineCard(
+                  title: 'Price review - Reviewed - Done',
+                  body: 'You reviewed fundi breakdown - Done',
+                  icon: Icons.check_circle,
+                  isDone: true,
+                ),
+              );
+            }
+          }
+
+          // STAGE 5: Parts flow
           if (phase == 'waiting_for_client_to_buy_parts') {
             timeline.add(
               _timelineCard(
@@ -452,19 +501,59 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               padding: const EdgeInsets.all(12),
               children: timeline,
             );
-          } else if (phase == 'client_claims_parts_bought') {
+          }
+          if (phase == 'client_claims_parts_bought' ||
+              phase == 'parts_confirmed_by_fundi' ||
+              phase == 'fundi_working' ||
+              status == 'in_progress' ||
+              status == 'job_completed' ||
+              status == 'pending_completion' ||
+              status == 'completed') {
+            if (phase == 'waiting_for_client_to_buy_parts') {
+              /* already handled */
+            } else {
+              timeline.add(
+                _timelineCard(
+                  title: 'You bought parts - Done',
+                  body: 'Parts purchase confirmed',
+                  icon: Icons.check_circle,
+                  isDone: true,
+                ),
+              );
+            }
+          }
+
+          if (phase == 'client_claims_parts_bought') {
             timeline.add(
               OrangeAnimatedWaitingCard(
                 title: 'Parts bought - Waiting for fundi to confirm',
                 message:
-                    'You marked parts as bought. Waiting for ${widget.fundiName} to confirm parts are correct & available.',
+                    'You marked parts as bought. Waiting for ${widget.fundiName} to confirm.',
               ),
             );
             return ListView(
               padding: const EdgeInsets.all(12),
               children: timeline,
             );
-          } else if (phase == 'parts_confirmed_by_fundi') {
+          } else if (phase == 'parts_confirmed_by_fundi' ||
+              phase == 'fundi_working' ||
+              status == 'in_progress' ||
+              status == 'job_completed' ||
+              status == 'pending_completion' ||
+              status == 'completed') {
+            if (phase != 'waiting_for_client_to_buy_parts') {
+              timeline.add(
+                _timelineCard(
+                  title: 'Fundi confirmed parts - Done',
+                  body: 'Parts confirmed as available',
+                  icon: Icons.check_circle,
+                  isDone: true,
+                ),
+              );
+            }
+          }
+
+          if (phase == 'parts_confirmed_by_fundi') {
             timeline.add(
               OrangeAnimatedWaitingCard(
                 title:
@@ -479,6 +568,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
 
+          // STAGE 6: Waiting for fundi to start job
           if (status == 'site_visit' && phase.isEmpty) {
             timeline.add(
               OrangeAnimatedWaitingCard(
@@ -491,14 +581,27 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               padding: const EdgeInsets.all(12),
               children: timeline,
             );
-          }
-          if (phase == 'fundi_working' || status == 'in_progress') {
+          } else if (status == 'in_progress' ||
+              phase == 'fundi_working' ||
+              status == 'job_completed' ||
+              status == 'pending_completion' ||
+              status == 'completed') {
             timeline.add(
               _timelineCard(
-                title: 'Fundi is working',
-                body: '${widget.trade} in progress at $location',
-                icon: Icons.construction,
-                isDone: false,
+                title: 'Waiting for fundi to start job - Done',
+                body: 'Fundi started job',
+                icon: Icons.check_circle,
+                isDone: true,
+              ),
+            );
+          }
+
+          if (phase == 'fundi_working' || status == 'in_progress') {
+            timeline.add(
+              OrangeAnimatedWaitingCard(
+                title: 'Fundi is working - Waiting to complete',
+                message:
+                    '${widget.trade} in progress at $location. ${widget.fundiName} is working. Waiting for him to tap MARK JOB AS COMPLETED. This stays in waiting state (orange) until fundi finishes.',
               ),
             );
             return ListView(
