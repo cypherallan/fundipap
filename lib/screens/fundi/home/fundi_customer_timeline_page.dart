@@ -4,7 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../my_jobs/fundi_request_new_price.dart';
 import 'fundi_visit_customer_tab.dart';
-import '../../../widgets/animated_waiting_card.dart'; // <-- you imported correctly
+import '../../../widgets/animated_waiting_card.dart';
+import '../rating/rate_client_screen.dart'; // <-- SAME RULES AS RateFundiScreen
 
 class FundiCustomerTimelinePage extends StatelessWidget {
   final String jobId;
@@ -75,6 +76,31 @@ class FundiCustomerTimelinePage extends StatelessWidget {
     });
   }
 
+  Future<void> _confirmPaymentReceived(
+    BuildContext context,
+    String clientId,
+  ) async {
+    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'fundiConfirmedPayment': true,
+      'fundiPaymentConfirmedAt': FieldValue.serverTimestamp(),
+      'fundiHasUnread': false,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    if (!context.mounted) return;
+    // After YES, mandatory rate client - same rules as client
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => RateClientScreen(
+          jobId: jobId,
+          clientId: clientId,
+          clientName: clientName,
+          trade: jobTitle,
+        ),
+      ),
+      (r) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
@@ -90,7 +116,12 @@ class FundiCustomerTimelinePage extends StatelessWidget {
         var job = snap.data!.data() as Map<String, dynamic>;
         var status = (job['status'] ?? '').toString();
         var escrow = (job['escrowStatus'] ?? 'pending').toString();
-        bool escrowDone = escrow == 'held' || escrow == 'paid';
+
+        // FIX: include released as done
+        bool escrowDone =
+            escrow == 'held' || escrow == 'paid' || escrow == 'released';
+        bool escrowReleased = escrow == 'released' || status == 'completed';
+
         int agreedPrice = _toInt(
           job['agreedPrice'] ??
               job['acceptedBidAmount'] ??
@@ -98,6 +129,14 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               job['budget'] ??
               0,
         );
+        int releasedAmount = _toInt(
+          job['totalReleasedAmount'] ?? job['fundiPayoutAmount'] ?? agreedPrice,
+        );
+        String clientId = (job['clientId'] ?? job['customerId'] ?? '')
+            .toString();
+        bool fundiConfirmedPayment = job['fundiConfirmedPayment'] == true;
+        bool fundiRatedClient = job['fundiRated'] == true;
+
         var reneg = job['renegotiation'] as Map<String, dynamic>?;
         String phase = (reneg?['currentPhase'] ?? '').toString();
         String rs = (reneg?['status'] ?? '').toString();
@@ -110,15 +149,181 @@ class FundiCustomerTimelinePage extends StatelessWidget {
         );
         List parts = List.from(reneg?['partsNeeded'] ?? []);
 
+        // ===== NEW: AFTER CLIENT RELEASES PAYMENT - FUNDI SEES THIS =====
+        if (status == 'completed' && escrowReleased) {
+          List<Widget> doneTimeline = [];
+
+          if (!fundiConfirmedPayment) {
+            doneTimeline.add(
+              Card(
+                color: Colors.green.shade50,
+                shape: RoundedRectangleBorder(
+                  side: BorderSide(color: Colors.green.shade700, width: 1.5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.account_balance_wallet,
+                        size: 48,
+                        color: Colors.green.shade700,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'KES $releasedAmount Released!',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'KES $releasedAmount has been successfully released to your account by $clientName. Kindly confirm your account balance / M-Pesa.',
+                        style: GoogleFonts.inter(fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: FundipapColors.greenSuccess,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () =>
+                              _confirmPaymentReceived(context, clientId),
+                          child: Text(
+                            'YES, I HAVE RECEIVED KES $releasedAmount',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          } else if (!fundiRatedClient) {
+            doneTimeline.add(
+              _card(
+                color: Colors.green.shade50,
+                border: Colors.green,
+                icon: Icons.account_balance_wallet,
+                iconColor: Colors.green,
+                title: 'KES $releasedAmount confirmed - Done',
+                message: 'You confirmed receipt',
+                time: 'Done',
+                isDone: true,
+              ),
+            );
+            doneTimeline.add(
+              Card(
+                color: Colors.orange.shade50,
+                shape: RoundedRectangleBorder(
+                  side: BorderSide(color: Colors.orange.shade700, width: 1.5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.star_rate_rounded,
+                        size: 48,
+                        color: Colors.amber,
+                      ),
+                      Text(
+                        'Rate $clientName - Mandatory',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(
+                        'Mandatory to clear this job. Same rules as client rating.',
+                        style: GoogleFonts.inter(fontSize: 11),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () =>
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(
+                                  builder: (_) => RateClientScreen(
+                                    jobId: jobId,
+                                    clientId: clientId,
+                                    clientName: clientName,
+                                    trade: jobTitle,
+                                  ),
+                                ),
+                                (r) => false,
+                              ),
+                          child: Text(
+                            'RATE $clientName NOW',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          } else {
+            doneTimeline.add(
+              _card(
+                color: Colors.green.shade50,
+                border: Colors.green,
+                icon: Icons.check_circle,
+                iconColor: Colors.green,
+                title: 'Completed & Rated - Done',
+                message:
+                    'KES $releasedAmount received and client rated - cleared',
+                time: 'Done',
+                isDone: true,
+              ),
+            );
+          }
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(
+                clientName,
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+              ),
+              backgroundColor: FundipapColors.blackGray,
+              foregroundColor: Colors.white,
+            ),
+            body: ListView.separated(
+              padding: const EdgeInsets.all(12),
+              itemCount: doneTimeline.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (_, i) => doneTimeline[i],
+            ),
+          );
+        }
+
         List<Widget> timeline = [];
 
-        // RULE 1: FUNDI WAITING FOR CLIENT TO PAY ESCROW - ANIMATED ORANGE
         if (!escrowDone) {
           timeline.add(
             OrangeAnimatedWaitingCard(
               title: 'Waiting for client to pay KES $agreedPrice to escrow',
               message:
-                  'Client $clientName has confirmed you but has NOT locked money yet. You cannot start site visit until escrow is held. You will be notified.',
+                  'Client $clientName has confirmed you but has NOT locked money yet. You cannot start site visit until escrow is held.',
             ),
           );
           timeline.add(
@@ -151,13 +356,13 @@ class FundiCustomerTimelinePage extends StatelessWidget {
           );
         }
 
-        // RULE 2: OTHER FUNDI WAITING FOR CLIENT ACTIONS - ALSO ORANGE ANIMATED
+        //... keep your existing logic below unchanged...
         if (phase == 'waiting_for_client_to_buy_parts') {
           timeline.add(
             OrangeAnimatedWaitingCard(
               title: 'Waiting for client to buy materials',
               message:
-                  'Client locked KES $extraAmt. Waiting for ${parts.length} items: ${parts.join(", ")}. You will be notified when they confirm.',
+                  'Client locked KES $extraAmt. Waiting for ${parts.length} items: ${parts.join(", ")}.',
             ),
           );
         } else if (phase == 'client_claims_parts_bought') {
@@ -189,7 +394,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             OrangeAnimatedWaitingCard(
               title: 'Waiting for client to lock extra KES $extraAmt',
               message:
-                  'You requested price review. Client accepted but must lock extra KES $extraAmt before you continue. Waiting for client.',
+                  'You requested price review. Client accepted but must lock extra KES $extraAmt.',
             ),
           );
         } else if (rs == 'pending' || rs == 'countered_by_fundi') {
@@ -197,7 +402,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             OrangeAnimatedWaitingCard(
               title: 'Waiting for client to confirm price review',
               message:
-                  'You sent new price breakdown. Waiting for $clientName to review and accept. You will be notified.',
+                  'You sent new price breakdown. Waiting for $clientName to review.',
             ),
           );
         } else if (phase == 'completed_by_fundi' ||
@@ -207,7 +412,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             OrangeAnimatedWaitingCard(
               title: 'Job Completed - Waiting for client confirmation',
               message:
-                  'You marked $jobTitle as completed. Waiting for $clientName to confirm and release KES $agreedPrice. This is waiting state until client confirms.',
+                  'You marked $jobTitle as completed. Waiting for $clientName to confirm and release KES $agreedPrice.',
             ),
           );
         } else if (phase == 'parts_confirmed_by_fundi') {
@@ -218,7 +423,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               icon: Icons.check_circle,
               iconColor: Colors.green.shade800,
               title: 'Materials confirmed',
-              message: 'Press START WORK to start.',
+              message: 'Press START WORK',
               time: 'Now',
               isCurrent: true,
               action: ElevatedButton(
@@ -245,8 +450,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               icon: Icons.construction,
               iconColor: Colors.orange.shade800,
               title: 'You are working',
-              message:
-                  'You are working on $jobTitle. When done, mark as completed.',
+              message: 'You are working on $jobTitle.',
               time: 'Now',
               isCurrent: true,
               action: ElevatedButton(
@@ -292,7 +496,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               iconColor: Colors.black,
               title: 'Escrow locked - Start site visit',
               message:
-                  'Client paid KES $agreedPrice to escrow. You can now start site visit.',
+                  'Client paid KES $agreedPrice to escrow. You can now start.',
               time: 'Now',
               isCurrent: true,
               action: SizedBox(
@@ -376,7 +580,6 @@ class FundiCustomerTimelinePage extends StatelessWidget {
           );
         }
 
-        // DONE CARDS
         timeline.add(
           _card(
             color: Colors.green.shade50,

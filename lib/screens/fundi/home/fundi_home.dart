@@ -9,6 +9,7 @@ import 'fundi_home_completed_wrapper.dart';
 import '../../chats/chat_list_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../rating/rate_client_screen.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});
@@ -36,120 +37,174 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
   void initState() {
     super.initState();
     loadMe();
-    WidgetsBinding.instance.addPostFrameCallback((_) => loadLocation(context));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      loadLocation(context);
+      _enforcePendingRating();
+    });
+  }
+
+  Future<void> _enforcePendingRating() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || !mounted) return;
+    try {
+      final opt = const GetOptions(source: Source.server);
+      var s1 = await FirebaseFirestore.instance
+          .collection('jobs')
+          .where('acceptedBidId', isEqualTo: uid)
+          .get(opt);
+      var s2 = await FirebaseFirestore.instance
+          .collection('jobs')
+          .where('fundiId', isEqualTo: uid)
+          .get(opt);
+      var s3 = await FirebaseFirestore.instance
+          .collection('jobs')
+          .where('assignedFundiId', isEqualTo: uid)
+          .get(opt);
+
+      final map = <String, QueryDocumentSnapshot>{};
+      for (var d in [...s1.docs, ...s2.docs, ...s3.docs]) map[d.id] = d;
+      final unrated = map.values
+          .where(
+            (d) => (d.data() as Map<String, dynamic>)['fundiRated'] != true,
+          )
+          .toList();
+
+      if (unrated.isNotEmpty && mounted) {
+        var first = unrated.first;
+        var data = first.data() as Map<String, dynamic>;
+        Navigator.of(context, rootNavigator: true).push(
+          MaterialPageRoute(
+            builder: (_) => RateClientScreen(
+              jobId: first.id,
+              clientId: (data['customerId'] ?? data['clientId'] ?? '')
+                  .toString(),
+              clientName:
+                  (data['customerName'] ?? data['clientName'] ?? 'Client')
+                      .toString(),
+              trade: (data['subcategoryName'] ?? data['title'] ?? '')
+                  .toString(),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('LOCK ERR $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 3,
-      child: Container(
-        color: FundipapColors.blackGray,
-        child: Column(
-          children: [
-            FundiHomeHeaderSection(
-              me: me,
-              profilePct: profilePct,
-              completedJobs: completedJobs,
-              totalEarned: totalEarned,
-              onReloadMe: loadMe,
-            ),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20),
-              decoration: BoxDecoration(
-                color: Colors.white10,
-                borderRadius: BorderRadius.circular(12),
+      child: Scaffold(
+        backgroundColor: FundipapColors.blackGray,
+        body: Container(
+          color: FundipapColors.blackGray,
+          child: Column(
+            children: [
+              FundiHomeHeaderSection(
+                me: me,
+                profilePct: profilePct,
+                completedJobs: completedJobs,
+                totalEarned: totalEarned,
+                onReloadMe: loadMe,
               ),
-              child: TabBar(
-                indicatorSize: TabBarIndicatorSize.tab,
-                indicatorPadding: EdgeInsets.zero,
-                dividerColor: Colors.transparent,
-                indicator: BoxDecoration(
-                  color: FundipapColors.primaryYellow,
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white10,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                labelColor: Colors.black,
-                unselectedLabelColor: Colors.white70,
-                labelStyle: GoogleFonts.montserrat(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                ),
-                tabs: [
-                  Tab(
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        border: Border(
-                          right: BorderSide(color: Colors.white24, width: 1),
-                        ),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text('Jobs Near You'),
-                    ),
+                child: TabBar(
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  dividerColor: Colors.transparent,
+                  indicator: BoxDecoration(
+                    color: FundipapColors.primaryYellow,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  Tab(
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        border: Border(
-                          right: BorderSide(color: Colors.white24, width: 1),
-                        ),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text('Completed • Rate Client'),
-                    ),
+                  labelColor: Colors.black,
+                  unselectedLabelColor: Colors.white70,
+                  labelStyle: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
                   ),
-                  Tab(
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('chats')
-                          .where(
-                            'participants',
-                            arrayContains:
-                                FirebaseAuth.instance.currentUser!.uid,
-                          )
-                          .snapshots(),
-                      builder: (_, snap) {
-                        int total = 0;
-                        String myId = FirebaseAuth.instance.currentUser!.uid;
-                        if (snap.hasData) {
-                          for (var doc in snap.data!.docs) {
-                            var map = doc.data() as Map<String, dynamic>;
-                            var counts =
-                                map['unreadCounts'] as Map<String, dynamic>?;
-                            total += ((counts?[myId] as num?)?.toInt() ?? 0);
+                  tabs: [
+                    Tab(
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            right: BorderSide(color: Colors.white24, width: 1),
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Text('Jobs Near You'),
+                      ),
+                    ),
+                    Tab(
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            right: BorderSide(color: Colors.white24, width: 1),
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Text('Completed • Rate Client'),
+                      ),
+                    ),
+                    Tab(
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('chats')
+                            .where(
+                              'participants',
+                              arrayContains:
+                                  FirebaseAuth.instance.currentUser!.uid,
+                            )
+                            .snapshots(),
+                        builder: (_, snap) {
+                          int total = 0;
+                          String myId = FirebaseAuth.instance.currentUser!.uid;
+                          if (snap.hasData) {
+                            for (var doc in snap.data!.docs) {
+                              var map = doc.data() as Map<String, dynamic>;
+                              var counts =
+                                  map['unreadCounts'] as Map<String, dynamic>?;
+                              total += ((counts?[myId] as num?)?.toInt() ?? 0);
+                            }
                           }
-                        }
-                        return Badge(
-                          isLabelVisible: total > 0,
-                          label: Text('$total'),
-                          child: const Text('Messages'),
-                        );
-                      },
+                          return Badge(
+                            isLabelVisible: total > 0,
+                            label: Text('$total'),
+                            child: const Text('Messages'),
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: TabBarView(
-                children: [
-                  FundiHomeJobsTab(
-                    search: search,
-                    onSearchChanged: (v) =>
-                        setState(() => search = v.toLowerCase()),
-                    mySkill: mySkill,
-                    me: me,
-                    completedJobs: completedJobs,
-                    relevanceScore: relevanceScore,
-                    onBid: bidForJob,
-                    currentPos: currentPos,
-                  ),
-                  const FundiCompletedWrapper(),
-                  const ChatListScreen(),
-                ],
+              const SizedBox(height: 12),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    FundiHomeJobsTab(
+                      search: search,
+                      onSearchChanged: (v) =>
+                          setState(() => search = v.toLowerCase()),
+                      mySkill: mySkill,
+                      me: me,
+                      completedJobs: completedJobs,
+                      relevanceScore: relevanceScore,
+                      onBid: bidForJob,
+                      currentPos: currentPos,
+                    ),
+                    const FundiCompletedWrapper(),
+                    const ChatListScreen(),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
