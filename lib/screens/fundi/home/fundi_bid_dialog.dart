@@ -34,8 +34,6 @@ class _FundiBidDialogState extends State<FundiBidDialog> {
   void initState() {
     super.initState();
     _loadStats();
-    // Pre-fill with average if exists
-    _priceCtrl.text = '';
   }
 
   Future<void> _loadStats() async {
@@ -46,11 +44,16 @@ class _FundiBidDialogState extends State<FundiBidDialog> {
     );
     if (!mounted) return;
     setState(() => _stats = stats);
-    // use local copy for promotion
-    final s = stats;
-    if (s != null && s['avg'] != null && _priceCtrl.text.isEmpty) {
-      _priceCtrl.text = s['avg'].toString();
+    if (stats != null && stats['avg'] != null && _priceCtrl.text.isEmpty) {
+      _priceCtrl.text = stats['avg'].toString();
     }
+  }
+
+  @override
+  void dispose() {
+    _priceCtrl.dispose();
+    _noteCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _submitBid() async {
@@ -268,25 +271,33 @@ class _FundiBidDialogState extends State<FundiBidDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
-        ElevatedButton(
-          onPressed: _loading ? null : _submitBid,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: FundipapColors.blackGray,
-            foregroundColor: Colors.white,
-          ),
-          child: _loading
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : Text(
-                  'SEND BID KES ${_priceCtrl.text.isEmpty ? '' : _priceCtrl.text}',
-                  style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
-                ),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _priceCtrl,
+          builder: (context, value, _) {
+            final live = value.text.trim();
+            return ElevatedButton(
+              onPressed: _loading ? null : _submitBid,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: FundipapColors.blackGray,
+                foregroundColor: Colors.white,
+              ),
+              child: _loading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      live.isEmpty ? 'SEND BID' : 'SEND BID KES $live',
+                      style: GoogleFonts.montserrat(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+            );
+          },
         ),
       ],
     );

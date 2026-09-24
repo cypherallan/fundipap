@@ -5,6 +5,7 @@ import '../../../theme/app_theme.dart';
 import '../../customer/confirm/client_price_approval_screen.dart';
 import '../tracking/customer_tracking_screen.dart';
 import '../../../widgets/animated_waiting_card.dart';
+import '../rating/rate_fundi_screen.dart'; // <-- NEW
 
 class CustomerFundiTimelinePage extends StatefulWidget {
   final String jobId;
@@ -89,7 +90,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
     });
   }
 
-  Future<void> _confirmCompletion(String jobId) async {
+  Future<void> _confirmCompletion(String jobId, String fundiId) async {
     var jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
     var snap = await jobRef.get();
     var j = snap.data() as Map<String, dynamic>;
@@ -107,6 +108,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
         ? newLaborTotal
         : initialAmount + extraAmount;
     if (totalRelease == 0) totalRelease = initialAmount;
+
     await jobRef.update({
       'status': 'completed',
       'escrowStatus': 'released',
@@ -133,31 +135,29 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           });
     } catch (_) {}
     if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.green, size: 28),
-            const SizedBox(width: 8),
-            Text(
-              'Payment Released! 🎉',
-              style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
-            ),
-          ],
+    // REPLACE Navigator.pushReplacement with this:
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => RateFundiScreen(
+          jobId: jobId,
+          fundiId: fundiId,
+          fundiName: widget.fundiName,
+          trade: widget.trade,
         ),
-        content: Text(
-          'KES $totalRelease released to ${widget.fundiName}\nInitial: KES $initialAmount + Extra: KES $extraAmount',
-          style: GoogleFonts.inter(fontSize: 12),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
       ),
+      (route) => false, // clears all back buttons
+    );
+  }
+
+  Widget _buildReversedList(List<Widget> timeline) {
+    if (timeline.length <= 2)
+      return ListView(padding: const EdgeInsets.all(12), children: timeline);
+    final header = timeline[0];
+    final divider = timeline[1];
+    final notifications = timeline.sublist(2).reversed.toList();
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [header, divider, ...notifications],
     );
   }
 
@@ -202,11 +202,20 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 job['budget'] ??
                 0,
           );
-          int alreadyLocked = _toInt(job['escrowAmount'] ?? agreed);
-          int fundiAsked = _toInt(
-            job['fundiBidAmount'] ?? job['acceptedBidAmount'] ?? agreed,
-          );
-          bool escrowDone = escrow == 'held' || escrow == 'paid';
+          int alreadyLocked = _toInt(
+            job['escrowAmount'] ?? 0,
+          ); // DON'T fallback to agreed
+          bool escrowHeldFlag =
+              job['escrowHeld'] == true || job['escrowPaidAt'] != null;
+          bool escrowDone =
+              ['held', 'paid', 'released'].contains(escrow) ||
+              escrowHeldFlag ||
+              alreadyLocked > 0 ||
+              status == 'escrow_locked' ||
+              status == 'completed';
+          bool clientRated = job['clientRated'] == true;
+          String fundiId = (job['fundiId'] ?? job['assignedFundiId'] ?? '')
+              .toString();
 
           List<Widget> timeline = [];
           timeline.add(
@@ -250,6 +259,97 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             ),
           );
           timeline.add(const Divider(height: 1));
+
+          // IF COMPLETED AND NOT RATED -> ONLY SHOW COMPLETED + MANDATORY RATE (clears other notifications for this fundi)
+          if (status == 'completed' && !clientRated) {
+            timeline.add(
+              _timelineCard(
+                title: 'Job completed by ${widget.fundiName} - Done',
+                body:
+                    'Payment KES ${job['totalReleasedAmount'] ?? alreadyLocked} released. Please rate ${widget.fundiName} to clear this job.',
+                icon: Icons.verified,
+                isDone: true,
+              ),
+            );
+            timeline.add(
+              Card(
+                color: Colors.orange.shade50,
+                shape: RoundedRectangleBorder(
+                  side: BorderSide(color: Colors.orange.shade700, width: 1.5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.star_rate_rounded,
+                        size: 48,
+                        color: Colors.amber,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Rate ${widget.fundiName} - Mandatory',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'This notification will be cleared only after you rate and review. This is mandatory to complete the job.',
+                        style: GoogleFonts.inter(fontSize: 11),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => RateFundiScreen(
+                                jobId: widget.jobId,
+                                fundiId: fundiId,
+                                fundiName: widget.fundiName,
+                                trade: widget.trade,
+                              ),
+                            ),
+                          ),
+                          child: Text(
+                            'RATE ${widget.fundiName.toUpperCase()} NOW',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+            return _buildReversedList(timeline);
+          }
+
+          if (status == 'completed' && clientRated) {
+            timeline.add(
+              _timelineCard(
+                title: 'Job completed by ${widget.fundiName} - Rated - Done',
+                body:
+                    'You rated ${job['clientRating'] ?? 5} stars - KES ${job['totalReleasedAmount'] ?? alreadyLocked} released. Notifications for this fundi cleared.',
+                icon: Icons.check_circle,
+                isDone: true,
+              ),
+            );
+            return _buildReversedList(timeline);
+          }
+
+          // Normal flow below
           timeline.add(
             _timelineCard(
               title: 'Bid accepted - Done',
@@ -265,7 +365,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   ? 'Escrow locked - Done (Mutual Price)'
                   : 'Lock mutual price to escrow',
               body: escrowDone
-                  ? 'KES $alreadyLocked secured (Fundi asked KES $fundiAsked, you both locked KES $alreadyLocked)'
+                  ? 'KES $alreadyLocked secured'
                   : 'You accepted fundi bid KES ${agreed.toInt()}. Secure it to start.',
               icon: Icons.lock,
               isDone: escrowDone,
@@ -284,32 +384,23 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             ),
           );
           if (!escrowDone) {
-            return ListView(
-              padding: const EdgeInsets.all(12),
-              children: timeline,
-            );
+            return _buildReversedList(timeline);
           }
 
-          // === CUMULATIVE FLOW - EVERY WAITING TURNS GREEN WHEN DONE ===
-
-          // STAGE 1: Waiting for fundi to start travelling
           if (!isTravelling &&
               !siteDone &&
               status != 'site_visit' &&
               status != 'in_progress' &&
-              status != 'job_completed' &&
-              status != 'pending_completion' &&
-              status != 'completed' &&
+              !status.contains('completed') &&
               phase != 'fundi_working') {
             timeline.add(
               OrangeAnimatedWaitingCard(
                 title: 'Waiting for fundi to start travelling',
                 message:
-                    'Escrow of KES $alreadyLocked secured. ${widget.fundiName} has NOT started travelling yet. You will be notified when he taps Start Site Visit.',
+                    'Escrow of KES $alreadyLocked secured. ${widget.fundiName} has NOT started travelling yet.',
               ),
             );
           } else {
-            // Once fundi started, previous waiting becomes GREEN DONE
             timeline.add(
               _timelineCard(
                 title: 'Fundi started travelling - Done',
@@ -320,7 +411,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
 
-          // STAGE 2: Fundi is on the way (only after travelling started, before arrival)
           if (isTravelling && !siteDone) {
             timeline.add(
               OrangeAnimatedWaitingCard(
@@ -362,7 +452,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
 
-          // STAGE 3: Arrival
           if (siteDone) {
             timeline.add(
               _timelineCard(
@@ -374,13 +463,9 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
           if (!siteDone) {
-            return ListView(
-              padding: const EdgeInsets.all(12),
-              children: timeline,
-            );
+            return _buildReversedList(timeline);
           }
 
-          // STAGE 4: Extra escrow & price review
           if (needsExtraEscrow) {
             int extra = _toInt(
               job['extraLaborAmount'] ?? job['extraEscrowAmount'] ?? 0,
@@ -413,10 +498,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ),
               ),
             );
-            return ListView(
-              padding: const EdgeInsets.all(12),
-              children: timeline,
-            );
+            return _buildReversedList(timeline);
           } else if (reneg != null &&
               reneg['requested'] == true &&
               renegStatus == 'pending') {
@@ -425,7 +507,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 title:
                     'Fundi requests price review - Waiting for you to review',
                 message:
-                    '${reneg['reasonDetails'] ?? 'Fundi sent new breakdown'}\nExtra labor: KES ${_toInt(reneg['extraLabor'])}\nWaiting for you to tap REVIEW BREAKDOWN. This stays in waiting state (orange) until you act.',
+                    '${reneg['reasonDetails'] ?? 'Fundi sent new breakdown'}\nExtra labor: KES ${_toInt(reneg['extraLabor'])}\nWaiting for you to tap REVIEW BREAKDOWN.',
                 action: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -448,13 +530,9 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ),
               ),
             );
-            return ListView(
-              padding: const EdgeInsets.all(12),
-              children: timeline,
-            );
+            return _buildReversedList(timeline);
           }
 
-          // Once reviewed, show it as GREEN DONE before next step
           if (reneg != null &&
               (renegStatus.contains('accepted') ||
                   renegStatus.contains('pending_extra_escrow') ||
@@ -472,7 +550,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             }
           }
 
-          // STAGE 5: Parts flow
           if (phase == 'waiting_for_client_to_buy_parts') {
             timeline.add(
               _timelineCard(
@@ -497,21 +574,14 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ),
               ),
             );
-            return ListView(
-              padding: const EdgeInsets.all(12),
-              children: timeline,
-            );
+            return _buildReversedList(timeline);
           }
           if (phase == 'client_claims_parts_bought' ||
               phase == 'parts_confirmed_by_fundi' ||
               phase == 'fundi_working' ||
               status == 'in_progress' ||
-              status == 'job_completed' ||
-              status == 'pending_completion' ||
-              status == 'completed') {
-            if (phase == 'waiting_for_client_to_buy_parts') {
-              /* already handled */
-            } else {
+              status.contains('completed')) {
+            if (phase != 'waiting_for_client_to_buy_parts') {
               timeline.add(
                 _timelineCard(
                   title: 'You bought parts - Done',
@@ -531,16 +601,11 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     'You marked parts as bought. Waiting for ${widget.fundiName} to confirm.',
               ),
             );
-            return ListView(
-              padding: const EdgeInsets.all(12),
-              children: timeline,
-            );
+            return _buildReversedList(timeline);
           } else if (phase == 'parts_confirmed_by_fundi' ||
               phase == 'fundi_working' ||
               status == 'in_progress' ||
-              status == 'job_completed' ||
-              status == 'pending_completion' ||
-              status == 'completed') {
+              status.contains('completed')) {
             if (phase != 'waiting_for_client_to_buy_parts') {
               timeline.add(
                 _timelineCard(
@@ -562,13 +627,9 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     'Fundi confirmed your parts are available. Waiting for him to tap Start Job.',
               ),
             );
-            return ListView(
-              padding: const EdgeInsets.all(12),
-              children: timeline,
-            );
+            return _buildReversedList(timeline);
           }
 
-          // STAGE 6: Waiting for fundi to start job
           if (status == 'site_visit' && phase.isEmpty) {
             timeline.add(
               OrangeAnimatedWaitingCard(
@@ -577,15 +638,10 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     '${widget.fundiName} arrived at $location and is on site. Waiting for him to Start Job.',
               ),
             );
-            return ListView(
-              padding: const EdgeInsets.all(12),
-              children: timeline,
-            );
+            return _buildReversedList(timeline);
           } else if (status == 'in_progress' ||
               phase == 'fundi_working' ||
-              status == 'job_completed' ||
-              status == 'pending_completion' ||
-              status == 'completed') {
+              status.contains('completed')) {
             timeline.add(
               _timelineCard(
                 title: 'Waiting for fundi to start job - Done',
@@ -601,17 +657,12 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               OrangeAnimatedWaitingCard(
                 title: 'Fundi is working - Waiting to complete',
                 message:
-                    '${widget.trade} in progress at $location. ${widget.fundiName} is working. Waiting for him to tap MARK JOB AS COMPLETED. This stays in waiting state (orange) until fundi finishes.',
+                    '${widget.trade} in progress at $location. ${widget.fundiName} is working. Waiting for him to tap MARK JOB AS COMPLETED.',
               ),
             );
-            return ListView(
-              padding: const EdgeInsets.all(12),
-              children: timeline,
-            );
+            return _buildReversedList(timeline);
           }
-          if (status == 'job_completed' ||
-              status == 'pending_completion' ||
-              status == 'completed') {
+          if (status == 'job_completed' || status == 'pending_completion') {
             bool isDone = status == 'completed';
             int initialAmt = _toInt(
               job['escrowAmount'] ?? job['agreedPrice'] ?? 0,
@@ -628,9 +679,9 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               _timelineCard(
                 title: isDone
                     ? 'Job Completed - KES $totalToRelease released'
-                    : 'Job Completed - Confirm & Release KES $totalToRelease',
+                    : 'Job Completed by ${widget.fundiName} - Confirm & Release KES $totalToRelease',
                 body: isDone
-                    ? 'Payment of KES $totalToRelease released'
+                    ? 'Payment released'
                     : 'Fundi marked job as complete. Confirm to release KES $totalToRelease',
                 icon: Icons.verified,
                 isDone: isDone,
@@ -642,7 +693,8 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: FundipapColors.greenSuccess,
                           ),
-                          onPressed: () => _confirmCompletion(widget.jobId),
+                          onPressed: () =>
+                              _confirmCompletion(widget.jobId, fundiId),
                           child: Text(
                             'CONFIRM COMPLETION & RELEASE KES $totalToRelease',
                             style: const TextStyle(
@@ -657,10 +709,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               ),
             );
           }
-          return ListView(
-            padding: const EdgeInsets.all(12),
-            children: timeline,
-          );
+          return _buildReversedList(timeline);
         },
       ),
     );

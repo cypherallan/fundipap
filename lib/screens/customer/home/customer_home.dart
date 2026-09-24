@@ -8,6 +8,7 @@ import '../../../notifications/notification_bell.dart';
 import 'customer_home_filter_bar.dart';
 import 'customer_home_fundi_list.dart';
 import 'customer_home_header.dart';
+import '../rating/rate_fundi_screen.dart';
 
 class CustomerHome extends StatefulWidget {
   const CustomerHome({super.key});
@@ -31,7 +32,80 @@ class _CustomerHomeState extends State<CustomerHome> {
       _getLocation();
       _loadMe();
       _loadCompletedCount();
+      _enforcePendingRating();
     });
+  }
+
+  Future<void> _enforcePendingRating() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      var snap1 = await FirebaseFirestore.instance
+          .collection('jobs')
+          .where('customerId', isEqualTo: user.uid)
+          .where('status', isEqualTo: 'completed')
+          .get();
+      var snap2 = await FirebaseFirestore.instance
+          .collection('jobs')
+          .where('clientId', isEqualTo: user.uid)
+          .where('status', isEqualTo: 'completed')
+          .get();
+
+      // Deduplicate by jobId
+      final Map<String, QueryDocumentSnapshot> map = {};
+      for (var d in [...snap1.docs, ...snap2.docs]) {
+        map[d.id] = d;
+      }
+
+      final unrated = map.values.where((d) {
+        var data = d.data() as Map<String, dynamic>;
+        return data['clientRated'] != true;
+      }).toList();
+
+      if (unrated.isNotEmpty && mounted) {
+        var first = unrated.first;
+        var data = first.data() as Map<String, dynamic>;
+
+        String fundiId =
+            (data['fundiId'] ??
+                    data['assignedFundiId'] ??
+                    data['acceptedFundiId'] ??
+                    data['selectedFundiId'] ??
+                    data['fundiUid'] ??
+                    data['fundiID'] ??
+                    data['acceptedFundiUid'] ??
+                    '')
+                .toString()
+                .trim();
+
+        String fundiName =
+            (data['assignedFundiName'] ??
+                    data['fundiDisplayName'] ??
+                    data['acceptedFundiName'] ??
+                    'Fundi')
+                .toString();
+
+        String trade =
+            (data['trade'] ??
+                    data['category'] ??
+                    data['serviceType'] ??
+                    data['skill'] ??
+                    '')
+                .toString();
+
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => RateFundiScreen(
+              jobId: first.id,
+              fundiId: fundiId,
+              fundiName: fundiName,
+              trade: trade,
+            ),
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadMe() async {
@@ -190,7 +264,6 @@ class _CustomerHomeState extends State<CustomerHome> {
             ],
           ),
         ),
-        // REMOVED const CustomerUnifiedBanner() - now in Notifications tab
         CustomerHomeFilterBar(
           radius: _radius,
           filter: _filter,
