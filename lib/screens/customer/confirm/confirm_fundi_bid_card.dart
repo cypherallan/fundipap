@@ -13,6 +13,18 @@ class ConfirmFundiBidCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    int fundiAsk =
+        (bidData['amount'] ?? bidData['bidAmount'] ?? bidData['price'] ?? 0)
+            .toInt();
+    int clientOffer =
+        (jobData['systemPriceAvg'] ??
+                jobData['budget'] ??
+                jobData['offeredPrice'] ??
+                jobData['budgetMin'] ??
+                0)
+            .toInt();
+    String note = (bidData['note'] ?? '').toString();
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -24,29 +36,67 @@ class ConfirmFundiBidCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Bid for: ${jobData['title']}',
+            'Bid for: ${jobData['title'] ?? jobData['subcategoryName'] ?? 'Job'}',
             style: GoogleFonts.montserrat(
               fontWeight: FontWeight.w700,
               fontSize: 13,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Offered by you: KES ${jobData['budget']}',
-                style: GoogleFonts.inter(fontSize: 11),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Market avg:',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  Text(
+                    'KES $clientOffer',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
-              Text(
-                'Fundi asks: KES ${bidData['price']}',
-                style: GoogleFonts.montserrat(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Fundi asks:',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  Text(
+                    'KES $fundiAsk',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      color: Colors.green.shade800,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
+          if (note.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Fundi note: $note',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -45,11 +45,30 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
   }
 
   Future<void> confirmFundi() async {
+    // FIX: bid saves as amount/bidAmount, not price - this was null
+    int finalPrice =
+        (bidData['amount'] ??
+                bidData['bidAmount'] ??
+                bidData['price'] ??
+                jobData['budget'] ??
+                jobData['systemPriceAvg'] ??
+                0)
+            .toInt();
+    if (finalPrice == 0) finalPrice = (jobData['budgetMax'] ?? 1000).toInt();
+
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'status': 'assigned',
       'assignedFundi': bidData['fundiId'],
       'assignedFundiName': bidData['fundiName'],
-      'agreedPrice': bidData['price'],
+      'agreedPrice':
+          finalPrice, // MUTUAL LOCKED PRICE - what client pays to escrow
+      'acceptedBidAmount': finalPrice,
+      'fundiBidAmount': finalPrice,
+      'acceptedBidId': bidId,
+      'initialAgreedPrice': finalPrice,
+      'agreedPriceSource': 'fundi_bid_mutual',
+      'priceMutuallyLocked': true,
+      'clientInitialBudget': jobData['budget'] ?? jobData['systemPriceAvg'],
       'updatedAt': FieldValue.serverTimestamp(),
       'fundiHasUnread': true,
     });
@@ -58,13 +77,17 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
         .doc(jobId)
         .collection('bids')
         .doc(bidId)
-        .update({'status': 'accepted'});
+        .update({
+          'status': 'accepted',
+          'acceptedAt': FieldValue.serverTimestamp(),
+          'acceptedPrice': finalPrice,
+        });
 
     await NotificationService.notifyUser(
       recipientId: bidData['fundiId'],
       title: 'Bid Accepted! 🎉',
       body:
-          'Client accepted your bid for ${jobData['title'] ?? 'job'} - KES ${bidData['price']}',
+          'Client accepted your bid for ${jobData['title'] ?? 'job'} - KES $finalPrice',
       type: 'bid_accepted',
       jobId: jobId,
       jobTitle: jobData['title'],
@@ -73,11 +96,11 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${bidData['fundiName']} confirmed!'),
+        content: Text('${bidData['fundiName']} confirmed for KES $finalPrice!'),
         backgroundColor: FundipapColors.greenSuccess,
       ),
     );
-    Navigator.pop(context, true); // <-- true = stay on notifications page
+    Navigator.pop(context, true);
   }
 
   Future<void> rejectFundi() async {

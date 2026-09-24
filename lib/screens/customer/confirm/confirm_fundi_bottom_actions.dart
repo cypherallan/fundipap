@@ -17,6 +17,9 @@ class ConfirmFundiBottomActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    int fundiAsk =
+        (bidData['amount'] ?? bidData['bidAmount'] ?? bidData['price'] ?? 0)
+            .toInt();
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -59,7 +62,7 @@ class ConfirmFundiBottomActions extends StatelessWidget {
                     ),
                     onPressed: onConfirm,
                     child: Text(
-                      'CONFIRM • KES ${bidData['price']}',
+                      'CONFIRM • KES $fundiAsk',
                       style: GoogleFonts.montserrat(
                         fontWeight: FontWeight.w800,
                         fontSize: 11,

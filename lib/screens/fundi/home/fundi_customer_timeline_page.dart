@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../my_jobs/fundi_request_new_price.dart';
 import 'fundi_visit_customer_tab.dart';
+import '../../../widgets/animated_waiting_card.dart'; // <-- you imported correctly
 
 class FundiCustomerTimelinePage extends StatelessWidget {
   final String jobId;
@@ -27,6 +28,8 @@ class FundiCustomerTimelinePage extends StatelessWidget {
   Future<void> _startSiteVisit(BuildContext context) async {
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'travelling': true,
+      'siteVisitStarted': true,
+      'travellingAt': FieldValue.serverTimestamp(),
       'status': 'travelling',
       'customerHasUnread': true,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -86,6 +89,15 @@ class FundiCustomerTimelinePage extends StatelessWidget {
           );
         var job = snap.data!.data() as Map<String, dynamic>;
         var status = (job['status'] ?? '').toString();
+        var escrow = (job['escrowStatus'] ?? 'pending').toString();
+        bool escrowDone = escrow == 'held' || escrow == 'paid';
+        int agreedPrice = _toInt(
+          job['agreedPrice'] ??
+              job['acceptedBidAmount'] ??
+              job['fundiBidAmount'] ??
+              job['budget'] ??
+              0,
+        );
         var reneg = job['renegotiation'] as Map<String, dynamic>?;
         String phase = (reneg?['currentPhase'] ?? '').toString();
         String rs = (reneg?['status'] ?? '').toString();
@@ -100,19 +112,52 @@ class FundiCustomerTimelinePage extends StatelessWidget {
 
         List<Widget> timeline = [];
 
-        // 1. WAITING STATES ON TOP
-        if (phase == 'waiting_for_client_to_buy_parts') {
+        // RULE 1: FUNDI WAITING FOR CLIENT TO PAY ESCROW - ANIMATED ORANGE
+        if (!escrowDone) {
+          timeline.add(
+            OrangeAnimatedWaitingCard(
+              title: 'Waiting for client to pay KES $agreedPrice to escrow',
+              message:
+                  'Client $clientName has confirmed you but has NOT locked money yet. You cannot start site visit until escrow is held. You will be notified.',
+            ),
+          );
           timeline.add(
             _card(
-              color: Colors.orange.shade50,
-              border: Colors.orange,
-              icon: Icons.shopping_cart,
-              iconColor: Colors.orange.shade800,
+              color: Colors.green.shade50,
+              border: Colors.green,
+              icon: Icons.check_circle,
+              iconColor: Colors.green,
+              title: 'Bid accepted - Done',
+              message: 'Done',
+              time: 'Earlier',
+              isDone: true,
+            ),
+          );
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(
+                clientName,
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+              ),
+              backgroundColor: FundipapColors.blackGray,
+              foregroundColor: Colors.white,
+            ),
+            body: ListView.separated(
+              padding: const EdgeInsets.all(12),
+              itemCount: timeline.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (_, i) => timeline[i],
+            ),
+          );
+        }
+
+        // RULE 2: OTHER FUNDI WAITING FOR CLIENT ACTIONS - ALSO ORANGE ANIMATED
+        if (phase == 'waiting_for_client_to_buy_parts') {
+          timeline.add(
+            OrangeAnimatedWaitingCard(
               title: 'Waiting for client to buy materials',
               message:
-                  'Client locked KES $extraAmt. Waiting for ${parts.length} items.',
-              time: 'Now',
-              isCurrent: true,
+                  'Client locked KES $extraAmt. Waiting for ${parts.length} items: ${parts.join(", ")}. You will be notified when they confirm.',
             ),
           );
         } else if (phase == 'client_claims_parts_bought') {
@@ -141,51 +186,31 @@ class FundiCustomerTimelinePage extends StatelessWidget {
           );
         } else if (rs.contains('pending_extra_escrow')) {
           timeline.add(
-            _card(
-              color: Colors.orange.shade50,
-              border: Colors.orange,
-              icon: Icons.lock,
-              iconColor: Colors.orange.shade800,
+            OrangeAnimatedWaitingCard(
               title: 'Waiting for client to lock extra KES $extraAmt',
-              message: 'Waiting',
-              time: 'Now',
-              isCurrent: true,
+              message:
+                  'You requested price review. Client accepted but must lock extra KES $extraAmt before you continue. Waiting for client.',
             ),
           );
         } else if (rs == 'pending' || rs == 'countered_by_fundi') {
           timeline.add(
-            _card(
-              color: Colors.orange.shade50,
-              border: Colors.orange,
-              icon: Icons.pending_actions,
-              iconColor: Colors.orange.shade800,
+            OrangeAnimatedWaitingCard(
               title: 'Waiting for client to confirm price review',
-              message: 'Waiting for $clientName',
-              time: 'Now',
-              isCurrent: true,
+              message:
+                  'You sent new price breakdown. Waiting for $clientName to review and accept. You will be notified.',
             ),
           );
-        }
-        // 2. COMPLETED - LAST STEP
-        else if (phase == 'completed_by_fundi' ||
+        } else if (phase == 'completed_by_fundi' ||
             status == 'job_completed' ||
             status == 'pending_completion') {
           timeline.add(
-            _card(
-              color: Colors.green.shade50,
-              border: Colors.green,
-              icon: Icons.check_circle,
-              iconColor: Colors.green.shade800,
+            OrangeAnimatedWaitingCard(
               title: 'Job Completed - Waiting for client confirmation',
               message:
-                  'You marked $jobTitle as completed. Client notified to review & release KES. Waiting for client to confirm.',
-              time: 'Now',
-              isCurrent: true,
+                  'You marked $jobTitle as completed. Waiting for $clientName to confirm and release KES $agreedPrice. This is waiting state until client confirms.',
             ),
           );
-        }
-        // 3. MATERIALS CONFIRMED -> START WORK
-        else if (phase == 'parts_confirmed_by_fundi') {
+        } else if (phase == 'parts_confirmed_by_fundi') {
           timeline.add(
             _card(
               color: Colors.green.shade50,
@@ -212,9 +237,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               ),
             ),
           );
-        }
-        // 4. WORKING -> SHOW MARK JOB AS COMPLETED
-        else if (status == 'in_progress' || phase == 'fundi_working') {
+        } else if (status == 'in_progress' || phase == 'fundi_working') {
           timeline.add(
             _card(
               color: Colors.orange.shade50,
@@ -223,7 +246,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               iconColor: Colors.orange.shade800,
               title: 'You are working',
               message:
-                  'You are working on $jobTitle. When done, mark as completed to notify $clientName.',
+                  'You are working on $jobTitle. When done, mark as completed.',
               time: 'Now',
               isCurrent: true,
               action: ElevatedButton(
@@ -242,9 +265,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               ),
             ),
           );
-        }
-        // 5. SITE FLOW
-        else if (!siteDone && travelling) {
+        } else if (!siteDone && travelling) {
           timeline.add(
             _card(
               color: Colors.blue.shade50,
@@ -252,7 +273,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               icon: Icons.directions_bike,
               iconColor: Colors.blue,
               title: 'You are on the way',
-              message: 'Travelling',
+              message: 'Travelling to client',
               time: 'Now',
               isCurrent: true,
               action: ElevatedButton.icon(
@@ -269,8 +290,9 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               border: FundipapColors.blackGray,
               icon: Icons.location_on,
               iconColor: Colors.black,
-              title: 'Start site visit',
-              message: 'Must visit first',
+              title: 'Escrow locked - Start site visit',
+              message:
+                  'Client paid KES $agreedPrice to escrow. You can now start site visit.',
               time: 'Now',
               isCurrent: true,
               action: SizedBox(
@@ -354,7 +376,20 @@ class FundiCustomerTimelinePage extends StatelessWidget {
           );
         }
 
-        if (extraPaid)
+        // DONE CARDS
+        timeline.add(
+          _card(
+            color: Colors.green.shade50,
+            border: Colors.green,
+            icon: Icons.lock,
+            iconColor: Colors.green,
+            title: 'Escrow locked - Done KES $agreedPrice',
+            message: 'Done',
+            time: 'Done',
+            isDone: true,
+          ),
+        );
+        if (extraPaid) {
           timeline.add(
             _card(
               color: Colors.green.shade50,
@@ -367,7 +402,8 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               isDone: true,
             ),
           );
-        if (siteDone)
+        }
+        if (siteDone) {
           timeline.add(
             _card(
               color: Colors.green.shade50,
@@ -380,6 +416,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               isDone: true,
             ),
           );
+        }
         timeline.add(
           _card(
             color: Colors.green.shade50,
