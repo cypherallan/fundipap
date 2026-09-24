@@ -20,6 +20,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _mpesaCtrl = TextEditingController();
   final _currentPassCtrl = TextEditingController();
   final _newPassCtrl = TextEditingController();
+  final _emailCtrl =
+      TextEditingController(); // FIXED: was creating new controller in build every time
 
   bool _loading = true;
   bool _saving = false;
@@ -29,6 +31,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _usernameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _mpesaCtrl.dispose();
+    _currentPassCtrl.dispose();
+    _newPassCtrl.dispose();
+    _emailCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadProfile() async {
@@ -44,9 +58,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _usernameCtrl.text = _userData?['username'] ?? '';
         _phoneCtrl.text = _userData?['phone'] ?? '';
         _mpesaCtrl.text = _userData?['mpesa'] ?? _userData?['phone'] ?? '';
+        _emailCtrl.text = _userData?['email'] ?? widget.email;
+      } else {
+        _emailCtrl.text = widget.email;
       }
-    } catch (e) {}
-    setState(() => _loading = false);
+    } catch (e) {
+      _emailCtrl.text = widget.email;
+    }
+    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _saveProfile() async {
@@ -71,11 +90,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
-    setState(() => _saving = false);
+    if (mounted) setState(() => _saving = false);
   }
 
   Future<void> _changePassword() async {
@@ -89,7 +110,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     try {
       var user = FirebaseAuth.instance.currentUser!;
-      // re-authenticate
       var cred = EmailAuthProvider.credential(
         email: user.email!,
         password: _currentPassCtrl.text,
@@ -105,14 +125,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
       _currentPassCtrl.clear();
       _newPassCtrl.clear();
-      Navigator.pop(context); // close dialog
+      Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
       String msg = e.code == 'wrong-password'
           ? 'Current password wrong'
           : e.message ?? 'Failed';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: FundipapColors.redAlert),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: FundipapColors.redAlert,
+          ),
+        );
+      }
     }
   }
 
@@ -162,154 +187,188 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 45,
-                  backgroundColor: FundipapColors.primaryYellow,
-                  child: Text(
-                    (widget.email.isNotEmpty
-                        ? widget.email[0].toUpperCase()
-                        : 'U'),
-                    style: GoogleFonts.montserrat(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w800,
+    // FIX 1: Loading must have Scaffold + Material ancestor
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    // FIX 2: Wrap entire screen in Scaffold so TextField has Material ancestor
+    return Scaffold(
+      backgroundColor: const Color(0xFFF6F6F6),
+      appBar: AppBar(
+        title: Text(
+          'Profile',
+          style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+        ),
+        backgroundColor: FundipapColors.blackGray,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 45,
+                    backgroundColor: FundipapColors.primaryYellow,
+                    child: Text(
+                      (widget.email.isNotEmpty
+                          ? widget.email[0].toUpperCase()
+                          : 'U'),
+                      style: GoogleFonts.montserrat(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _nameCtrl.text.isEmpty ? 'Your Profile' : _nameCtrl.text,
-                  style: GoogleFonts.montserrat(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 20,
-                  ),
-                ),
-                Text(
-                  widget.email,
-                  style: GoogleFonts.inter(color: Colors.black54),
-                ),
-                Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: FundipapColors.blackGray,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    widget.role.toUpperCase(),
+                  const SizedBox(height: 12),
+                  Text(
+                    _nameCtrl.text.isEmpty ? 'Your Profile' : _nameCtrl.text,
                     style: GoogleFonts.montserrat(
-                      color: Colors.white,
-                      fontSize: 10,
                       fontWeight: FontWeight.w700,
+                      fontSize: 20,
                     ),
                   ),
+                  Text(
+                    widget.email,
+                    style: GoogleFonts.inter(color: Colors.black54),
+                  ),
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: FundipapColors.blackGray,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      widget.role.toUpperCase(),
+                      style: GoogleFonts.montserrat(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'Personal Info',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            _field('Full Name', _nameCtrl, Icons.person),
+            const SizedBox(height: 12),
+            _field('Username', _usernameCtrl, Icons.alternate_email),
+            const SizedBox(height: 12),
+            _field(
+              'Phone Number',
+              _phoneCtrl,
+              Icons.phone,
+              keyboard: TextInputType.phone,
+            ),
+            const SizedBox(height: 12),
+            _field(
+              'M-Pesa Number',
+              _mpesaCtrl,
+              Icons.mobile_friendly,
+              keyboard: TextInputType.phone,
+            ),
+            const SizedBox(height: 12),
+            // FIX 3: Don't create new controller in build - use _emailCtrl
+            TextField(
+              enabled: false,
+              controller: _emailCtrl,
+              decoration: InputDecoration(
+                labelText: 'Email (cannot change)',
+                prefixIcon: const Icon(Icons.email),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ],
+                filled: true,
+                fillColor: Colors.grey[100],
+              ),
             ),
-          ),
-          const SizedBox(height: 32),
-          Text(
-            'Personal Info',
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          _field('Full Name', _nameCtrl, Icons.person),
-          const SizedBox(height: 12),
-          _field('Username', _usernameCtrl, Icons.alternate_email),
-          const SizedBox(height: 12),
-          _field(
-            'Phone Number',
-            _phoneCtrl,
-            Icons.phone,
-            keyboard: TextInputType.phone,
-          ),
-          const SizedBox(height: 12),
-          _field(
-            'M-Pesa Number',
-            _mpesaCtrl,
-            Icons.mobile_friendly,
-            keyboard: TextInputType.phone,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            enabled: false,
-            decoration: InputDecoration(
-              labelText: 'Email (cannot change)',
-              prefixIcon: const Icon(Icons.email),
-              border: OutlineInputBorder(
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _saveProfile,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: FundipapColors.blackGray,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        'Save Profile',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text(
+              'Security',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: Colors.black12),
               ),
-              filled: true,
-              fillColor: Colors.grey[100],
-            ),
-            controller: TextEditingController(text: widget.email),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _saving ? null : _saveProfile,
-              child: _saving
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Save Profile'),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Divider(),
-          const SizedBox(height: 8),
-          Text(
-            'Security',
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          ListTile(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Colors.black12),
-            ),
-            leading: const Icon(Icons.lock_outline),
-            title: Text(
-              'Change Password',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600),
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _showChangePasswordDialog,
-          ),
-          const SizedBox(height: 12),
-          ListTile(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Colors.black12),
-            ),
-            leading: const Icon(Icons.logout, color: FundipapColors.redAlert),
-            title: Text(
-              'Logout',
-              style: GoogleFonts.inter(
-                fontWeight: FontWeight.w600,
-                color: FundipapColors.redAlert,
+              leading: const Icon(Icons.lock_outline),
+              title: Text(
+                'Change Password',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600),
               ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _showChangePasswordDialog,
             ),
-            onTap: () async {
-              await FirebaseAuth.instance.signOut();
-            },
-          ),
-          const SizedBox(height: 80),
-        ],
+            const SizedBox(height: 12),
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: Colors.black12),
+              ),
+              leading: const Icon(Icons.logout, color: FundipapColors.redAlert),
+              title: Text(
+                'Logout',
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w600,
+                  color: FundipapColors.redAlert,
+                ),
+              ),
+              onTap: () async {
+                await FirebaseAuth.instance.signOut();
+              },
+            ),
+            const SizedBox(height: 80),
+          ],
+        ),
       ),
     );
   }
@@ -327,6 +386,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         labelText: label,
         prefixIcon: Icon(icon),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor: Colors.white,
       ),
     );
   }

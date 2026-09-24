@@ -18,9 +18,13 @@ class AuthGate extends StatelessWidget {
           );
         }
         if (snapshot.hasData && snapshot.data != null) {
-          // User still logged in - get role and go home
+          final user = snapshot.data!;
+          // HARD ADMIN CHECK - don't wait for Firestore
+          if (user.email == 'agwonamallan@gmail.com') {
+            return HomeNavigator(role: 'admin', email: user.email ?? '');
+          }
           return FutureBuilder<String?>(
-            future: AuthService().getUserRole(snapshot.data!.uid),
+            future: AuthService().getUserRole(user.uid),
             builder: (context, roleSnap) {
               if (roleSnap.connectionState == ConnectionState.waiting) {
                 return const Scaffold(
@@ -28,19 +32,14 @@ class AuthGate extends StatelessWidget {
                 );
               }
               String role = roleSnap.data ?? 'client';
-              // Safety: only your email can be admin
-              if (role == 'admin' &&
-                  snapshot.data!.email != 'agwonamallan@gmail.com') {
-                role = 'client';
+              if (role == 'admin') {
+                role =
+                    'client'; // only your email can be admin, already handled above
               }
-              return HomeNavigator(
-                role: role,
-                email: snapshot.data!.email ?? '',
-              );
+              return HomeNavigator(role: role, email: user.email ?? '');
             },
           );
         }
-        // Not logged in
         return const RoleSelectScreen();
       },
     );

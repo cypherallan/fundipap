@@ -16,6 +16,7 @@ import 'services/auth_service.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/fundi/fundi_profile.dart';
 import 'screens/fundi/my_jobs/fundi_my_jobs_page.dart';
+import 'screens/admin/admin_screen.dart'; // <-- ADDED
 
 class FundiPapApp extends StatelessWidget {
   const FundiPapApp({super.key});
@@ -159,8 +160,8 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     }
     if (widget.role == 'admin') {
       return Scaffold(
-        appBar: _buildAppBar(),
-        body: const Center(child: Text('Admin - coming soon')),
+        appBar: _buildAppBar(), // now admin gets 3 dots too
+        body: const AdminScreen(),
       );
     }
     final pages = [

@@ -50,8 +50,9 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
 
   @override
   Widget build(BuildContext context) {
-    if (loading)
+    if (loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     var combined = {...?user, ...?fundi, ...widget.bidData};
 
     return Scaffold(

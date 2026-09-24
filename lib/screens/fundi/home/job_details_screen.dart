@@ -99,18 +99,26 @@ class JobDetailsScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                onPressed: () => showFundiBidDialog(
-                  context: context,
-                  job: job,
-                  me: me,
-                  completedJobs: completedJobs,
-                ),
+                onPressed: () {
+                  final jobId = job['id'] ?? job['jobId'] ?? '';
+                  if (jobId.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Job ID missing')),
+                    );
+                    return;
+                  }
+                  showDialog(
+                    context: context,
+                    builder: (_) => FundiBidDialog(jobId: jobId, jobData: job),
+                  );
+                },
                 child: Text(
-                  'PLACE BID • KES ${job['budget'] ?? job['offeredPrice'] ?? 1500} OFFERED',
+                  job['marketAvg'] != null
+                      ? 'AVG KES ${job['marketAvg']}'
+                      : 'KES ${job['budget'] ?? job['offeredPrice'] ?? job['systemPriceAvg'] ?? ''} OFFERED',
                   style: GoogleFonts.montserrat(
                     fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    fontSize: 13,
+                    fontSize: 18,
                   ),
                 ),
               );

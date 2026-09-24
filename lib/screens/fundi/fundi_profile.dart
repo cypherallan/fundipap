@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../theme/app_theme.dart';
+import '../../data/job_taxonomy.dart';
 
 class FundiProfile extends StatefulWidget {
   const FundiProfile({super.key});
@@ -17,55 +18,85 @@ class _FundiProfileState extends State<FundiProfile> {
   final _bioCtrl = TextEditingController();
   final _otherProfCtrl = TextEditingController();
   final _keywordCtrl = TextEditingController();
-  final _expCtrl = TextEditingController(); // <-- ADDED for experience years
+  final _expCtrl = TextEditingController();
 
   Map<String, dynamic>? data;
   Map<String, dynamic>? userData;
   bool loading = true;
   bool uploadingPhoto = false;
 
-  String selectedProfession = 'Carpentry';
-  List<String> selectedSkills = [];
+  String selectedCategoryId = 'plumbing_waterworks';
+  List<String> selectedCategoryIds = []; // other categories fundi can do
+  List<String> selectedSubcategoryIds = [];
   int profilePct = 0;
 
-  final professions = [
-    'Carpentry',
-    'Cleaning',
-    'Dishwasher Installation',
-    'Electricals/Electronics Repair',
-    'Electronics Repair',
-    'Gardening',
-    'Masonry',
-    'Mechanic',
-    'Painting',
-    'Plumbing',
-    'TV Installation',
-    'Washing Machine Installation',
-    'Washing Machine Repair',
-    'Welding',
-    'Other',
-  ];
-  final allSkills = [
-    'Carpentry',
-    'Cleaning',
-    'Dishwasher Installation',
-    'Electricals/Electronics Repair',
-    'Electronics Repair',
-    'Gardening',
-    'Masonry',
-    'Mechanic',
-    'Painting',
-    'Plumbing',
-    'TV Installation',
-    'Washing Machine Installation',
-    'Washing Machine Repair',
-    'Welding',
-  ];
+  // Helper to get category by id
+  Map<String, dynamic> get selectedCategory =>
+      FundiTaxonomy.categories.firstWhere(
+        (c) => c['id'] == selectedCategoryId,
+        orElse: () => FundiTaxonomy.categories[0],
+      );
+  List get subcategories => selectedCategory['subcategories'] as List;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  String _mapOldProfessionToCategoryId(String oldProf) {
+    var lower = oldProf.toLowerCase();
+    if (lower.contains('plumb')) return 'plumbing_waterworks';
+    if (lower.contains('electrical') || lower.contains('electrics'))
+      return 'electrical';
+    if (lower.contains('washing') ||
+        lower.contains('fridge') ||
+        lower.contains('appliance') ||
+        lower.contains('cooker'))
+      return 'appliance_repair';
+    if (lower.contains('carpentry') || lower.contains('carpenter'))
+      return 'carpentry_joinery';
+    if (lower.contains('weld')) return 'welding_fabrication';
+    if (lower.contains('mechanic') ||
+        lower.contains('car') ||
+        lower.contains('automotive'))
+      return 'automotive';
+    if (lower.contains('tv') || lower.contains('electronics'))
+      return 'electronics_repair';
+    if (lower.contains('boda') ||
+        lower.contains('motorcycle') ||
+        lower.contains('tuk'))
+      return 'motorcycle_boda';
+    if (lower.contains('masonry') || lower.contains('building'))
+      return 'masonry_building';
+    if (lower.contains('paint')) return 'painting_decoration';
+    if (lower.contains('roof') || lower.contains('gutter'))
+      return 'roofing_guttering';
+    if (lower.contains('tile') || lower.contains('terrazzo'))
+      return 'tiling_flooring';
+    if (lower.contains('ac') || lower.contains('hvac')) return 'hvac';
+    if (lower.contains('solar') || lower.contains('inverter'))
+      return 'solar_renewable';
+    if (lower.contains('cctv') || lower.contains('security'))
+      return 'security_systems';
+    if (lower.contains('glass') ||
+        lower.contains('aluminium') ||
+        lower.contains('aluminum'))
+      return 'glass_aluminum';
+    if (lower.contains('gypsum') || lower.contains('ceiling'))
+      return 'gypsum_ceiling';
+    if (lower.contains('waterproof')) return 'waterproofing';
+    if (lower.contains('borehole') || lower.contains('pump'))
+      return 'borehole_pump';
+    if (lower.contains('generator')) return 'generator_power';
+    if (lower.contains('garden') || lower.contains('landscap'))
+      return 'landscaping_gardening';
+    if (lower.contains('clean')) return 'cleaning_laundry';
+    if (lower.contains('pest') || lower.contains('fumigation'))
+      return 'pest_control';
+    if (lower.contains('locksmith') || lower.contains('key'))
+      return 'locksmith';
+    return 'plumbing_waterworks';
   }
 
   Future<void> _load() async {
@@ -84,20 +115,52 @@ class _FundiProfileState extends State<FundiProfile> {
     _bioCtrl.text = combined['bio'] ?? '';
     _expCtrl.text =
         (combined['experienceYears'] ?? combined['experience'] ?? '')
-            .toString(); // <-- ADDED
-    selectedProfession =
-        combined['profession'] ?? combined['skill'] ?? 'Carpentry';
-    if (!professions.contains(selectedProfession)) {
-      if (selectedProfession.isNotEmpty && selectedProfession != 'General') {
-        _otherProfCtrl.text = selectedProfession;
-        selectedProfession = 'Other';
+            .toString();
+
+    // Map old profession string to new 24 categories
+    String oldProf =
+        combined['profession'] ??
+        combined['skill'] ??
+        combined['primaryCategoryName'] ??
+        'Plumbing';
+    if (combined['primaryCategoryId'] != null) {
+      selectedCategoryId = combined['primaryCategoryId'];
+    } else {
+      selectedCategoryId = _mapOldProfessionToCategoryId(oldProf);
+    }
+    if (!FundiTaxonomy.categories.any((c) => c['id'] == selectedCategoryId)) {
+      selectedCategoryId = 'plumbing_waterworks';
+    }
+
+    // Load other categories
+    List<String> catIds = List<String>.from(
+      combined['categoryIds'] ?? combined['categories'] ?? [],
+    );
+    if (catIds.isEmpty && combined['otherSkills'] != null) {
+      // migrate old otherSkills strings to categoryIds
+      var oldOthers = List<String>.from(combined['otherSkills']);
+      for (var s in oldOthers) {
+        catIds.add(_mapOldProfessionToCategoryId(s));
       }
     }
-    selectedSkills = List<String>.from(combined['otherSkills'] ?? []);
-    _keywordCtrl.text = combined['searchKeyword'] ?? '';
+    // Remove primary from others and dedup
+    catIds = catIds.toSet().where((id) => id != selectedCategoryId).toList();
+    selectedCategoryIds = catIds;
+
+    selectedSubcategoryIds = List<String>.from(
+      combined['subcategoryIds'] ?? [],
+    );
+
+    _keywordCtrl.text =
+        combined['searchKeyword'] ?? selectedCategory['slug'] ?? '';
+    _otherProfCtrl.text = '';
+
     int pct = 0;
     if ((combined['name'] ?? '').toString().length > 2) pct += 10;
-    if ((combined['profession'] ?? '').toString().isNotEmpty) pct += 15;
+    if ((combined['profession'] ?? combined['primaryCategoryId'] ?? '')
+        .toString()
+        .isNotEmpty)
+      pct += 15;
     if ((combined['bio'] ?? '').toString().length > 20) pct += 20;
     if ((combined['bio'] ?? '').toString().length > 20) pct += 30;
     if (combined['photoUrl'] != null) pct += 15;
@@ -174,40 +237,61 @@ class _FundiProfileState extends State<FundiProfile> {
 
   Future<void> _save() async {
     var uid = FirebaseAuth.instance.currentUser!.uid;
-    String finalProf = selectedProfession == 'Other'
-        ? _otherProfCtrl.text.trim()
-        : selectedProfession;
-    String finalKeyword = selectedProfession == 'Other'
-        ? _keywordCtrl.text.trim().toLowerCase()
-        : finalProf.toLowerCase();
+    var cat = selectedCategory;
+    String finalKeyword = _keywordCtrl.text.trim().isEmpty
+        ? (cat['slug'] as String)
+        : _keywordCtrl.text.trim().toLowerCase();
+
+    List<String> allCatIds = [
+      selectedCategoryId,
+      ...selectedCategoryIds,
+    ].toSet().toList();
+
     await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
-      'profession': finalProf,
-      'skill': finalProf,
+      // NEW 24 CATEGORIES SYSTEM
+      'primaryCategoryId': selectedCategoryId,
+      'primaryCategoryName': cat['name'],
+      'primaryCategorySlug': cat['slug'],
+      'categoryIds': allCatIds,
+      'categories': allCatIds, // backward compat
+      'subcategoryIds': selectedSubcategoryIds,
+      // OLD FIELDS - kept for backward compat with old job matching
+      'profession': cat['name'],
+      'skill': cat['name'],
       'searchKeyword': finalKeyword,
-      'otherSkills': selectedSkills,
+      'otherSkills': selectedCategoryIds.map((id) {
+        try {
+          return FundiTaxonomy.categories.firstWhere(
+            (c) => c['id'] == id,
+          )['name'];
+        } catch (_) {
+          return id;
+        }
+      }).toList(),
       'bio': _bioCtrl.text.trim(),
-      'experienceYears':
-          int.tryParse(_expCtrl.text) ?? _expCtrl.text, // <-- ADDED
-      'experience': _expCtrl.text, // <-- ADDED
+      'experienceYears': int.tryParse(_expCtrl.text) ?? _expCtrl.text,
+      'experience': _expCtrl.text,
       'available': true,
       'updatedAt': FieldValue.serverTimestamp(),
-      // DO NOT overwrite these stats - keep them if exist
       'jobsCompleted': data?['jobsCompleted'] ?? 0,
       'fraudCount': data?['fraudCount'] ?? 0,
       'averageRating': data?['averageRating'] ?? data?['rating'] ?? 4.5,
       'ratingCount': data?['ratingCount'] ?? 0,
     }, SetOptions(merge: true));
+
     await FirebaseFirestore.instance.collection('users').doc(uid).set({
-      'profession': finalProf,
-      'skill': finalProf,
+      'profession': cat['name'],
+      'skill': cat['name'],
+      'primaryCategoryId': selectedCategoryId,
+      'categoryIds': allCatIds,
       'searchKeyword': finalKeyword,
-      'otherSkills': selectedSkills,
     }, SetOptions(merge: true));
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Public profile saved ✨'),
-        backgroundColor: FundipapColors.greenSuccess,
+        content: Text('Public profile saved with 24-category system ✨'),
+        backgroundColor: Color(0xFF2E7D32),
       ),
     );
     _load();
@@ -218,7 +302,6 @@ class _FundiProfileState extends State<FundiProfile> {
     if (loading)
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     var combined = {...?userData, ...?data};
-    bool isOther = selectedProfession == 'Other';
     var jobsDone = combined['jobsCompleted'] ?? 0;
     var rating = (combined['averageRating'] ?? combined['rating'] ?? 4.5)
         .toDouble();
@@ -340,7 +423,6 @@ class _FundiProfileState extends State<FundiProfile> {
               backgroundColor: Colors.black12,
             ),
             const SizedBox(height: 16),
-            // STATS FOR FUNDI TO SEE HIMSELF
             Row(
               children: [
                 _stat('$jobsDone', 'Jobs Done'),
@@ -351,27 +433,38 @@ class _FundiProfileState extends State<FundiProfile> {
               ],
             ),
             const SizedBox(height: 20),
-            Text(
-              'Advertise Yourself',
-              style: GoogleFonts.montserrat(
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade200),
               ),
-            ),
-            Text(
-              'Clients see this when they search',
-              style: GoogleFonts.inter(color: Colors.black54, fontSize: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.info, size: 18, color: Colors.blue.shade800),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Now 24 categories. Your profile matches jobs by categoryId, not text. Select primary + other categories you can do.',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: Colors.blue.shade900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 20),
             Text(
-              'Primary Profession *',
+              'Primary Profession * (24 Categories)',
               style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: professions.contains(selectedProfession)
-                  ? selectedProfession
-                  : 'Other',
+              value: selectedCategoryId,
+              isExpanded: true,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -379,41 +472,77 @@ class _FundiProfileState extends State<FundiProfile> {
                 filled: true,
                 fillColor: Colors.white,
               ),
-              items: professions
-                  .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                  .toList(),
-              onChanged: (v) => setState(() => selectedProfession = v!),
+              items: FundiTaxonomy.categories.map((c) {
+                bool isTop = c['isTop6'] == true;
+                return DropdownMenuItem(
+                  value: c['id'] as String,
+                  child: Row(
+                    children: [
+                      Text(
+                        isTop ? '⭐ ' : '',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      Expanded(
+                        child: Text(
+                          c['name'] as String,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: isTop
+                                ? FontWeight.w700
+                                : FontWeight.w400,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (v) => setState(() {
+                selectedCategoryId = v!;
+                selectedSubcategoryIds =
+                    []; // reset subcategories when primary changes
+              }),
             ),
-            if (isOther) ...[
-              const SizedBox(height: 12),
-              TextField(
-                controller: _otherProfCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Your profession *',
-                  hintText: 'e.g. Washing Machine Repair',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
+            const SizedBox(height: 12),
+            if (subcategories.isNotEmpty) ...[
+              Text(
+                'What you do inside ${selectedCategory['name']} - Select sub-services',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _keywordCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Keyword for search *',
-                  hintText: 'e.g. washing machine',
-                  helperText: 'This keyword decides which jobs show first',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: subcategories.map((s) {
+                  var ss = s as Map<String, dynamic>;
+                  bool sel = selectedSubcategoryIds.contains(ss['id']);
+                  return FilterChip(
+                    label: Text(
+                      ss['name'] as String,
+                      style: GoogleFonts.inter(fontSize: 11),
+                    ),
+                    selected: sel,
+                    selectedColor: FundipapColors.primaryYellow.withOpacity(
+                      0.4,
+                    ),
+                    onSelected: (v) {
+                      setState(() {
+                        if (v) {
+                          selectedSubcategoryIds.add(ss['id']);
+                        } else {
+                          selectedSubcategoryIds.remove(ss['id']);
+                        }
+                      });
+                    },
+                  );
+                }).toList(),
               ),
+              const SizedBox(height: 16),
             ],
-            const SizedBox(height: 16),
             Text(
               'Years of Experience',
               style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
@@ -433,39 +562,69 @@ class _FundiProfileState extends State<FundiProfile> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Other skills you also do',
+              'Other Categories You Also Do (24)',
               style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Clients searching these categories will also see you',
+              style: GoogleFonts.inter(fontSize: 11, color: Colors.black54),
             ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 6,
               runSpacing: 6,
-              children: allSkills
-                  .where(
-                    (s) =>
-                        s !=
-                        (isOther ? _otherProfCtrl.text : selectedProfession),
-                  )
-                  .map((skill) {
-                    bool sel = selectedSkills.contains(skill);
+              children: FundiTaxonomy.categories
+                  .where((c) => c['id'] != selectedCategoryId)
+                  .map((c) {
+                    bool sel = selectedCategoryIds.contains(c['id']);
+                    bool isTop = c['isTop6'] == true;
                     return FilterChip(
-                      label: Text(
-                        skill,
-                        style: GoogleFonts.inter(fontSize: 11),
+                      label: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isTop)
+                            const Text('⭐ ', style: TextStyle(fontSize: 10)),
+                          Text(
+                            c['name'] as String,
+                            style: GoogleFonts.inter(fontSize: 11),
+                          ),
+                        ],
                       ),
                       selected: sel,
+                      selectedColor: FundipapColors.primaryYellow.withOpacity(
+                        0.3,
+                      ),
                       onSelected: (v) {
                         setState(() {
                           if (v) {
-                            selectedSkills.add(skill);
+                            selectedCategoryIds.add(c['id'] as String);
                           } else {
-                            selectedSkills.remove(skill);
+                            selectedCategoryIds.remove(c['id']);
                           }
                         });
                       },
                     );
                   })
                   .toList(),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Search Keyword',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _keywordCtrl,
+              decoration: InputDecoration(
+                labelText: 'e.g. plumbing, wiring, washing machine',
+                hintText: '${selectedCategory['slug']}',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+              ),
             ),
             const SizedBox(height: 20),
             Text(
@@ -478,7 +637,7 @@ class _FundiProfileState extends State<FundiProfile> {
               maxLines: 4,
               decoration: InputDecoration(
                 hintText:
-                    'e.g I install & repair washing machines, dishwashers, TVs. 5 years experience...',
+                    'e.g I install & repair washing machines, dishwashers, TVs. 5 years experience in Kisumu...',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -497,7 +656,7 @@ class _FundiProfileState extends State<FundiProfile> {
                   foregroundColor: Colors.white,
                 ),
                 child: Text(
-                  'Update Public Profile',
+                  'Update Public Profile - 24 Categories',
                   style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
                 ),
               ),
@@ -516,7 +675,6 @@ class _FundiProfileState extends State<FundiProfile> {
               Icons.photo_library,
             ),
             const SizedBox(height: 24),
-            // FUNDI CAN SEE HIS OWN FEEDBACKS
             Text(
               'My Customer Feedbacks',
               style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),

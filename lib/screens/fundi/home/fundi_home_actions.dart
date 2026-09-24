@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../services/location_service.dart';
 import 'fundi_home_logic.dart';
-import 'fundi_bid_dialog.dart';
+import 'fundi_bid_dialog.dart'; // keep - now provides FundiBidDialog widget
 
 mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
   String get search;
@@ -43,8 +43,6 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
   Future<void> loadMe() async {
     final result = await FundiHomeLogic.loadMe();
     if (!mounted) return;
-
-    // Real earnings from completed jobs
     final uid = FirebaseAuth.instance.currentUser!.uid;
     final snap = await FirebaseFirestore.instance
         .collection('jobs')
@@ -63,8 +61,8 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
 
     setState(() {
       me = result.me;
-      completedJobs = snap.docs.length; // real count
-      totalEarned = sum; // real total
+      completedJobs = snap.docs.length;
+      totalEarned = sum;
       mySkill = result.mySkill;
       profilePct = result.profilePct;
     });
@@ -74,11 +72,16 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
       FundiHomeLogic.relevanceScore(job, me, mySkill);
 
   Future<void> bidForJob(BuildContext context, Map<String, dynamic> job) async {
-    await showFundiBidDialog(
+    final jobId = job['id'] ?? job['jobId'] ?? '';
+    if (jobId.toString().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Job ID missing')));
+      return;
+    }
+    await showDialog(
       context: context,
-      job: job,
-      me: me,
-      completedJobs: completedJobs,
+      builder: (_) => FundiBidDialog(jobId: jobId.toString(), jobData: job),
     );
   }
 }
