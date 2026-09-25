@@ -42,6 +42,9 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
               'clientId': (bid['customerId'] ?? bid['customerName'] ?? '')
                   .toString(),
               'price': bid['price'] ?? bid['agreedPrice'] ?? 0,
+              'totalCost':
+                  bid['totalCost'] ?? bid['price'] ?? bid['agreedPrice'] ?? 0,
+              'transportFee': bid['transportFee'] ?? 0,
               'createdAt': bid['updatedAt'] ?? bid['createdAt'],
               'isRead': bid['isReadByFundi'] == true,
             });
@@ -177,6 +180,9 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
           (b['clientName'] as String).isEmpty)
         continue;
       String key = "${b['jobId']}_${b['clientId']}";
+      int labor = (b['price'] ?? 0).toInt();
+      int total = (b['totalCost'] ?? labor).toInt();
+      int transport = (b['transportFee'] ?? 0).toInt();
       grouped[key] = {
         'jobId': b['jobId'],
         'clientName': b['clientName'],
@@ -184,7 +190,11 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         'category': b['jobTitle'],
         'jobData': {
           'title': b['jobTitle'],
-          'agreedPrice': b['price'],
+          'agreedPrice': labor,
+          'laborCost': labor,
+          'transportFee': transport,
+          'totalCost': total,
+          'escrowAmount': total,
           'escrowStatus': 'pending',
           'status': 'accepted',
           'customerName': b['clientName'],
@@ -201,16 +211,23 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       var cName = (job['customerName'] ?? job['clientName'] ?? '').toString();
       if (title.isEmpty || cName.isEmpty) continue;
       var clientId = (job['customerId'] ?? cName).toString();
+      // TRANSPORT SAFE READ
+      int labor = (job['laborCost'] ?? job['agreedPrice'] ?? 0).toInt();
+      int transport = (job['transportFee'] ?? 0).toInt();
+      int total = (job['totalCost'] ?? job['escrowAmount'] ?? labor).toInt();
       grouped[doc.id] = {
         'jobId': doc.id,
         'clientName': cName,
         'clientId': clientId,
         'category': title,
-        'jobData': job,
+        'jobData': job, // already has transport fields
         'latestAt': (job['updatedAt'] is Timestamp)
             ? (job['updatedAt'] as Timestamp).toDate()
             : DateTime.now(),
         'isRead': job['fundiHasUnread'] != true,
+        'labor': labor,
+        'transport': transport,
+        'total': total,
       };
     }
 
@@ -378,6 +395,29 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                             Text(
                               g['clientName'],
                               style: GoogleFonts.inter(fontSize: 11),
+                            ),
+                            Builder(
+                              builder: (_) {
+                                final int transport =
+                                    (g['transport'] as int?) ??
+                                    (g['jobData']['transportFee'] as int?) ??
+                                    0;
+                                final int total =
+                                    (g['total'] as int?) ??
+                                    (g['jobData']['totalCost'] as int?) ??
+                                    (g['jobData']['escrowAmount'] as int?) ??
+                                    0;
+                                if (transport > 0 && total > 0) {
+                                  return Text(
+                                    'KES $total total (incl. transport $transport)',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      color: Colors.black54,
+                                    ),
+                                  );
+                                }
+                                return const SizedBox.shrink();
+                              },
                             ),
                             if (isPendingPrice)
                               Text(

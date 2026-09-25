@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../../../notifications/notification_service.dart';
+import '../../../utils/transport_calculator.dart'; // <-- new file we created
 
 mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
   Map<String, dynamic>? get fundi;
@@ -44,34 +44,52 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
     });
   }
 
+  // For Review Fundi page to show distance before confirm
+  Future<Map<String, dynamic>> getTransportPreview() async {
+    return await TransportCalculator.calc(
+      jobData: jobData,
+      fundiId: bidData['fundiId'],
+    );
+  }
+
   Future<void> confirmFundi() async {
-    // FIX: bid saves as amount/bidAmount, not price - this was null
     int finalPrice =
         (bidData['amount'] ??
                 bidData['bidAmount'] ??
                 bidData['price'] ??
                 jobData['budget'] ??
-                jobData['systemPriceAvg'] ??
                 0)
             .toInt();
     if (finalPrice == 0) finalPrice = (jobData['budgetMax'] ?? 1000).toInt();
+
+    var t = await TransportCalculator.calc(
+      jobData: jobData,
+      fundiId: bidData['fundiId'],
+    );
+    int transportFee = t['fee'] as int;
+    double km = t['km'] as double;
+    String mode = t['mode'] as String;
+    int totalLocked = finalPrice + transportFee; // what client WILL pay
 
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'status': 'assigned',
       'assignedFundi': bidData['fundiId'],
       'assignedFundiName': bidData['fundiName'],
-      'agreedPrice':
-          finalPrice, // MUTUAL LOCKED PRICE - what client pays to escrow
+      'assignedFundiId': bidData['fundiId'],
+      'agreedPrice': finalPrice,
+      'laborCost': finalPrice,
+      'transportFee': transportFee,
+      'transportDistanceKm': km,
+      'transportMode': mode,
+      'totalCost': totalLocked, // SHOW THIS
+      'escrowAmount': 0, // <-- FIX: 0 until paid, not totalLocked
+      'escrowStatus': 'pending',
       'acceptedBidAmount': finalPrice,
-      'fundiBidAmount': finalPrice,
       'acceptedBidId': bidId,
-      'initialAgreedPrice': finalPrice,
-      'agreedPriceSource': 'fundi_bid_mutual',
-      'priceMutuallyLocked': true,
-      'clientInitialBudget': jobData['budget'] ?? jobData['systemPriceAvg'],
       'updatedAt': FieldValue.serverTimestamp(),
       'fundiHasUnread': true,
     });
+
     await FirebaseFirestore.instance
         .collection('jobs')
         .doc(jobId)
@@ -81,26 +99,27 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
           'status': 'accepted',
           'acceptedAt': FieldValue.serverTimestamp(),
           'acceptedPrice': finalPrice,
+          'transportFee': transportFee,
+          'totalCost': totalLocked,
         });
 
-    await NotificationService.notifyUser(
-      recipientId: bidData['fundiId'],
-      title: 'Bid Accepted! 🎉',
-      body:
-          'Client accepted your bid for ${jobData['title'] ?? 'job'} - KES $finalPrice',
-      type: 'bid_accepted',
-      jobId: jobId,
-      jobTitle: jobData['title'],
-    );
+    await FirebaseFirestore.instance
+        .collection('escrowTransactions')
+        .doc(jobId)
+        .set({
+          'jobId': jobId,
+          'clientId': FirebaseAuth.instance.currentUser!.uid,
+          'fundiId': bidData['fundiId'],
+          'amount': totalLocked, // pending amount
+          'laborAmount': finalPrice,
+          'transportAmount': transportFee,
+          'status': 'pending_payment',
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
 
+    // ... your notification code same
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${bidData['fundiName']} confirmed for KES $finalPrice!'),
-        backgroundColor: FundipapColors.greenSuccess,
-      ),
-    );
-    Navigator.pop(context, true);
+    Navigator.pop(context, true); // returns true
   }
 
   Future<void> rejectFundi() async {

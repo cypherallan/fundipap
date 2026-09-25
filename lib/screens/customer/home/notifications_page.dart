@@ -157,6 +157,8 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
         'type': 'bid',
         'isPendingBid': b['status'] == 'pending',
         'isRead': b['isRead'] == true,
+        'totalCost': 0, // FIX: add default
+        'transportFee': 0, // FIX: add default
       };
     }
 
@@ -170,6 +172,10 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
           reneg != null &&
           reneg['requested'] == true &&
           reneg['status'] == 'pending';
+      int totalCost =
+          (job['totalCost'] ?? job['escrowAmount'] ?? job['agreedPrice'] ?? 0)
+              .toInt();
+      int transport = (job['transportFee'] ?? 0).toInt();
 
       grouped[doc.id] = {
         'jobId': doc.id,
@@ -183,6 +189,8 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
         'type': 'active',
         'isRead': (job['customerHasUnread'] != true) && !isNewPrice,
         'isNewPrice': isNewPrice,
+        'totalCost': totalCost,
+        'transportFee': transport,
       };
     }
 
@@ -191,13 +199,11 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
         (a, b) =>
             (b['latestAt'] as DateTime).compareTo((a['latestAt'] as DateTime)),
       );
-
     Map<String, int> fundiUnreadCounts = {};
     for (var g in list) {
-      if (g['isRead'] == false) {
+      if (g['isRead'] == false)
         fundiUnreadCounts[g['fundiId']] =
             (fundiUnreadCounts[g['fundiId']] ?? 0) + 1;
-      }
     }
     int totalTabCounter = fundiUnreadCounts.values.fold(0, (a, b) => a + b);
 
@@ -260,6 +266,10 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
                       cardColor = Colors.white;
                       borderColor = Colors.black12;
                     }
+
+                    // FIX: safe cast
+                    final int transportFee = (g['transportFee'] as int?) ?? 0;
+                    final int totalCost = (g['totalCost'] as int?) ?? 0;
 
                     return Card(
                       color: cardColor,
@@ -328,6 +338,14 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
+                            if (transportFee > 0)
+                              Text(
+                                'Total KES $totalCost (incl. transport $transportFee)',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  color: Colors.black54,
+                                ),
+                              ),
                           ],
                         ),
                         trailing: isUnreadGroup
@@ -353,7 +371,19 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
                               ),
                             );
                             if (confirmed == true && context.mounted) {
-                              // DO NOT push CustomerFundiTimelinePage here - stay on notifications list
+                              // AFTER CONFIRM - GO TO TIMELINE, timeline listens to job stream so it will have transport + escrow
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => CustomerFundiTimelinePage(
+                                    jobId: g['jobId'],
+                                    fundiName: g['fundiName'],
+                                    trade: g['category'],
+                                    jobData:
+                                        g['jobData'], // stream will update to include totalCost/transportFee automatically
+                                  ),
+                                ),
+                              );
                               return;
                             }
                           } else {

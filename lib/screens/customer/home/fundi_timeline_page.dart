@@ -193,8 +193,11 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           String renegStatus = (reneg?['status'] ?? '').toString();
           String phase = (reneg?['currentPhase'] ?? '').toString();
           bool needsExtraEscrow = renegStatus.contains('pending_extra_escrow');
+          // inside build, replace the agreed/alreadyLocked block with this:
           double agreed = _toDouble(
-            job['agreedPrice'] ??
+            job['totalCost'] ??
+                job['escrowAmount'] ??
+                job['agreedPrice'] ??
                 job['acceptedBidAmount'] ??
                 job['fundiBidAmount'] ??
                 job['initialAgreedPrice'] ??
@@ -202,6 +205,12 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 job['budget'] ??
                 0,
           );
+          int labor = _toInt(job['laborCost'] ?? job['agreedPrice'] ?? agreed);
+          int transport = _toInt(
+            job['transportFee'] ?? job['escrowTransport'] ?? 0,
+          );
+          double km = _toDouble(job['transportDistanceKm'] ?? 0);
+          String mode = (job['transportMode'] ?? 'boda').toString();
           int alreadyLocked = _toInt(
             job['escrowAmount'] ?? 0,
           ); // DON'T fallback to agreed
@@ -350,11 +359,13 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           }
 
           // Normal flow below
+          // Normal flow below
           timeline.add(
             _timelineCard(
               title: 'Bid accepted - Done',
-              body:
-                  '${widget.trade} • $location • KES ${agreed.toInt()} mutual',
+              body: transport > 0
+                  ? '${widget.trade} • $location • Labor KES $labor + Transport KES $transport ($mode ${km.toStringAsFixed(1)}km) = KES ${agreed.toInt()} mutual'
+                  : '${widget.trade} • $location • KES ${agreed.toInt()} mutual',
               icon: Icons.verified,
               isDone: true,
             ),
@@ -365,7 +376,9 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   ? 'Escrow locked - Done (Mutual Price)'
                   : 'Lock mutual price to escrow',
               body: escrowDone
-                  ? 'KES $alreadyLocked secured'
+                  ? 'KES $alreadyLocked secured${transport > 0 ? ' (Labor $labor + Transport $transport)' : ''}'
+                  : transport > 0
+                  ? 'You accepted fundi bid KES $labor + Transport KES $transport = Total KES ${agreed.toInt()}. Secure it to start.'
                   : 'You accepted fundi bid KES ${agreed.toInt()}. Secure it to start.',
               icon: Icons.lock,
               isDone: escrowDone,

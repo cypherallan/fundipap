@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
+import '../../../utils/transport_calculator.dart';
 import 'fundi_actions.dart';
 import 'fundi_profile_card.dart';
 import 'fundi_details_section.dart';
@@ -33,6 +34,14 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
   @override
   bool loading = true;
 
+  // TRANSPORT STATE - for Review display
+  double distanceKm = 0;
+  int transportFee = 0;
+  String transportMode = 'boda';
+  int labor = 0;
+  int total = 0;
+  bool transportLoading = true;
+
   @override
   String get jobId => widget.jobId;
   @override
@@ -45,7 +54,32 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
   @override
   void initState() {
     super.initState();
-    loadFundi();
+    loadFundi().then((_) => _loadTransport());
+  }
+
+  Future<void> _loadTransport() async {
+    try {
+      var t = await TransportCalculator.calc(
+        jobData: widget.jobData,
+        fundiId: widget.bidData['fundiId'],
+      );
+      if (!mounted) return;
+      setState(() {
+        distanceKm = t['km'] as double;
+        transportFee = t['fee'] as int;
+        transportMode = t['mode'] as String;
+        labor =
+            (widget.bidData['amount'] ??
+                    widget.bidData['bidAmount'] ??
+                    widget.bidData['price'] ??
+                    0)
+                .toInt();
+        total = labor + transportFee;
+        transportLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => transportLoading = false);
+    }
   }
 
   @override
@@ -72,6 +106,11 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
       ),
       bottomNavigationBar: ConfirmFundiBottomActions(
         bidData: widget.bidData,
+        labor: labor,
+        transportFee: transportFee,
+        total: total,
+        distanceKm: distanceKm,
+        transportMode: transportMode,
         onReject: rejectFundi,
         onConfirm: confirmFundi,
         onReport: reportFraud,
@@ -84,6 +123,100 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
             ConfirmFundiProfileCard(combined: combined),
             const SizedBox(height: 12),
             ConfirmFundiDetailsSection(combined: combined),
+            const SizedBox(height: 12),
+            // NEW: Distance + Total to be locked
+            Card(
+              color: Colors.blue.shade50,
+              shape: RoundedRectangleBorder(
+                side: BorderSide(color: Colors.blue.shade200),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: transportLoading
+                    ? Row(
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Calculating distance...',
+                            style: GoogleFonts.inter(fontSize: 12),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.location_on,
+                                size: 18,
+                                color: Colors.blue.shade700,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                'Fundi is ${distanceKm.toStringAsFixed(1)} km away',
+                                style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              Spacer(),
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  transportMode,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Labor: KES $labor',
+                            style: GoogleFonts.inter(fontSize: 12),
+                          ),
+                          Text(
+                            'Transport ($transportMode): KES $transportFee',
+                            style: GoogleFonts.inter(fontSize: 12),
+                          ),
+                          Divider(),
+                          Text(
+                            'TOTAL TO LOCK IN ESCROW: KES $total',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: Colors.black,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'This whole amount will be locked to escrow',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+            const SizedBox(height: 12),
             ConfirmFundiBidCard(
               jobData: widget.jobData,
               bidData: widget.bidData,

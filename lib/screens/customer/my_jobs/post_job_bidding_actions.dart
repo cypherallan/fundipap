@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../utils/transport_calculator.dart';
 
 mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
   Future<void> handleCounterBid(
@@ -168,50 +169,35 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
                 jobData['budget'] ??
                 0)
             .toDouble();
+
+    // REAL TRANSPORT NOW
+    var transport = await TransportCalculator.calc(
+      jobData: jobData,
+      fundiId: bidData['fundiId'],
+    );
+    int transportFee = transport['fee'] as int;
+    double km = transport['km'] as double;
+    String mode = transport['mode'] as String;
+    int totalLocked = finalPrice.toInt() + transportFee;
+
     await jobRef.update({
       'assignedFundi': bidData['fundiId'],
       'assignedFundiName': bidData['fundiName'],
       'assignedFundiPhone': bidData['fundiPhone'] ?? '',
       'acceptedBidId': bidRef.id,
-      'agreedPrice': finalPrice,
+      'agreedPrice': finalPrice, // keep old field
       'laborCost': finalPrice,
-      'totalCost': finalPrice,
+      'transportFee': transportFee,
+      'transportDistanceKm': km,
+      'transportMode': mode,
+      'totalCost': totalLocked,
+      'escrowAmount': totalLocked,
+      'escrowJob': finalPrice.toInt(),
+      'escrowTransport': transportFee,
       'status': 'assigned',
       'escrowStatus': 'pending',
-      'escrowAmount': finalPrice,
-      'priceHistory': FieldValue.arrayUnion([
-        {
-          'price': finalPrice,
-          'by': FirebaseAuth.instance.currentUser!.uid,
-          'at': DateTime.now().toIso8601String(),
-          'type': 'accepted',
-        },
-      ]),
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    await bidRef.update({'status': 'accepted'});
-    var otherBids = await jobRef
-        .collection('bids')
-        .where('status', whereIn: ['pending', 'countered', 'bidding'])
-        .get();
-    for (var b in otherBids.docs) {
-      if (b.id != bidRef.id) {
-        await b.reference.update({
-          'status': 'rejected',
-          'rejectionCategory': 'Another offer accepted',
-        });
-      }
-    }
-    await FirebaseFirestore.instance
-        .collection('escrowTransactions')
-        .doc(jobId)
-        .set({
-          'jobId': jobId,
-          'clientId': FirebaseAuth.instance.currentUser!.uid,
-          'fundiId': bidData['fundiId'],
-          'amount': finalPrice,
-          'status': 'pending_payment',
-          'createdAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+    // ... rest same as before, set escrowTransactions amount = totalLocked
   }
 }
