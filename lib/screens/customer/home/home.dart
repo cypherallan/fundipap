@@ -51,47 +51,38 @@ class _CustomerHomeState extends State<CustomerHome> {
           .where('status', isEqualTo: 'completed')
           .get();
 
-      // Deduplicate by jobId
       final Map<String, QueryDocumentSnapshot> map = {};
-      for (var d in [...snap1.docs, ...snap2.docs]) {
-        map[d.id] = d;
-      }
+      for (var d in [...snap1.docs, ...snap2.docs]) map[d.id] = d;
 
       final unrated = map.values.where((d) {
         var data = d.data() as Map<String, dynamic>;
-        return data['clientRated'] != true;
+        bool notRated = data['clientRated'] != true;
+        bool released =
+            (data['escrowStatus'] ?? '') == 'released' ||
+            (data['totalReleasedAmount'] ?? 0) != 0 ||
+            (data['fundiPayoutAmount'] ?? 0) != 0;
+        // NEW RULE: must have fundiConfirmedPayment == true
+        // For old jobs where field doesn't exist, allow if released (backward compat)
+        bool fundiConfirmed =
+            data['fundiConfirmedPayment'] == true ||
+            (data['fundiConfirmedPayment'] == null && released);
+        return notRated && released && fundiConfirmed;
       }).toList();
 
       if (unrated.isNotEmpty && mounted) {
         var first = unrated.first;
         var data = first.data() as Map<String, dynamic>;
-
         String fundiId =
             (data['fundiId'] ??
                     data['assignedFundiId'] ??
                     data['acceptedFundiId'] ??
-                    data['selectedFundiId'] ??
-                    data['fundiUid'] ??
-                    data['fundiID'] ??
-                    data['acceptedFundiUid'] ??
                     '')
                 .toString()
                 .trim();
-
         String fundiName =
-            (data['assignedFundiName'] ??
-                    data['fundiDisplayName'] ??
-                    data['acceptedFundiName'] ??
-                    'Fundi')
+            (data['assignedFundiName'] ?? data['fundiDisplayName'] ?? 'Fundi')
                 .toString();
-
-        String trade =
-            (data['trade'] ??
-                    data['category'] ??
-                    data['serviceType'] ??
-                    data['skill'] ??
-                    '')
-                .toString();
+        String trade = (data['trade'] ?? data['category'] ?? '').toString();
 
         Navigator.of(context).push(
           MaterialPageRoute(

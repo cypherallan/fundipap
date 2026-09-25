@@ -135,8 +135,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           });
     } catch (_) {}
     if (!mounted) return;
-    // REPLACE Navigator.pushReplacement with this:
-    Navigator.of(context).pushAndRemoveUntil(
+    Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => RateFundiScreen(
           jobId: jobId,
@@ -145,7 +144,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           trade: widget.trade,
         ),
       ),
-      (route) => false, // clears all back buttons
     );
   }
 
@@ -176,9 +174,20 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             .doc(widget.jobId)
             .snapshots(),
         builder: (_, snap) {
-          if (!snap.hasData)
+          if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
-          var job = snap.data!.data() as Map<String, dynamic>;
+          }
+          if (snap.hasError) {
+            return Center(child: Text('Error: ${snap.error}'));
+          }
+          if (!snap.hasData || snap.data == null || !snap.data!.exists) {
+            return const Center(child: Text('Job not found'));
+          }
+          final raw = snap.data!.data();
+          if (raw == null) {
+            return const Center(child: Text('Job deleted'));
+          }
+          var job = raw as Map<String, dynamic>;
           var escrow = (job['escrowStatus'] ?? 'pending').toString();
           var status = (job['status'] ?? '').toString();
           var location = (job['location'] ?? job['address'] ?? 'Your location')

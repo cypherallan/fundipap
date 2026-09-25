@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../../app.dart';
 
 class RateFundiScreen extends StatefulWidget {
   final String jobId;
@@ -25,11 +27,18 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
   bool _submitting = false;
   Map<String, dynamic>? _job;
   bool _loadingJob = true;
+  bool _hasRated = false;
 
   @override
   void initState() {
     super.initState();
     _loadJob();
+  }
+
+  @override
+  void dispose() {
+    _reviewCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadJob() async {
@@ -38,12 +47,11 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
           .collection('jobs')
           .doc(widget.jobId)
           .get();
-      if (mounted) {
+      if (mounted)
         setState(() {
           _job = doc.data();
           _loadingJob = false;
         });
-      }
     } catch (_) {
       if (mounted) setState(() => _loadingJob = false);
     }
@@ -52,14 +60,12 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
   void _onStarTap(int index) {
     double halfRating = index + 0.5;
     double fullRating = index + 1.0;
-
-    if (_rating == halfRating) {
-      setState(() => _rating = fullRating); // 2nd tap = full
-    } else if (_rating == fullRating) {
-      setState(() => _rating = halfRating); // 3rd tap = half again
-    } else {
-      setState(() => _rating = halfRating); // 1st tap = half (odd = half)
-    }
+    if (_rating == halfRating)
+      setState(() => _rating = fullRating);
+    else if (_rating == fullRating)
+      setState(() => _rating = halfRating);
+    else
+      setState(() => _rating = halfRating);
   }
 
   Future<void> _submitRating() async {
@@ -82,7 +88,6 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
           .doc(widget.jobId);
       var jobSnap = await jobRef.get();
       var jobData = jobSnap.data() ?? {};
-
       String clientId =
           (jobData['clientId'] ?? jobData['customerId'] ?? 'unknown')
               .toString();
@@ -90,21 +95,13 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
           (jobData['clientName'] ?? jobData['customerName'] ?? 'Client')
               .toString();
 
-      // GET FUNDI ID SAFELY - check every possible key
       String effectiveFundiId = widget.fundiId.trim();
       if (effectiveFundiId.isEmpty) {
         effectiveFundiId =
-            (jobData['fundiId'] ??
-                    jobData['assignedFundiId'] ??
-                    jobData['acceptedFundiId'] ??
-                    jobData['selectedFundiId'] ??
-                    jobData['fundiUid'] ??
-                    '')
-                .toString();
+            (jobData['fundiId'] ?? jobData['assignedFundiId'] ?? '').toString();
       }
 
       if (effectiveFundiId.isEmpty) {
-        // If still empty, at least mark job as rated so user is not locked forever
         await jobRef.update({
           'clientRated': true,
           'clientRating': _rating,
@@ -112,55 +109,62 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
           'ratedAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        return;
+      } else {
+        await FirebaseFirestore.instance
+            .collection('fundis')
+            .doc(effectiveFundiId)
+            .collection('reviews')
+            .add({
+              'jobId': widget.jobId,
+              'clientId': clientId,
+              'clientName': clientName,
+              'fundiId': effectiveFundiId,
+              'rating': _rating,
+              'comment': _reviewCtrl.text.trim(),
+              'trade': widget.trade,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+
+        var fundiRef = FirebaseFirestore.instance
+            .collection('fundis')
+            .doc(effectiveFundiId);
+        var fundiSnap = await fundiRef.get();
+        var fundiData = fundiSnap.data() ?? {};
+        double currentAvg = (fundiData['averageRating'] ?? 0).toDouble();
+        int currentCount = (fundiData['reviewsCount'] ?? 0).toInt();
+        double newAvg = currentCount == 0
+            ? _rating
+            : ((currentAvg * currentCount) + _rating) / (currentCount + 1);
+        await fundiRef.update({
+          'averageRating': newAvg,
+          'reviewsCount': currentCount + 1,
+          'lastRatedAt': FieldValue.serverTimestamp(),
+        });
+
+        await jobRef.update({
+          'clientRated': true,
+          'clientRating': _rating,
+          'clientReview': _reviewCtrl.text.trim(),
+          'ratedAt': FieldValue.serverTimestamp(),
+          'status': 'completed',
+          'clientTimelineCleared': true,
+          'fundiHasUnread': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       }
 
-      await FirebaseFirestore.instance
-          .collection('fundis')
-          .doc(effectiveFundiId)
-          .collection('reviews')
-          .add({
-            'jobId': widget.jobId,
-            'clientId': clientId,
-            'clientName': clientName,
-            'fundiId': effectiveFundiId,
-            'rating': _rating,
-            'comment': _reviewCtrl.text.trim(),
-            'trade': widget.trade,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-
-      var fundiRef = FirebaseFirestore.instance
-          .collection('fundis')
-          .doc(effectiveFundiId);
-      var fundiSnap = await fundiRef.get();
-      var fundiData = fundiSnap.data() ?? {};
-      double currentAvg = (fundiData['averageRating'] ?? 0).toDouble();
-      int currentCount = (fundiData['reviewsCount'] ?? 0).toInt();
-      double newAvg =
-          ((currentAvg * currentCount) + _rating) / (currentCount + 1);
-
-      await fundiRef.update({
-        'averageRating': newAvg,
-        'reviewsCount': currentCount + 1,
-        'lastRatedAt': FieldValue.serverTimestamp(),
-      });
-
-      await jobRef.update({
-        'clientRated': true,
-        'clientRating': _rating,
-        'clientReview': _reviewCtrl.text.trim(),
-        'ratedAt': FieldValue.serverTimestamp(),
-        'status': 'completed',
-        'clientTimelineCleared': true,
-        'fundiHasUnread': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
       if (!mounted) return;
-      Navigator.of(context).pop();
+      setState(() => _hasRated = true);
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => HomeNavigator(
+            role: 'client',
+            email: FirebaseAuth.instance.currentUser?.email ?? '',
+          ),
+        ),
+        (route) => false,
+      );
     } catch (e) {
       ScaffoldMessenger.of(
         context,
@@ -172,14 +176,12 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
 
   Widget _buildStar(int index) {
     IconData icon;
-    if (_rating >= index + 1) {
+    if (_rating >= index + 1)
       icon = Icons.star;
-    } else if (_rating >= index + 0.5) {
+    else if (_rating >= index + 0.5)
       icon = Icons.star_half;
-    } else {
+    else
       icon = Icons.star_border;
-    }
-
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _onStarTap(index),
@@ -199,25 +201,22 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
     String title = (_job?['title'] ?? _job?['description'] ?? 'Job').toString();
     String location = (_job?['location'] ?? _job?['address'] ?? 'Your location')
         .toString();
-    int paid =
-        (_job?['totalReleasedAmount'] ??
-                _job?['fundiPayoutAmount'] ??
-                _job?['agreedPrice'] ??
-                0)
-            is int
-        ? (_job?['totalReleasedAmount'] ??
-                  _job?['fundiPayoutAmount'] ??
-                  _job?['agreedPrice'] ??
-                  0)
-              as int
-        : int.tryParse(
-                (_job?['totalReleasedAmount'] ??
-                        _job?['fundiPayoutAmount'] ??
-                        _job?['agreedPrice'] ??
-                        0)
-                    .toString(),
-              ) ??
-              0;
+    int paid = 0;
+    try {
+      var v =
+          _job?['totalReleasedAmount'] ??
+          _job?['fundiPayoutAmount'] ??
+          _job?['totalCost'] ??
+          _job?['escrowAmount'] ??
+          _job?['agreedPrice'] ??
+          0;
+      if (v is int)
+        paid = v;
+      else if (v is double)
+        paid = v.toInt();
+      else
+        paid = int.tryParse(v.toString()) ?? 0;
+    } catch (_) {}
 
     final ratingLabels = [
       '0.0 Tap to rate',
@@ -236,8 +235,9 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
     String ratingLabel = _rating == 0
         ? 'Tap to rate'
         : '${_rating.toStringAsFixed(_rating.truncateToDouble() == _rating ? 0 : 1)} / 5 - ${ratingLabels[idx]}';
+
     return PopScope(
-      canPop: false,
+      canPop: _hasRated,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         ScaffoldMessenger.of(context).showSnackBar(
