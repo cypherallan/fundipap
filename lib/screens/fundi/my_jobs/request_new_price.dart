@@ -34,7 +34,6 @@ class _FundiRequestNewPriceScreenState
   final detailsCtrl = TextEditingController();
   final extraLaborCtrl = TextEditingController(text: '0');
   final tillCtrl = TextEditingController();
-
   List<Map<String, TextEditingController>> partsNeeded = [];
   List<XFile> evidencePhotos = [];
   List<XFile> oldPartPhotos = [];
@@ -58,16 +57,35 @@ class _FundiRequestNewPriceScreenState
     );
   }
 
-  int get oldLabor =>
-      (widget.job['agreedPrice'] ?? widget.job['budget'] ?? 0) is int
-      ? widget.job['agreedPrice'] ?? widget.job['budget'] ?? 0
-      : int.tryParse(
-              (widget.job['agreedPrice'] ?? widget.job['budget']).toString(),
-            ) ??
-            0;
+  int _toInt(dynamic v, [int fb = 0]) {
+    if (v == null) return fb;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? fb;
+  }
 
-  int get extraLabor => int.tryParse(extraLaborCtrl.text) ?? 0;
+  int get oldLabor => _toInt(
+    widget.job['laborCost'] ??
+        widget.job['agreedPrice'] ??
+        widget.job['budget'] ??
+        0,
+  );
+  int get transport =>
+      _toInt(widget.job['transportFee'] ?? widget.job['escrowTransport'] ?? 0);
+  int get extraLabor => _toInt(extraLaborCtrl.text);
   int get newLaborTotal => oldLabor + extraLabor;
+  int get oldClientFee => (oldLabor * 0.05).round();
+  int get newClientFee => (newLaborTotal * 0.05).round();
+  int get newFundiFee => (newLaborTotal * 0.05).round();
+  int get oldTotalClient => _toInt(
+    widget.job['totalClientPays'] ??
+        widget.job['totalCost'] ??
+        oldLabor + transport + oldClientFee,
+  );
+  int get newTotalClient => newLaborTotal + transport + newClientFee;
+  int get newFundiReceives => newLaborTotal - newFundiFee + transport;
+  int get extraToLock => newTotalClient - oldTotalClient;
 
   int get partsEstimateTotal {
     int total = 0;
@@ -107,12 +125,10 @@ class _FundiRequestNewPriceScreenState
       );
       return;
     }
-
     setState(() => uploading = true);
     try {
       var evidenceUrls = await _uploadPhotos(evidencePhotos, 'evidence');
       var oldPartUrls = await _uploadPhotos(oldPartPhotos, 'old_parts');
-
       List<Map> partsNeededData = partsNeeded
           .where((p) => (p['name']?.text.trim().isNotEmpty ?? false))
           .map(
@@ -125,22 +141,27 @@ class _FundiRequestNewPriceScreenState
           )
           .toList();
 
-      final int pendingExtra = extraLabor;
-      final int newLaborTotalLocal = oldLabor + extraLabor;
-
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
           .update({
             'renegotiation': {
               'requested': true,
-              'status': 'pending', // pending = new notification for client
+              'status': 'pending',
               'reasons': selectedReasons.toList(),
               'reasonDetails': detailsCtrl.text.trim(),
               'oldLabor': oldLabor,
               'extraLabor': extraLabor,
-              'newLaborTotal': newLaborTotalLocal,
-              'pendingLabor': pendingExtra,
+              'newLaborTotal': newLaborTotal,
+              'pendingLabor': extraLabor,
+              'oldClientAppFee': oldClientFee,
+              'newClientAppFee': newClientFee,
+              'newFundiAppFee': newFundiFee,
+              'transportFee': transport,
+              'oldTotalClientPays': oldTotalClient,
+              'newTotalClientPays': newTotalClient,
+              'newFundiReceives': newFundiReceives,
+              'extraToLock': extraToLock,
               'partsNeeded': partsNeededData,
               'partsEstimateTotal': partsEstimateTotal,
               'partsPaymentDestination': 'shop_direct',
@@ -151,7 +172,7 @@ class _FundiRequestNewPriceScreenState
               'createdAt': FieldValue.serverTimestamp(),
             },
             'status': 'site_visit',
-            'customerHasUnread': true, // <-- makes client see new badge
+            'customerHasUnread': true,
             'fundiHasUnread': false,
             'updatedAt': FieldValue.serverTimestamp(),
             'customerLastSeenAt': FieldValue.delete(),
@@ -161,7 +182,7 @@ class _FundiRequestNewPriceScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Request sent: New Labor KES $newLaborTotal - Parts KES $partsEstimateTotal - Client will buy parts',
+            'Request sent: New Total KES $newTotalClient (Labour $newLaborTotal + Transport $transport + App $newClientFee)',
           ),
         ),
       );
@@ -210,14 +231,14 @@ class _FundiRequestNewPriceScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Current agreed: KES $oldLabor (Labor only)',
+                    'Current: Labour KES $oldLabor + Transport KES $transport + App KES $oldClientFee = KES $oldTotalClient',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w700,
-                      fontSize: 12,
+                      fontSize: 11,
                     ),
                   ),
                   Text(
-                    'You will ONLY list what parts are needed. Client buys them personally to avoid scam.',
+                    'Transport does not change. App fee = 5% of labour.',
                     style: GoogleFonts.inter(
                       fontSize: 10,
                       color: Colors.black54,
@@ -245,11 +266,10 @@ class _FundiRequestNewPriceScreenState
                   selected: sel,
                   selectedColor: FundipapColors.primaryYellow,
                   onSelected: (v) => setState(() {
-                    if (v) {
+                    if (v)
                       selectedReasons.add(r);
-                    } else {
+                    else
                       selectedReasons.remove(r);
-                    }
                   }),
                 );
               }).toList(),
@@ -275,9 +295,7 @@ class _FundiRequestNewPriceScreenState
               TextField(
                 controller: extraLaborCtrl,
                 keyboardType: TextInputType.number,
-                onChanged: (_) => setState(
-                  () {},
-                ), // only updates summary, doesn't reset other fields now
+                onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   labelText: 'Extra Labor KES',
                   border: OutlineInputBorder(
@@ -306,7 +324,7 @@ class _FundiRequestNewPriceScreenState
                 int idx = e.key;
                 var p = e.value;
                 return Container(
-                  key: ValueKey(p['name']), // keeps cursor stable
+                  key: ValueKey(p['name']),
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
@@ -319,9 +337,7 @@ class _FundiRequestNewPriceScreenState
                         flex: 3,
                         child: TextField(
                           controller: p['name'],
-                          enableInteractiveSelection: true,
-                          onChanged: (_) =>
-                              setState(() {}), // <-- ADD THIS LINE
+                          onChanged: (_) => setState(() {}),
                           decoration: const InputDecoration(
                             labelText: 'Part e.g. 1 inch pipe',
                             isDense: true,
@@ -334,7 +350,6 @@ class _FundiRequestNewPriceScreenState
                         child: TextField(
                           controller: p['qty'],
                           keyboardType: TextInputType.number,
-                          enableInteractiveSelection: true,
                           decoration: const InputDecoration(
                             labelText: 'Qty',
                             isDense: true,
@@ -346,7 +361,6 @@ class _FundiRequestNewPriceScreenState
                         flex: 2,
                         child: TextField(
                           controller: p['model'],
-                          enableInteractiveSelection: true,
                           onChanged: (_) => setState(() {}),
                           decoration: const InputDecoration(
                             labelText: 'Model',
@@ -381,12 +395,11 @@ class _FundiRequestNewPriceScreenState
                 );
               }),
             ],
-
+            const SizedBox(height: 12),
             TextField(
               controller: tillCtrl,
               decoration: InputDecoration(
-                labelText:
-                    'Till Number (Optional - can add later after scouting)',
+                labelText: 'Till Number (Optional)',
                 hintText: 'Leave blank if you dont know shops around',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -394,7 +407,6 @@ class _FundiRequestNewPriceScreenState
               ),
             ),
             const SizedBox(height: 16),
-            // BILL FOR CLIENT
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -405,7 +417,7 @@ class _FundiRequestNewPriceScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Bill for Client',
+                    'Bill for Client - NEW FORMULA',
                     style: GoogleFonts.montserrat(
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
@@ -413,74 +425,43 @@ class _FundiRequestNewPriceScreenState
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'New Labor Total:',
-                        style: GoogleFonts.inter(
-                          color: Colors.white70,
-                          fontSize: 11,
-                        ),
-                      ),
-                      Text(
-                        'KES $newLaborTotal',
-                        style: GoogleFonts.montserrat(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
+                  _billRow('Old Labour:', 'KES $oldLabor'),
+                  _billRow(
+                    'New Labour Total:',
+                    'KES $newLaborTotal',
+                    highlight: true,
+                  ),
+                  _billRow('Transport (same):', 'KES $transport'),
+                  _billRow(
+                    'App maintenance 5% of $newLaborTotal:',
+                    'KES $newClientFee',
                   ),
                   const Divider(color: Colors.white24),
+                  _billRow('Old Total Paid:', 'KES $oldTotalClient'),
+                  _billRow(
+                    'New Total to Pay:',
+                    'KES $newTotalClient',
+                    highlightYellow: true,
+                  ),
+                  _billRow(
+                    'Extra to Lock Now:',
+                    'KES $extraToLock',
+                    highlightYellow: true,
+                  ),
+                  const SizedBox(height: 6),
+                  _billRow(
+                    'Fundi will receive:',
+                    'KES $newFundiReceives = $newLaborTotal - $newFundiFee + $transport',
+                    small: true,
+                  ),
+                  const SizedBox(height: 4),
                   Text(
-                    'Parts: ${partsNeeded.where((p) => (p['name']?.text.trim().isNotEmpty ?? false)).length} items - Client buys separately',
+                    'Parts: ${partsNeeded.where((p) => (p['name']?.text.trim().isNotEmpty ?? false)).length} items - KES $partsEstimateTotal separate (client buys)',
                     style: GoogleFonts.inter(
                       color: Colors.white54,
                       fontSize: 10,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Estimated Parts Total:',
-                        style: GoogleFonts.inter(
-                          color: Colors.white70,
-                          fontSize: 11,
-                        ),
-                      ),
-                      Text(
-                        'KES $partsEstimateTotal',
-                        style: GoogleFonts.montserrat(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (tillCtrl.text.trim().isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        'Till: ${tillCtrl.text.trim()}',
-                        style: GoogleFonts.inter(
-                          color: Colors.white54,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ),
-                  if (tillCtrl.text.trim().isEmpty)
-                    Text(
-                      'No till yet - will scout around after client accepts',
-                      style: GoogleFonts.inter(
-                        color: Colors.orange.shade300,
-                        fontSize: 9,
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -524,7 +505,7 @@ class _FundiRequestNewPriceScreenState
             if (needsReplacement) ...[
               const SizedBox(height: 12),
               Text(
-                'OLD damaged part photo (Optional)',
+                'OLD damaged part photo',
                 style: GoogleFonts.montserrat(
                   fontWeight: FontWeight.w700,
                   fontSize: 11,
@@ -578,7 +559,7 @@ class _FundiRequestNewPriceScreenState
                 child: uploading
                     ? const CircularProgressIndicator()
                     : Text(
-                        'Send Request KES $newLaborTotal (Labor only)',
+                        'Send Request NEW TOTAL KES $newTotalClient (Extra KES $extraToLock)',
                         style: GoogleFonts.montserrat(
                           fontWeight: FontWeight.w800,
                         ),
@@ -587,6 +568,46 @@ class _FundiRequestNewPriceScreenState
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _billRow(
+    String l,
+    String v, {
+    bool highlight = false,
+    bool highlightYellow = false,
+    bool small = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            l,
+            style: GoogleFonts.inter(
+              color: Colors.white70,
+              fontSize: small ? 9 : 11,
+            ),
+          ),
+          Text(
+            v,
+            style: GoogleFonts.montserrat(
+              color: highlightYellow
+                  ? FundipapColors.primaryYellow
+                  : Colors.white,
+              fontWeight: highlight || highlightYellow
+                  ? FontWeight.w800
+                  : FontWeight.w600,
+              fontSize: small
+                  ? 10
+                  : highlightYellow
+                  ? 13
+                  : 11,
+            ),
+          ),
+        ],
       ),
     );
   }

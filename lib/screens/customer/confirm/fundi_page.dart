@@ -34,12 +34,15 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
   @override
   bool loading = true;
 
-  // TRANSPORT STATE - for Review display
+  // TRANSPORT + FEE STATE
   double distanceKm = 0;
   int transportFee = 0;
   String transportMode = 'boda';
   int labor = 0;
-  int total = 0;
+  int clientAppFee = 0; // 5% client sees
+  int fundiAppFee = 0; // 5% hidden, for DB
+  int totalClientPays = 0; // 5350
+  int fundiReceives = 0; // 4850
   bool transportLoading = true;
 
   @override
@@ -64,17 +67,25 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         fundiId: widget.bidData['fundiId'],
       );
       if (!mounted) return;
+      int lab =
+          ((widget.bidData['amount'] ??
+                      widget.bidData['bidAmount'] ??
+                      widget.bidData['price'] ??
+                      0)
+                  as num)
+              .toInt();
+      int trans = t['fee'] as int;
+      int cFee = (lab * 0.05).round(); // client 5%
+      int fFee = (lab * 0.05).round(); // fundi 5% - hidden here
       setState(() {
         distanceKm = t['km'] as double;
-        transportFee = t['fee'] as int;
+        transportFee = trans;
         transportMode = t['mode'] as String;
-        labor =
-            (widget.bidData['amount'] ??
-                    widget.bidData['bidAmount'] ??
-                    widget.bidData['price'] ??
-                    0)
-                .toInt();
-        total = labor + transportFee;
+        labor = lab;
+        clientAppFee = cFee;
+        fundiAppFee = fFee;
+        totalClientPays = lab + trans + cFee; // 5000+100+250=5350
+        fundiReceives = lab - fFee + trans; // 4850 - for DB only
         transportLoading = false;
       });
     } catch (_) {
@@ -108,11 +119,18 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         bidData: widget.bidData,
         labor: labor,
         transportFee: transportFee,
-        total: total,
+        total: totalClientPays, // BUTTON SHOWS ONLY TOTAL 5350
         distanceKm: distanceKm,
         transportMode: transportMode,
         onReject: rejectFundi,
-        onConfirm: confirmFundi,
+        onConfirm: () => confirmFundi(
+          totalToLock: totalClientPays,
+          clientAppFee: clientAppFee,
+          fundiAppFee: fundiAppFee,
+          fundiReceives: fundiReceives,
+          transportFee: transportFee,
+          labor: labor,
+        ),
         onReport: reportFraud,
       ),
       body: SingleChildScrollView(
@@ -124,15 +142,15 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
             const SizedBox(height: 12),
             ConfirmFundiDetailsSection(combined: combined),
             const SizedBox(height: 12),
-            // NEW: Distance + Total to be locked
+            // RECEIPT CARD - CLIENT SEES THIS
             Card(
-              color: Colors.blue.shade50,
+              color: Colors.white,
               shape: RoundedRectangleBorder(
-                side: BorderSide(color: Colors.blue.shade200),
                 borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.black12),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 child: transportLoading
                     ? Row(
                         children: [
@@ -143,7 +161,7 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                           ),
                           SizedBox(width: 8),
                           Text(
-                            'Calculating distance...',
+                            'Calculating...',
                             style: GoogleFonts.inter(fontSize: 12),
                           ),
                         ],
@@ -160,7 +178,7 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                               ),
                               SizedBox(width: 6),
                               Text(
-                                'Fundi is ${distanceKm.toStringAsFixed(1)} km away',
+                                'Fundi is ${distanceKm < 1 ? '${(distanceKm * 1000).toStringAsFixed(0)}m' : '${distanceKm.toStringAsFixed(1)}km'} away',
                                 style: GoogleFonts.montserrat(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 13,
@@ -173,7 +191,7 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color: Colors.blue.shade50,
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
@@ -186,27 +204,24 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                               ),
                             ],
                           ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Labor: KES $labor',
-                            style: GoogleFonts.inter(fontSize: 12),
+                          SizedBox(height: 12),
+                          _receiptRow('Fundi labour charges:', 'KES $labor'),
+                          SizedBox(height: 6),
+                          _receiptRow('Transport cost:', 'KES $transportFee'),
+                          SizedBox(height: 6),
+                          _receiptRow(
+                            'App maintenance cost:',
+                            'KES $clientAppFee',
                           ),
-                          Text(
-                            'Transport ($transportMode): KES $transportFee',
-                            style: GoogleFonts.inter(fontSize: 12),
+                          Divider(height: 20),
+                          _receiptRow(
+                            'Total to pay:',
+                            'KES $totalClientPays',
+                            isBold: true,
                           ),
-                          Divider(),
+                          SizedBox(height: 6),
                           Text(
-                            'TOTAL TO LOCK IN ESCROW: KES $total',
-                            style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 14,
-                              color: Colors.black,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'This whole amount will be locked to escrow',
+                            'This amount will be locked and paid after job completion',
                             style: GoogleFonts.inter(
                               fontSize: 10,
                               color: Colors.black54,
@@ -227,6 +242,29 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
           ],
         ),
       ),
+    );
+  }
+
+  Widget _receiptRow(String label, String value, {bool isBold = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: Colors.black54,
+            fontWeight: isBold ? FontWeight.w700 : FontWeight.w400,
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.montserrat(
+            fontSize: 13,
+            fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }

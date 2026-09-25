@@ -11,7 +11,6 @@ class ClientPriceApprovalScreen extends StatefulWidget {
     required this.jobId,
     required this.job,
   });
-
   @override
   State<ClientPriceApprovalScreen> createState() =>
       _ClientPriceApprovalScreenState();
@@ -22,7 +21,6 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
   final counterReasonCtrl = TextEditingController();
   bool loading = false;
   String whoBuys = 'client';
-  bool acceptedRisk = false;
 
   int _toInt(dynamic v, [int fb = 0]) {
     if (v == null) return fb;
@@ -30,6 +28,14 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
     if (v is double) return v.toInt();
     if (v is num) return v.toInt();
     return int.tryParse(v.toString()) ?? fb;
+  }
+
+  double _toDouble(dynamic v, [double fb = 0]) {
+    if (v == null) return fb;
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? fb;
   }
 
   Future<void> _acceptClientBuys(
@@ -40,15 +46,32 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
   ) async {
     setState(() => loading = true);
     try {
-      if (extraLabor > 0) {
+      int transport = _toInt(
+        job['transportFee'] ?? widget.job['transportFee'] ?? 0,
+      );
+      int newClientFee = (newLabor * 0.05).round();
+      int newFundiFee = (newLabor * 0.05).round();
+      int newTotal = newLabor + transport + newClientFee;
+      int extraToLock = newTotal - alreadyLocked;
+      int newFundiReceives = newLabor - newFundiFee + transport;
+      if (extraToLock > 0) {
         await FirebaseFirestore.instance
             .collection('jobs')
             .doc(widget.jobId)
             .update({
               'agreedPrice': newLabor,
+              'laborCost': newLabor,
               'laborPrice': newLabor,
+              'transportFee': transport,
+              'clientAppFee': newClientFee,
+              'fundiAppFee': newFundiFee,
+              'totalClientPays': newTotal,
+              'totalCost': newTotal,
+              'fundiReceives': newFundiReceives,
               'extraLaborAmount': extraLabor,
-              'extraEscrowAmount': extraLabor,
+              'extraClientAppFee': newClientFee - (alreadyLocked > 0 ? 0 : 0),
+              'extraEscrowAmount': extraToLock,
+              'extraToLock': extraToLock,
               'extraEscrowStatus': 'pending',
               'status': job['status'],
               'renegotiation.status':
@@ -56,6 +79,9 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
               'renegotiation.whoBuysParts': 'client',
               'renegotiation.currentPhase': 'waiting_for_extra_escrow',
               'renegotiation.extraLabor': extraLabor,
+              'renegotiation.newClientAppFee': newClientFee,
+              'renegotiation.newTotalClientPays': newTotal,
+              'renegotiation.extraToLock': extraToLock,
               'renegotiation.acceptedAt': FieldValue.serverTimestamp(),
               'fundiHasUnread': true,
               'customerHasUnread': false,
@@ -67,7 +93,13 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
             .doc(widget.jobId)
             .update({
               'agreedPrice': newLabor,
-              'laborPrice': newLabor,
+              'laborCost': newLabor,
+              'transportFee': transport,
+              'clientAppFee': newClientFee,
+              'fundiAppFee': newFundiFee,
+              'totalClientPays': newTotal,
+              'totalCost': newTotal,
+              'fundiReceives': newFundiReceives,
               'status': 'in_progress',
               'renegotiation.status': 'accepted_client_buys_parts',
               'renegotiation.whoBuysParts': 'client',
@@ -91,15 +123,31 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
   ) async {
     setState(() => loading = true);
     try {
-      if (extraLabor > 0) {
+      int transport = _toInt(
+        job['transportFee'] ?? widget.job['transportFee'] ?? 0,
+      );
+      int alreadyLocked = _toInt(job['escrowAmount'] ?? 0);
+      int newClientFee = (newLabor * 0.05).round();
+      int newFundiFee = (newLabor * 0.05).round();
+      int newTotal = newLabor + transport + newClientFee;
+      int extraToLock = newTotal - alreadyLocked;
+      int newFundiReceives = newLabor - newFundiFee + transport;
+      if (extraToLock > 0) {
         await FirebaseFirestore.instance
             .collection('jobs')
             .doc(widget.jobId)
             .update({
               'agreedPrice': newLabor,
-              'laborPrice': newLabor,
+              'laborCost': newLabor,
+              'transportFee': transport,
+              'clientAppFee': newClientFee,
+              'fundiAppFee': newFundiFee,
+              'totalClientPays': newTotal,
+              'totalCost': newTotal,
+              'fundiReceives': newFundiReceives,
               'extraLaborAmount': extraLabor,
-              'extraEscrowAmount': extraLabor,
+              'extraEscrowAmount': extraToLock,
+              'extraToLock': extraToLock,
               'extraEscrowStatus': 'pending',
               'status': job['status'],
               'renegotiation.status':
@@ -109,6 +157,8 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
               'renegotiation.currentPhase': 'waiting_for_extra_escrow',
               'renegotiation.riskAccepted': true,
               'renegotiation.extraLabor': extraLabor,
+              'renegotiation.newTotalClientPays': newTotal,
+              'renegotiation.extraToLock': extraToLock,
               'renegotiation.acceptedAt': FieldValue.serverTimestamp(),
               'fundiHasUnread': true,
               'updatedAt': FieldValue.serverTimestamp(),
@@ -119,7 +169,13 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
             .doc(widget.jobId)
             .update({
               'agreedPrice': newLabor,
-              'laborPrice': newLabor,
+              'laborCost': newLabor,
+              'transportFee': transport,
+              'clientAppFee': newClientFee,
+              'fundiAppFee': newFundiFee,
+              'totalClientPays': newTotal,
+              'totalCost': newTotal,
+              'fundiReceives': newFundiReceives,
               'status': 'in_progress',
               'renegotiation.status': 'accepted_fundi_buys_at_client_risk',
               'renegotiation.whoBuysParts': 'fundi',
@@ -140,16 +196,17 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
 
   Future<void> _payExtraEscrow(
     int alreadyLocked,
-    int extraLabor,
+    int extraToLock,
     String whoBuysVal,
   ) async {
     setState(() => loading = true);
     try {
+      int newTotal = alreadyLocked + extraToLock;
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
           .update({
-            'escrowAmount': alreadyLocked + extraLabor,
+            'escrowAmount': newTotal,
             'extraEscrowStatus': 'paid',
             'escrowStatus': 'held',
             'status': 'in_progress',
@@ -167,7 +224,9 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Extra KES $extraLabor locked. Fundi can start job'),
+          content: Text(
+            'Extra KES $extraToLock locked. Total now KES $newTotal',
+          ),
         ),
       );
       Navigator.pop(context);
@@ -180,13 +239,34 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
     if (counterPriceCtrl.text.isEmpty) return;
     setState(() => loading = true);
     try {
+      int counterLabor = int.tryParse(counterPriceCtrl.text) ?? newLabor;
+      int transport = _toInt(widget.job['transportFee'] ?? 0);
+      int counterClientFee = (counterLabor * 0.05).round();
+      int counterFundiFee = (counterLabor * 0.05).round();
+      int counterTotal = counterLabor + transport + counterClientFee;
+      int counterFundiReceives = counterLabor - counterFundiFee + transport;
+      int alreadyLocked = _toInt(
+        widget.job['escrowAmount'] ??
+            widget.job['totalClientPays'] ??
+            widget.job['totalCost'] ??
+            0,
+      );
+      int extraToLock = counterTotal - alreadyLocked;
+
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
           .update({
             'renegotiation.status': 'countered_by_client',
-            'renegotiation.counterPrice':
-                int.tryParse(counterPriceCtrl.text) ?? newLabor,
+            'renegotiation.counterLabor': counterLabor,
+            'renegotiation.counterPrice': counterLabor,
+            'renegotiation.counterClientAppFee': counterClientFee,
+            'renegotiation.counterFundiAppFee': counterFundiFee,
+            'renegotiation.counterTotalClientPays': counterTotal,
+            'renegotiation.counterTotalCost': counterTotal,
+            'renegotiation.counterFundiReceives': counterFundiReceives,
+            'renegotiation.counterTransportFee': transport,
+            'renegotiation.counterExtraToLock': extraToLock,
             'renegotiation.counterReason': counterReasonCtrl.text,
             'renegotiation.counteredAt': FieldValue.serverTimestamp(),
             'fundiHasUnread': true,
@@ -195,9 +275,13 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
       if (!mounted) return;
       Navigator.pop(context);
       Navigator.pop(context);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Counter offer sent')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Counter sent: KES $counterTotal = $counterLabor + $transport + $counterClientFee (Fundi gets $counterFundiReceives)',
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -222,9 +306,12 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
             return const Center(child: CircularProgressIndicator());
           var job = snap.data!.data() as Map<String, dynamic>;
           var reneg = (job['renegotiation'] as Map<String, dynamic>?) ?? {};
-
           int oldLabor = _toInt(
-            reneg['oldLabor'] ?? reneg['oldPrice'] ?? job['agreedPrice'] ?? 0,
+            reneg['oldLabor'] ??
+                reneg['oldPrice'] ??
+                job['agreedPrice'] ??
+                job['laborCost'] ??
+                0,
           );
           int newLabor = _toInt(
             reneg['newLaborTotal'] ?? reneg['newLaborPrice'] ?? 0,
@@ -233,11 +320,39 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
             newLabor = oldLabor + _toInt(reneg['extraLabor'] ?? 0);
           int extraLabor = (newLabor - oldLabor).clamp(0, 9999999);
           int alreadyLocked = _toInt(
-            job['escrowAmount'] ?? job['agreedPrice'] ?? oldLabor,
+            job['escrowAmount'] ??
+                job['totalClientPays'] ??
+                job['totalCost'] ??
+                oldLabor,
           );
           String renegStatus = (reneg['status'] ?? 'pending').toString();
           bool needsExtraEscrow = renegStatus.contains('pending_extra_escrow');
-
+          int transport = _toInt(
+            job['transportFee'] ?? widget.job['transportFee'] ?? 0,
+          );
+          double km = _toDouble(
+            job['transportDistanceKm'] ??
+                widget.job['transportDistanceKm'] ??
+                0,
+          );
+          String mode =
+              (job['transportMode'] ?? widget.job['transportMode'] ?? 'boda')
+                  .toString();
+          String transportLabel = km > 0
+              ? 'Transport ($mode ${km.toStringAsFixed(1)}km)'
+              : 'Transport ($mode)';
+          int oldClientFee = (oldLabor * 0.05).round();
+          int newClientFee = _toInt(
+            reneg['newClientAppFee'] ?? (newLabor * 0.05).round(),
+          );
+          int newFundiFee = (newLabor * 0.05).round();
+          int newTotal = _toInt(
+            reneg['newTotalClientPays'] ?? newLabor + transport + newClientFee,
+          );
+          int extraToLock = _toInt(
+            reneg['extraToLock'] ?? newTotal - alreadyLocked,
+          );
+          int fundiReceives = newLabor - newFundiFee + transport;
           List<String> reasons = List<String>.from(
             reneg['reasons'] ?? [reneg['reason'] ?? 'Extra work'],
           );
@@ -251,9 +366,8 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
           );
           int partsEstimateTotal = _toInt(reneg['partsEstimateTotal']);
           int calc = 0;
-          for (var p in partsNeeded) {
+          for (var p in partsNeeded)
             calc += _toInt(p['qty'], 1) * _toInt(p['estPrice']);
-          }
           if (partsEstimateTotal == 0) partsEstimateTotal = calc;
 
           return SingleChildScrollView(
@@ -274,7 +388,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Fundi visited site - needs extra labor + materials. You control who buys materials.',
+                          'Fundi visited site - new labour KES $newLabor (was $oldLabor). Transport unchanged.',
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -284,13 +398,13 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade50,
+                    color: Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.green.shade200),
+                    border: Border.all(color: Colors.black12),
                   ),
                   child: Column(
                     children: [
@@ -311,20 +425,77 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Extra labor requested:',
+                            'Old Labour:',
                             style: GoogleFonts.inter(fontSize: 11),
                           ),
                           Text(
-                            'KES $extraLabor',
+                            'KES $oldLabor',
+                            style: GoogleFonts.inter(fontSize: 11),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'New Labour:',
+                            style: GoogleFonts.inter(fontSize: 11),
+                          ),
+                          Text(
+                            'KES $newLabor',
                             style: GoogleFonts.montserrat(
                               fontWeight: FontWeight.w800,
                               fontSize: 12,
                               color: Colors.red,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            transportLabel,
+                            style: GoogleFonts.inter(fontSize: 11),
+                          ),
+                          Text(
+                            'KES $transport',
+                            style: GoogleFonts.inter(fontSize: 11),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Old App fee 5%:',
+                            style: GoogleFonts.inter(fontSize: 10),
+                          ),
+                          Text(
+                            'KES $oldClientFee',
+                            style: GoogleFonts.inter(fontSize: 10),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'New App fee 5% of $newLabor:',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            'KES $newClientFee',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11,
                             ),
                           ),
                         ],
@@ -341,13 +512,49 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                             ),
                           ),
                           Text(
-                            'KES $newLabor',
+                            'KES $newTotal',
                             style: GoogleFonts.montserrat(
                               fontWeight: FontWeight.w800,
-                              fontSize: 13,
+                              fontSize: 14,
                             ),
                           ),
                         ],
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Extra to lock now:',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11,
+                              color: Colors.red,
+                            ),
+                          ),
+                          Text(
+                            'KES $extraToLock',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                              color: Colors.red,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        'Formula: $newLabor + $transport + $newClientFee = $newTotal | Extra = $newTotal - $alreadyLocked',
+                        style: GoogleFonts.inter(
+                          fontSize: 9,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      Text(
+                        'Fundi will receive: KES $fundiReceives = $newLabor - $newFundiFee + $transport',
+                        style: GoogleFonts.inter(
+                          fontSize: 9,
+                          color: Colors.green.shade800,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
@@ -412,7 +619,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                       border: Border.all(color: Colors.orange.shade200),
                     ),
                     child: Text(
-                      'Fundi will scout shops and send Till after you accept "Send fundi" - KES $partsEstimateTotal',
+                      'Fundi will scout shops and send Till after you accept - KES $partsEstimateTotal',
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         color: Colors.orange.shade800,
@@ -494,7 +701,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                         Icon(Icons.lock, color: Colors.red.shade700, size: 32),
                         const SizedBox(height: 8),
                         Text(
-                          'Lock Extra KES $extraLabor in Escrow',
+                          'Lock Extra KES $extraToLock in Escrow',
                           style: GoogleFonts.montserrat(
                             fontWeight: FontWeight.w800,
                             fontSize: 14,
@@ -504,7 +711,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'You already locked KES $alreadyLocked. Lock extra KES $extraLabor to reach KES $newLabor before fundi starts.',
+                          'You already locked KES $alreadyLocked. Lock extra KES $extraToLock to reach KES $newTotal (Labour $newLabor + Transport $transport + App $newClientFee) before fundi starts.',
                           style: GoogleFonts.inter(fontSize: 11),
                           textAlign: TextAlign.center,
                         ),
@@ -521,13 +728,13 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                                 ? null
                                 : () => _payExtraEscrow(
                                     alreadyLocked,
-                                    extraLabor,
+                                    extraToLock,
                                     whoBuys,
                                   ),
                             child: Text(
                               loading
                                   ? 'Processing...'
-                                  : 'LOCK KES $extraLabor NOW',
+                                  : 'LOCK KES $extraToLock NOW',
                               style: GoogleFonts.montserrat(
                                 fontWeight: FontWeight.w800,
                               ),
@@ -592,7 +799,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                                 alreadyLocked,
                               ),
                         child: Text(
-                          'Accept - Pay extra KES $extraLabor to escrow + Buy parts yourself',
+                          'Accept - Pay extra KES $extraToLock to escrow + Buy parts yourself\nTotal will be KES $newTotal',
                           style: GoogleFonts.montserrat(
                             fontWeight: FontWeight.w800,
                             fontSize: 11,
@@ -618,7 +825,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                                 extraLabor,
                               ),
                         child: Text(
-                          'Accept - Lock KES $extraLabor + Pay shop',
+                          'Accept - Lock KES $extraToLock + Pay shop\nTotal KES $newTotal',
                           style: GoogleFonts.montserrat(
                             fontWeight: FontWeight.w800,
                             fontSize: 11,
@@ -636,17 +843,34 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                             showDialog(
                               context: context,
                               builder: (_) => AlertDialog(
-                                title: const Text('Counter'),
+                                title: const Text(
+                                  'Counter Offer - Enter Labour Only',
+                                ),
                                 content: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     TextField(
                                       controller: counterPriceCtrl,
                                       keyboardType: TextInputType.number,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Your offer',
+                                      decoration: InputDecoration(
+                                        labelText:
+                                            'Your labour offer (e.g. 5500)',
+                                        helperText:
+                                            'We auto add transport $transport + 5%',
                                       ),
+                                      onChanged: (_) => setState(() {}),
                                     ),
+                                    if (counterPriceCtrl.text.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 8),
+                                        child: Text(
+                                          'Total will be: KES ${(_toInt(counterPriceCtrl.text) + transport + (_toInt(counterPriceCtrl.text) * 0.05).round())} = labour ${_toInt(counterPriceCtrl.text)} + transport $transport + fee ${(_toInt(counterPriceCtrl.text) * 0.05).round()}',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 10,
+                                            color: Colors.green,
+                                          ),
+                                        ),
+                                      ),
                                     TextField(
                                       controller: counterReasonCtrl,
                                       decoration: const InputDecoration(
@@ -662,7 +886,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                                   ),
                                   ElevatedButton(
                                     onPressed: () => _counter(newLabor),
-                                    child: const Text('Send'),
+                                    child: const Text('Send Counter'),
                                   ),
                                 ],
                               ),
@@ -699,7 +923,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                     ),
                     child: Center(
                       child: Text(
-                        'Status: ${renegStatus.toUpperCase()}',
+                        'Status: ${renegStatus.toUpperCase()} - Total KES $newTotal (Extra KES $extraToLock)',
                         style: GoogleFonts.montserrat(
                           fontWeight: FontWeight.w700,
                           color: Colors.green,

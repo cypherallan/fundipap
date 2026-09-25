@@ -4,7 +4,8 @@ import '../../../theme/app_theme.dart';
 
 class FundiEarningsCard extends StatelessWidget {
   final Map<String, dynamic>? me;
-  final double totalEarned;
+  final double
+  totalEarned; // MUST be sum of fundiReceives: labour - fundiAppFee + transport
   final int completedJobs;
   final int profilePct;
 
@@ -43,9 +44,14 @@ class FundiEarningsCard extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
+          // NEW FORMULA TEXT
           Text(
-            'From $completedJobs completed jobs • Platform fee paid by customer',
-            style: GoogleFonts.inter(fontSize: 11),
+            'From $completedJobs jobs • After 5% app fee • Formula: Labour -5% + Transport = Payout',
+            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600),
+          ),
+          Text(
+            'Eg: 6000 - 300 + 100 = 5800 you get, client paid 6400',
+            style: GoogleFonts.inter(fontSize: 9, color: Colors.black54),
           ),
           const SizedBox(height: 12),
           Row(

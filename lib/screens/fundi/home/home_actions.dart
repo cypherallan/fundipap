@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../services/location_service.dart';
 import 'logic.dart';
-import 'bid_dialog.dart'; // keep - now provides FundiBidDialog widget
+import 'bid_dialog.dart';
 
 mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
   String get search;
@@ -21,6 +21,14 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
   set mySkill(String v);
   Position? get currentPos;
   set currentPos(Position? v);
+
+  int _toInt(dynamic v, [int fb = 0]) {
+    if (v == null) return fb;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? fb;
+  }
 
   Future<void> loadLocation(BuildContext context) async {
     var pos = await LocationService.determinePosition(context);
@@ -53,16 +61,29 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
     double sum = 0;
     for (var doc in snap.docs) {
       var data = doc.data();
-      sum +=
-          ((data['agreedPrice'] ?? data['budget'] ?? data['totalCost'] ?? 0)
-                  as num)
-              .toDouble();
+      // NEW FORMULA: labour - 5% + transport = your payout
+      int labour = _toInt(
+        data['laborCost'] ??
+            data['agreedPrice'] ??
+            data['fundiBidAmount'] ??
+            data['budget'] ??
+            0,
+      );
+      int transport = _toInt(data['transportFee'] ?? 0);
+      int fundiFee = _toInt(data['fundiAppFee'] ?? (labour * 0.05).round());
+      int payout = _toInt(
+        data['fundiReceives'] ??
+            data['fundiPayoutAmount'] ??
+            data['totalReleasedAmount'] ??
+            labour - fundiFee + transport,
+      );
+      sum += payout.toDouble();
     }
 
     setState(() {
       me = result.me;
       completedJobs = snap.docs.length;
-      totalEarned = sum;
+      totalEarned = sum; // now 5800 per 6000 labour job, not 6400
       mySkill = result.mySkill;
       profilePct = result.profilePct;
     });

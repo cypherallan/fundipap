@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../../../utils/transport_calculator.dart'; // <-- new file we created
+import '../../../utils/transport_calculator.dart';
 
 mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
   Map<String, dynamic>? get fundi;
@@ -44,7 +44,6 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
     });
   }
 
-  // For Review Fundi page to show distance before confirm
   Future<Map<String, dynamic>> getTransportPreview() async {
     return await TransportCalculator.calc(
       jobData: jobData,
@@ -52,8 +51,17 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
     );
   }
 
-  Future<void> confirmFundi() async {
+  // NEW SIGNATURE - receives receipt from ConfirmFundiPage
+  Future<void> confirmFundi({
+    int? totalToLock,
+    int? clientAppFee,
+    int? fundiAppFee,
+    int? fundiReceives,
+    int? transportFee,
+    int? labor,
+  }) async {
     int finalPrice =
+        labor ??
         (bidData['amount'] ??
                 bidData['bidAmount'] ??
                 bidData['price'] ??
@@ -66,10 +74,20 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
       jobData: jobData,
       fundiId: bidData['fundiId'],
     );
-    int transportFee = t['fee'] as int;
+    int transFee = transportFee ?? t['fee'] as int;
     double km = t['km'] as double;
     String mode = t['mode'] as String;
-    int totalLocked = finalPrice + transportFee; // what client WILL pay
+
+    // YOUR RULE: 10% split = 5% client + 5% fundi, transport NOT deducted
+    int cAppFee =
+        clientAppFee ?? (finalPrice * 0.05).round(); // 250 client sees
+    int fAppFee =
+        fundiAppFee ?? (finalPrice * 0.05).round(); // 250 hidden from client
+    int adminComm = cAppFee + fAppFee; // 500 you keep
+    int totalLocked =
+        totalToLock ?? (finalPrice + transFee + cAppFee); // 5350 client pays
+    int fundiPayout =
+        fundiReceives ?? (finalPrice - fAppFee + transFee); // 4850 fundi gets
 
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'status': 'assigned',
@@ -78,11 +96,23 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
       'assignedFundiId': bidData['fundiId'],
       'agreedPrice': finalPrice,
       'laborCost': finalPrice,
-      'transportFee': transportFee,
+      'transportFee': transFee,
       'transportDistanceKm': km,
       'transportMode': mode,
-      'totalCost': totalLocked, // SHOW THIS
-      'escrowAmount': 0, // <-- FIX: 0 until paid, not totalLocked
+      // NEW BREAKDOWN - THIS IS WHERE YOUR PROFIT IS LOCKED
+      'clientAppFee': cAppFee,
+      'fundiAppFee': fAppFee,
+      'adminCommission': adminComm,
+      'totalCost': totalLocked, // 5350 - shown to client as total
+      'totalClientPays': totalLocked,
+      'fundiReceives': fundiPayout, // 4850 - shown to fundi only on completion
+      'fundiReceivesBreakdown': {
+        'labour': finalPrice,
+        'transport': transFee,
+        'appFee': -fAppFee,
+        'total': fundiPayout,
+      },
+      'escrowAmount': 0, // stays 0 until Mpesa paid
       'escrowStatus': 'pending',
       'acceptedBidAmount': finalPrice,
       'acceptedBidId': bidId,
@@ -99,8 +129,11 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
           'status': 'accepted',
           'acceptedAt': FieldValue.serverTimestamp(),
           'acceptedPrice': finalPrice,
-          'transportFee': transportFee,
+          'transportFee': transFee,
+          'clientAppFee': cAppFee,
+          'fundiAppFee': fAppFee,
           'totalCost': totalLocked,
+          'fundiReceives': fundiPayout,
         });
 
     await FirebaseFirestore.instance
@@ -110,16 +143,19 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
           'jobId': jobId,
           'clientId': FirebaseAuth.instance.currentUser!.uid,
           'fundiId': bidData['fundiId'],
-          'amount': totalLocked, // pending amount
-          'laborAmount': finalPrice,
-          'transportAmount': transportFee,
+          'amount': totalLocked, // 5350 to be locked
+          'laborAmount': finalPrice, // 5000
+          'transportAmount': transFee, // 100
+          'clientAppFee': cAppFee, // 250
+          'fundiAppFee': fAppFee, // 250
+          'adminCommission': adminComm, // 500
+          'fundiPayout': fundiPayout, // 4850
           'status': 'pending_payment',
           'createdAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
 
-    // ... your notification code same
     if (!mounted) return;
-    Navigator.pop(context, true); // returns true
+    Navigator.pop(context, true);
   }
 
   Future<void> rejectFundi() async {
@@ -245,12 +281,11 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
     if (ok != true) return;
     var fundiId = bidData['fundiId'];
     var uid = FirebaseAuth.instance.currentUser!.uid;
-    var reason = reasonCtrl.text.trim();
     await FirebaseFirestore.instance.collection('fraud_reports').add({
       'fundiId': fundiId,
       'clientId': uid,
       'jobId': jobId,
-      'reason': reason,
+      'reason': reasonCtrl.text.trim(),
       'createdAt': FieldValue.serverTimestamp(),
     });
     await FirebaseFirestore.instance.collection('fundis').doc(fundiId).update({

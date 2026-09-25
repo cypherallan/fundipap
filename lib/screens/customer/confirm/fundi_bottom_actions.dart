@@ -6,7 +6,8 @@ class ConfirmFundiBottomActions extends StatelessWidget {
   final Map<String, dynamic> bidData;
   final int labor;
   final int transportFee;
-  final int total;
+  final int appFee; // NEW: 5% client sees = 250
+  final int total; // 5350
   final double distanceKm;
   final String transportMode;
   final VoidCallback onReject;
@@ -18,6 +19,7 @@ class ConfirmFundiBottomActions extends StatelessWidget {
     required this.bidData,
     this.labor = 0,
     this.transportFee = 0,
+    this.appFee = 0,
     this.total = 0,
     this.distanceKm = 0,
     this.transportMode = 'boda',
@@ -32,8 +34,13 @@ class ConfirmFundiBottomActions extends StatelessWidget {
         (bidData['amount'] ?? bidData['bidAmount'] ?? bidData['price'] ?? 0)
             .toInt();
     int displayLabor = labor > 0 ? labor : fundiAsk;
-    int displayTotal = total > 0 ? total : fundiAsk;
     int displayTransport = transportFee;
+    int displayAppFee = appFee > 0
+        ? appFee
+        : (displayLabor * 0.05).round(); // 250
+    int displayTotal = total > 0
+        ? total
+        : displayLabor + displayTransport + displayAppFee; // 5350
 
     return SafeArea(
       child: Container(
@@ -42,66 +49,50 @@ class ConfirmFundiBottomActions extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Breakdown - NEW
             if (displayTotal > 0)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.black12),
                 ),
                 child: Column(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Labor', style: GoogleFonts.inter(fontSize: 11)),
-                        Text(
-                          'KES $displayLabor',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
+                    _row('Fundi labour charges:', 'KES $displayLabor'),
+                    SizedBox(height: 6),
+                    _row('Transport cost:', 'KES $displayTransport'),
+                    SizedBox(height: 6),
+                    _row('App maintenance cost:', 'KES $displayAppFee'),
+                    Divider(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Transport ${distanceKm > 0 ? '(${distanceKm.toStringAsFixed(1)}km $transportMode)' : '($transportMode)'}',
-                          style: GoogleFonts.inter(fontSize: 11),
-                        ),
-                        Text(
-                          'KES $displayTransport',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Divider(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'TOTAL TO LOCK TO ESCROW',
+                          'Total to pay:',
                           style: GoogleFonts.montserrat(
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                         Text(
                           'KES $displayTotal',
                           style: GoogleFonts.montserrat(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
                       ],
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'This total will be locked and paid',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        color: Colors.black54,
+                      ),
                     ),
                   ],
                 ),
@@ -141,25 +132,12 @@ class ConfirmFundiBottomActions extends StatelessWidget {
                       ),
                     ),
                     onPressed: onConfirm,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'CONFIRM • KES $displayTotal',
-                          style: GoogleFonts.montserrat(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
-                          ),
-                        ),
-                        if (displayTransport > 0)
-                          Text(
-                            'incl. KES $displayTransport transport',
-                            style: GoogleFonts.inter(
-                              fontSize: 8,
-                              color: Colors.white70,
-                            ),
-                          ),
-                      ],
+                    child: Text(
+                      'CONFIRM • KES $displayTotal',
+                      style: GoogleFonts.montserrat(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 ),
@@ -184,6 +162,22 @@ class ConfirmFundiBottomActions extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _row(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.inter(fontSize: 11, color: Colors.black54),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700),
+        ),
+      ],
     );
   }
 }
