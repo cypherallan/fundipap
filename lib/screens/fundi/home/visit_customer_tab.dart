@@ -1,3 +1,4 @@
+// lib/screens/fundi/home/visit_customer_tab.dart - FIXED
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -44,8 +45,7 @@ class FundiVisitCustomerTab extends StatelessWidget {
           itemBuilder: (_, i) {
             var doc = snap.data!.docs[i];
             var data = doc.data() as Map<String, dynamic>;
-            bool visited =
-                data['siteVisited'] == true || data['siteVisitDone'] == true;
+            bool visited = data['siteVisited'] == true;
             return Card(
               color: visited ? Colors.green.shade50 : Colors.white,
               child: ListTile(
@@ -57,7 +57,7 @@ class FundiVisitCustomerTab extends StatelessWidget {
                   ),
                 ),
                 subtitle: Text(
-                  '${data['location'] ?? ''}\n${visited ? '✓ Site visited - Go to Notifications to Start Job' : 'Not visited yet'}',
+                  '${data['location'] ?? ''}\n${visited ? '✓ Site visited' : 'Not visited yet'}',
                   style: GoogleFonts.inter(fontSize: 11),
                 ),
                 trailing: visited
@@ -112,6 +112,13 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
   double? clientLat;
   double? clientLng;
 
+  double calculateTransportFee(double meters) {
+    if (meters <= 1000) return 100; // YOUR RULE: <=1km = 100 round trip
+    double km = meters / 1000;
+    return 100 +
+        ((km - 1) * 60); // <-- your >1km formula, 60 = per km after first
+  }
+
   @override
   void initState() {
     super.initState();
@@ -121,12 +128,10 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
 
   void _extractClientLatLng() {
     try {
-      // Check all possible places where client lat/lng could be saved
       var geo =
           widget.job['clientLocation'] ??
           widget.job['customerLocation'] ??
-          widget.job['locationGeoPoint'] ??
-          widget.job['geoPoint'];
+          widget.job['locationGeoPoint'];
       if (geo is GeoPoint) {
         clientLat = geo.latitude;
         clientLng = geo.longitude;
@@ -134,26 +139,17 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
         clientLat = (geo['lat'] ?? geo['latitude'])?.toDouble();
         clientLng = (geo['lng'] ?? geo['longitude'])?.toDouble();
       }
-      // direct fields
       clientLat ??=
           (widget.job['customerLat'] ??
                   widget.job['clientLat'] ??
-                  widget.job['lat'] ??
-                  widget.job['customerLatitude'])
+                  widget.job['lat'])
               ?.toDouble();
       clientLng ??=
           (widget.job['customerLng'] ??
                   widget.job['clientLng'] ??
-                  widget.job['lng'] ??
-                  widget.job['lon'] ??
-                  widget.job['customerLongitude'])
+                  widget.job['lng'])
               ?.toDouble();
-
-      // also check nested address
-      if (clientLat == null && widget.job['addressLat'] != null) {
-        clientLat = (widget.job['addressLat'] as num).toDouble();
-        clientLng = (widget.job['addressLng'] as num).toDouble();
-      }
+      // NO FALLBACK TO -0.0917,34.7680 - removed!
     } catch (e) {
       error = 'Error parsing client location: $e';
     }
@@ -165,12 +161,11 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
       perm = await Geolocator.requestPermission();
     if (perm == LocationPermission.deniedForever) {
       setState(() {
-        error = 'Location permission denied forever. Enable from settings.';
+        error = 'Location denied forever. Enable from settings.';
         loading = false;
       });
       return;
     }
-
     sub =
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
@@ -180,24 +175,22 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
         ).listen(
           (p) {
             double? d;
-            if (clientLat != null && clientLng != null) {
+            if (clientLat != null && clientLng != null)
               d = Geolocator.distanceBetween(
                 p.latitude,
                 p.longitude,
                 clientLat!,
                 clientLng!,
               );
-            }
-            if (mounted) {
+            if (mounted)
               setState(() {
                 pos = p;
                 distance = d;
                 loading = false;
                 if (clientLat == null)
                   error =
-                      'Client GPS not saved in job! Job has no customerLat/customerLng. Distance will show as unknown. Ask client to re-create job with location permission ON.';
+                      'Client GPS not saved! Ask client to re-create job with location ON.';
               });
-            }
           },
           onError: (e) {
             setState(() {
@@ -210,32 +203,16 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
 
   Future<void> _openMaps() async {
     if (clientLat == null || clientLng == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Client GPS missing - cannot open maps. Check Firestore job for clientLat/lng',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Client GPS missing')));
       return;
     }
     final uri = Uri.parse(
       'https://www.google.com/maps/dir/?api=1&destination=$clientLat,$clientLng&travelmode=driving',
     );
-    final fallback = Uri.parse(
-      'geo:$clientLat,$clientLng?q=$clientLat,$clientLng(Customer)',
-    );
-
     try {
-      // Try google maps first
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else if (await canLaunchUrl(fallback)) {
-        await launchUrl(fallback, mode: LaunchMode.externalApplication);
-      } else {
-        // last resort - open in browser
-        await launchUrl(uri, mode: LaunchMode.platformDefault);
-      }
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
       ScaffoldMessenger.of(
         context,
@@ -244,18 +221,13 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
   }
 
   Future<void> _markVisited() async {
-    // If client GPS missing, allow anyway
-    if (clientLat == null || clientLng == null) {
-      await _forceConfirm();
-      return;
-    }
-    if (distance != null && distance! > 100) {
+    if (clientLat != null && distance != null && distance! > 100) {
       bool? ok = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
           title: Text('${distance!.toStringAsFixed(0)}m away'),
           content: Text(
-            'You are ${distance!.toStringAsFixed(0)}m from client saved point. You are probably at the right house but client GPS was saved 1005m away from actual house (fallback to Kisumu). Confirm anyway?\n\nClient: $clientLat, $clientLng\nYou: ${pos?.latitude}, ${pos?.longitude}',
+            'You are ${distance!.toStringAsFixed(0)}m from client point. Confirm anyway?\nClient: $clientLat,$clientLng\nYou: ${pos?.latitude},${pos?.longitude}',
           ),
           actions: [
             TextButton(
@@ -275,6 +247,7 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
   }
 
   Future<void> _forceConfirm() async {
+    double fee = distance != null ? calculateTransportFee(distance!) : 100;
     await FirebaseFirestore.instance
         .collection('jobs')
         .doc(widget.jobId)
@@ -282,9 +255,8 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
           'siteVisited': true,
           'siteVisitDone': true,
           'siteVisitedAt': FieldValue.serverTimestamp(),
-          'siteVisitedBy': FirebaseAuth.instance.currentUser!.uid,
-          'fundiLatAtVisit': pos?.latitude,
-          'fundiLngAtVisit': pos?.longitude,
+          'fundiLatAtVisit': pos?.latitude, 'fundiLngAtVisit': pos?.longitude,
+          'transportDistanceMeters': distance, 'transportFee': fee, // SAVE FEE
           'travelling': false,
           'status': 'site_visit',
           'updatedAt': FieldValue.serverTimestamp(),
@@ -292,9 +264,9 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
         });
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
-          'Site visited confirmed ✓ - Now go to Notifications to Start Job or Request New Price',
+          'Site visited ✓ Transport: KES ${fee.toStringAsFixed(0)}',
         ),
       ),
     );
@@ -311,6 +283,7 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
   Widget build(BuildContext context) {
     bool canMark = pos != null;
     bool within100 = distance != null && distance! <= 100;
+    double fee = distance != null ? calculateTransportFee(distance!) : 100;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -345,27 +318,34 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
                     const CircularProgressIndicator()
                   else if (clientLat == null)
                     Text(
-                      '⚠️ CLIENT GPS MISSING - job has no lat/lng',
+                      '⚠ CLIENT GPS MISSING',
                       style: GoogleFonts.montserrat(
                         fontWeight: FontWeight.w700,
                         color: Colors.red,
                       ),
                     )
                   else
-                    Text(
-                      '${distance?.toStringAsFixed(0) ?? '--'}m away from customer',
-                      style: GoogleFonts.montserrat(
-                        fontWeight: FontWeight.w700,
-                        color: within100 ? Colors.green : Colors.red,
-                      ),
-                    ),
-                  if (clientLat != null)
-                    Text(
-                      'Client saved: ${clientLat!.toStringAsFixed(5)}, ${clientLng!.toStringAsFixed(5)}',
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        color: Colors.black54,
-                      ),
+                    Column(
+                      children: [
+                        Text(
+                          '${distance?.toStringAsFixed(0) ?? '--'}m away',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w700,
+                            color: within100 ? Colors.green : Colors.red,
+                          ),
+                        ),
+                        Text(
+                          'Transport: KES ${fee.toStringAsFixed(0)} ${distance != null && distance! <= 1000 ? '(100 round trip - <=1km rule)' : ''}',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          'Client: ${clientLat!.toStringAsFixed(5)}, ${clientLng!.toStringAsFixed(5)}',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ],
                     ),
                   if (pos != null)
                     Text(
@@ -406,7 +386,7 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
                 onPressed: _openMaps,
                 icon: const Icon(Icons.directions),
                 label: Text(
-                  'Get Directions to Customer',
+                  'Get Directions',
                   style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
                 ),
               ),
@@ -426,19 +406,13 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
                 icon: Icon(within100 ? Icons.check_circle : Icons.location_off),
                 label: Text(
                   within100
-                      ? 'Mark as Site Visited'
+                      ? 'Mark as Site Visited - KES $fee'
                       : distance != null
-                      ? 'Confirm Arrival (${distance!.toStringAsFixed(0)}m - Tap to force)'
-                      : 'Move closer to enable',
+                      ? 'Confirm Arrival (${distance!.toStringAsFixed(0)}m) - KES ${fee.toStringAsFixed(0)}'
+                      : 'Move closer',
                   style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Fix: When client creates job, save clientLocation as GeoPoint. Remove fallback -0.0917,34.7680. That was showing 1005m because it was measuring to Kisumu town, not client house.',
-              style: GoogleFonts.inter(fontSize: 10, color: Colors.black54),
-              textAlign: TextAlign.center,
             ),
           ],
         ),

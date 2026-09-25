@@ -604,7 +604,7 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
                 },
               ),
             const SizedBox(height: 12),
-                       ElevatedButton.icon(
+            ElevatedButton.icon(
               onPressed: pickPhotos,
               icon: const Icon(Icons.photo),
               style: ElevatedButton.styleFrom(

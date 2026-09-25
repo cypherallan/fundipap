@@ -43,9 +43,16 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   int _index = 0;
   AppBar _buildAppBar() {
     bool isFundi = widget.role == 'fundi';
+    bool showBackOnNotifications = _index == 1; // 1 = Notifications tab
     return AppBar(
       backgroundColor: isFundi ? FundipapColors.blackGray : Colors.white,
       foregroundColor: isFundi ? Colors.white : Colors.black,
+      leading: showBackOnNotifications
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => setState(() => _index = 0), // back to Home
+            )
+          : null,
       title: Text('FUNDI PAP - ${widget.role.toUpperCase()}'),
       actions: [
         PopupMenuButton<String>(

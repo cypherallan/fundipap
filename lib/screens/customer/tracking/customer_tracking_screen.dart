@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -11,6 +12,12 @@ class CustomerTrackingScreen extends StatelessWidget {
     required this.jobId,
     required this.job,
   });
+
+  double calculateTransportFee(double distanceMeters) {
+    if (distanceMeters <= 1000) return 100; // your rule: <=1km = 100 round trip
+    double km = distanceMeters / 1000;
+    return 100 + ((km - 1) * 60); // change 60 to your per-km rate
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,23 +31,39 @@ class CustomerTrackingScreen extends StatelessWidget {
             .doc(jobId)
             .snapshots(),
         builder: (_, snap) {
-          if (!snap.hasData) {
+          if (!snap.hasData)
             return const Center(child: CircularProgressIndicator());
-          }
           var data = snap.data!.data() as Map<String, dynamic>?;
           double? fLat = (data?['fundiLiveLat'] as num?)?.toDouble();
           double? fLng = (data?['fundiLiveLng'] as num?)?.toDouble();
-          double dist = (data?['fundiLiveDistance'] as num?)?.toDouble() ?? 0;
+          double storedDist =
+              (data?['fundiLiveDistance'] as num?)?.toDouble() ?? 0;
           bool isTravelling = data?['travelling'] == true;
 
-          if (!isTravelling) {
+          if (!isTravelling)
             return Center(
               child: Text(
                 'Fundi arrived or cancelled travel',
                 style: GoogleFonts.inter(),
               ),
             );
+
+          // RECALC LOCALLY - fixes 2km bug when phones on same table
+          double cLat = (job['customerLat'] ?? job['lat'] ?? -0.0917)
+              .toDouble();
+          double cLng = (job['customerLng'] ?? job['lng'] ?? 34.7680)
+              .toDouble();
+          double dist = storedDist;
+          if (fLat != null && fLng != null) {
+            double local = Geolocator.distanceBetween(fLat, fLng, cLat, cLng);
+            if (dist == 0 || (local - dist).abs() > 200)
+              dist = local; // use local if stored is wrong
           }
+
+          double fee = calculateTransportFee(dist);
+          String display = dist <= 1000
+              ? '${dist.toStringAsFixed(0)} m away'
+              : '${(dist / 1000).toStringAsFixed(1)} km away';
 
           return Padding(
             padding: const EdgeInsets.all(16),
@@ -62,7 +85,7 @@ class CustomerTrackingScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        '${(dist / 1000).toStringAsFixed(1)} km away',
+                        display,
                         style: GoogleFonts.montserrat(
                           fontWeight: FontWeight.w800,
                           fontSize: 20,
@@ -70,20 +93,16 @@ class CustomerTrackingScreen extends StatelessWidget {
                         ),
                       ),
                       Text(
+                        'Transport: KES ${fee.toStringAsFixed(0)} ${dist <= 1000 ? '(100 round trip)' : ''}',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
                         'Live • Updates every 10m',
                         style: GoogleFonts.inter(
                           fontSize: 11,
                           color: Colors.black54,
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Fundi shared location only for this trip. Sharing stops when he marks arrived.',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          color: Colors.black54,
-                        ),
-                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
@@ -98,12 +117,6 @@ class CustomerTrackingScreen extends StatelessWidget {
                       minimumSize: const Size(double.infinity, 52),
                     ),
                     onPressed: () async {
-                      double cLat =
-                          (job['customerLat'] ?? job['lat'] ?? -0.0917)
-                              .toDouble();
-                      double cLng =
-                          (job['customerLng'] ?? job['lng'] ?? 34.7680)
-                              .toDouble();
                       String url = fLat != null
                           ? 'https://www.google.com/maps/dir/?api=1&origin=$fLat,$fLng&destination=$cLat,$cLng'
                           : 'https://www.google.com/maps/search/?api=1&query=$cLat,$cLng';
