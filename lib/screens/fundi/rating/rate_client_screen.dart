@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
+import '../home/fundi_home.dart'; // FIXED: go home, not pop
 
 class RateClientScreen extends StatefulWidget {
   final String jobId;
@@ -38,13 +39,14 @@ class _RateClientScreenState extends State<RateClientScreen> {
           .collection('jobs')
           .doc(widget.jobId)
           .get();
-      if (mounted)
-        setState(() {
-          _job = doc.data();
-          _loadingJob = false;
-        });
+      if (!mounted) return;
+      setState(() {
+        _job = doc.data();
+        _loadingJob = false;
+      });
     } catch (_) {
-      if (mounted) setState(() => _loadingJob = false);
+      if (!mounted) return;
+      setState(() => _loadingJob = false);
     }
   }
 
@@ -58,6 +60,15 @@ class _RateClientScreenState extends State<RateClientScreen> {
     } else {
       setState(() => _rating = halfRating);
     }
+  }
+
+  Future<void> _goHome() async {
+    if (!mounted) return;
+    // CRITICAL FIX: never pop, always replace stack with home
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const FundiHome()),
+      (route) => false,
+    );
   }
 
   Future<void> _submitRating() async {
@@ -99,12 +110,10 @@ class _RateClientScreenState extends State<RateClientScreen> {
           'fundiRatedAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
-        if (!mounted) return;
-        Navigator.of(context).pop();
+        await _goHome();
         return;
       }
 
-      // Store review for client
       await FirebaseFirestore.instance
           .collection('users')
           .doc(effectiveClientId)
@@ -150,8 +159,7 @@ class _RateClientScreenState extends State<RateClientScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
+      await _goHome();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -287,7 +295,7 @@ class _RateClientScreenState extends State<RateClientScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Your honest rating helps FundiPap verify legitimate, respectful and trustworthy clients. Highly rated clients get faster responses from top fundis, while abusive or fake clients are reviewed and removed. By rating ${widget.clientName}, you protect the next fundi and keep our community safe.',
+                                  'Your honest rating helps FundiPap verify legitimate clients. By rating ${widget.clientName}, you protect the next fundi.',
                                   style: GoogleFonts.inter(
                                     fontSize: 11,
                                     color: Colors.black87,
@@ -364,7 +372,7 @@ class _RateClientScreenState extends State<RateClientScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Tap left side of star for 0.5, right side for full. Tap same star twice to toggle 5 → 4.5',
+                            'Tap left side of star for 0.5, right side for full.',
                             style: GoogleFonts.inter(
                               fontSize: 10,
                               color: Colors.black54,
@@ -403,8 +411,7 @@ class _RateClientScreenState extends State<RateClientScreen> {
                       controller: _reviewCtrl,
                       maxLines: 4,
                       decoration: InputDecoration(
-                        hintText:
-                            'How was ${widget.clientName} as a client? Be honest - your review builds trust.',
+                        hintText: 'How was ${widget.clientName} as a client?',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -431,16 +438,6 @@ class _RateClientScreenState extends State<RateClientScreen> {
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: Text(
-                        'Locked until rated - reappears on relaunch',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          color: Colors.black45,
-                        ),
                       ),
                     ),
                   ],
