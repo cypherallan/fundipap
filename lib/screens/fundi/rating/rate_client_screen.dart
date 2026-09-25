@@ -1,8 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../home/fundi_home.dart'; // FIXED: go home, not pop
+import '../../../app.dart'; // HomeNavigator = bottom tabs host
 
 class RateClientScreen extends StatefulWidget {
   final String jobId;
@@ -62,11 +63,13 @@ class _RateClientScreenState extends State<RateClientScreen> {
     }
   }
 
-  Future<void> _goHome() async {
+  Future<void> _goHomeWithTabs() async {
     if (!mounted) return;
-    // CRITICAL FIX: never pop, always replace stack with home
+    final email = FirebaseAuth.instance.currentUser?.email ?? '';
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const FundiHome()),
+      MaterialPageRoute(
+        builder: (_) => HomeNavigator(role: 'fundi', email: email),
+      ),
       (route) => false,
     );
   }
@@ -110,7 +113,7 @@ class _RateClientScreenState extends State<RateClientScreen> {
           'fundiRatedAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
-        await _goHome();
+        await _goHomeWithTabs();
         return;
       }
 
@@ -159,7 +162,7 @@ class _RateClientScreenState extends State<RateClientScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      await _goHome();
+      await _goHomeWithTabs();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -194,7 +197,7 @@ class _RateClientScreenState extends State<RateClientScreen> {
 
   @override
   Widget build(BuildContext context) {
-    String title = (_job?['title'] ?? _job?['description'] ?? 'Job').toString();
+    // title removed - was unused, caused lint
     String location =
         (_job?['location'] ?? _job?['address'] ?? 'Client location').toString();
     int paid =
@@ -265,50 +268,6 @@ class _RateClientScreenState extends State<RateClientScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.shade200),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            Icons.verified_user_outlined,
-                            color: Colors.blue.shade700,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Why your rating matters',
-                                  style: GoogleFonts.montserrat(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 12,
-                                    color: Colors.blue.shade900,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Your honest rating helps FundiPap verify legitimate clients. By rating ${widget.clientName}, you protect the next fundi.',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11,
-                                    color: Colors.black87,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
                     Center(
                       child: Column(
                         children: [
@@ -340,43 +299,6 @@ class _RateClientScreenState extends State<RateClientScreen> {
                               color: Colors.black54,
                             ),
                             textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'What you did for ${widget.clientName}:',
-                            style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            title,
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Tap left side of star for 0.5, right side for full.',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              color: Colors.black54,
-                            ),
                           ),
                         ],
                       ),
@@ -433,7 +355,7 @@ class _RateClientScreenState extends State<RateClientScreen> {
                         child: _submitting
                             ? const CircularProgressIndicator()
                             : Text(
-                                'SUBMIT ${_rating > 0 ? '${_rating.toStringAsFixed(_rating.truncateToDouble() == _rating ? 0 : 1)}★' : ''} & UNLOCK APP',
+                                'SUBMIT & UNLOCK APP',
                                 style: GoogleFonts.montserrat(
                                   fontWeight: FontWeight.w800,
                                 ),
