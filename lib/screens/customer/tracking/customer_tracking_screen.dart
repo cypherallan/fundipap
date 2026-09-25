@@ -14,9 +14,9 @@ class CustomerTrackingScreen extends StatelessWidget {
   });
 
   double calculateTransportFee(double distanceMeters) {
-    if (distanceMeters <= 1000) return 100; // your rule: <=1km = 100 round trip
+    if (distanceMeters <= 1000) return 100; // <=1km = 100 round trip
     double km = distanceMeters / 1000;
-    return 100 + ((km - 1) * 60); // change 60 to your per-km rate
+    return 100 + ((km - 1) * 60);
   }
 
   @override
@@ -33,37 +33,70 @@ class CustomerTrackingScreen extends StatelessWidget {
         builder: (_, snap) {
           if (!snap.hasData)
             return const Center(child: CircularProgressIndicator());
-          var data = snap.data!.data() as Map<String, dynamic>?;
-          double? fLat = (data?['fundiLiveLat'] as num?)?.toDouble();
-          double? fLng = (data?['fundiLiveLng'] as num?)?.toDouble();
-          double storedDist =
-              (data?['fundiLiveDistance'] as num?)?.toDouble() ?? 0;
-          bool isTravelling = data?['travelling'] == true;
+          var data = snap.data!.data() as Map<String, dynamic>? ?? {};
 
-          if (!isTravelling)
+          // Merge static job + live data - try ALL keys you save
+          double? cLat, cLng;
+          for (var k in ['customerLat', 'clientLat', 'lat', 'latitude']) {
+            if ((job[k] ?? data[k]) != null) {
+              cLat = (job[k] ?? data[k] as num).toDouble();
+              break;
+            }
+          }
+          for (var k in ['customerLng', 'clientLng', 'lng', 'longitude']) {
+            if ((job[k] ?? data[k]) != null) {
+              cLng = (job[k] ?? data[k] as num).toDouble();
+              break;
+            }
+          }
+          for (var k in [
+            'clientLocation',
+            'customerLocation',
+            'locationGeoPoint',
+            'locationGeo',
+          ]) {
+            var v = job[k] ?? data[k];
+            if (v is GeoPoint) {
+              cLat = v.latitude;
+              cLng = v.longitude;
+              break;
+            }
+          }
+
+          if (cLat == null || cLng == null) {
+            return Center(
+              child: Text(
+                'Client location missing',
+                style: GoogleFonts.inter(),
+              ),
+            );
+          }
+
+          double? fLat = (data['fundiLiveLat'] as num?)?.toDouble();
+          double? fLng = (data['fundiLiveLng'] as num?)?.toDouble();
+          double storedDist =
+              (data['fundiLiveDistance'] as num?)?.toDouble() ?? 0;
+          bool isTravelling = data['travelling'] == true;
+
+          if (!isTravelling) {
             return Center(
               child: Text(
                 'Fundi arrived or cancelled travel',
                 style: GoogleFonts.inter(),
               ),
             );
+          }
 
-          // RECALC LOCALLY - fixes 2km bug when phones on same table
-          double cLat = (job['customerLat'] ?? job['lat'] ?? -0.0917)
-              .toDouble();
-          double cLng = (job['customerLng'] ?? job['lng'] ?? 34.7680)
-              .toDouble();
           double dist = storedDist;
           if (fLat != null && fLng != null) {
             double local = Geolocator.distanceBetween(fLat, fLng, cLat, cLng);
-            if (dist == 0 || (local - dist).abs() > 200)
-              dist = local; // use local if stored is wrong
+            if (dist == 0 || (local - dist).abs() > 200) dist = local;
           }
 
           double fee = calculateTransportFee(dist);
-          String display = dist <= 1000
-              ? '${dist.toStringAsFixed(0)} m away'
-              : '${(dist / 1000).toStringAsFixed(1)} km away';
+          String display = dist < 1000
+              ? '${dist.toStringAsFixed(0)}m away'
+              : '${(dist / 1000).toStringAsFixed(2)}km away';
 
           return Padding(
             padding: const EdgeInsets.all(16),

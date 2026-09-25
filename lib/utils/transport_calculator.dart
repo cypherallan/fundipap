@@ -2,73 +2,114 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 
 class TransportCalculator {
-  // returns {km: double, fee: int, mode: String}
   static Future<Map<String, dynamic>> calc({
     required Map<String, dynamic> jobData,
     required String fundiId,
   }) async {
     try {
-      // 1. Job lat/lng
-      double jobLat = 0, jobLng = 0;
-      if (jobData['locationGeo'] is GeoPoint) {
-        jobLat = (jobData['locationGeo'] as GeoPoint).latitude;
-        jobLng = (jobData['locationGeo'] as GeoPoint).longitude;
-      } else {
-        jobLat =
-            double.tryParse('${jobData['lat'] ?? jobData['latitude'] ?? 0}') ??
-            0;
-        jobLng =
-            double.tryParse('${jobData['lng'] ?? jobData['longitude'] ?? 0}') ??
-            0;
-      }
+      double? jobLat, jobLng;
 
-      // 2. Fundi lat/lng from users collection
-      double fundiLat = 0, fundiLng = 0;
-      try {
-        var fundiDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(fundiId)
-            .get();
-        var f = fundiDoc.data() ?? {};
-        if (f['lastLocation'] is GeoPoint) {
-          fundiLat = (f['lastLocation'] as GeoPoint).latitude;
-          fundiLng = (f['lastLocation'] as GeoPoint).longitude;
-        } else {
-          fundiLat = double.tryParse('${f['lat'] ?? f['latitude'] ?? 0}') ?? 0;
-          fundiLng = double.tryParse('${f['lng'] ?? f['longitude'] ?? 0}') ?? 0;
+      // 1. Try all GeoPoint keys you actually use
+      for (var k in [
+        'locationGeo',
+        'locationGeoPoint',
+        'clientLocation',
+        'customerLocation',
+        'customerGeoPoint',
+        'jobLocation',
+      ]) {
+        if (jobData[k] is GeoPoint) {
+          jobLat = (jobData[k] as GeoPoint).latitude;
+          jobLng = (jobData[k] as GeoPoint).longitude;
+          break;
         }
-      } catch (_) {}
+      }
+      // 2. Try all double keys you actually use
+      jobLat ??= double.tryParse(
+        '${jobData['customerLat'] ?? jobData['clientLat'] ?? jobData['lat'] ?? jobData['latitude'] ?? ''}',
+      );
+      jobLng ??= double.tryParse(
+        '${jobData['customerLng'] ?? jobData['clientLng'] ?? jobData['lng'] ?? jobData['longitude'] ?? ''}',
+      );
 
-      double km = 2.0; // default if no coords
-      if (jobLat != 0 && fundiLat != 0) {
-        double meters = Geolocator.distanceBetween(
-          fundiLat,
-          fundiLng,
-          jobLat,
-          jobLng,
-        );
-        km = meters / 1000;
+      double? fundiLat, fundiLng;
+
+      // 3. Best source is job's live fundi location, not users collection (stale)
+      fundiLat =
+          (jobData['fundiLiveLat'] ??
+                  jobData['fundiLat'] ??
+                  jobData['fundiLatAtVisit'] ??
+                  jobData['fundiLatitude'])
+              ?.toDouble();
+      fundiLng =
+          (jobData['fundiLiveLng'] ??
+                  jobData['fundiLng'] ??
+                  jobData['fundiLngAtVisit'] ??
+                  jobData['fundiLongitude'])
+              ?.toDouble();
+
+      // 4. Fallback to users collection if not in job
+      if (fundiLat == null) {
+        try {
+          var doc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(fundiId)
+              .get();
+          var f = doc.data() ?? {};
+          if (f['lastLocation'] is GeoPoint) {
+            fundiLat = (f['lastLocation'] as GeoPoint).latitude;
+            fundiLng = (f['lastLocation'] as GeoPoint).longitude;
+          } else if (f['currentLocation'] is GeoPoint) {
+            fundiLat = (f['currentLocation'] as GeoPoint).latitude;
+            fundiLng = (f['currentLocation'] as GeoPoint).longitude;
+          } else {
+            fundiLat = double.tryParse(
+              '${f['lat'] ?? f['latitude'] ?? f['lastLat'] ?? ''}',
+            );
+            fundiLng = double.tryParse(
+              '${f['lng'] ?? f['longitude'] ?? f['lastLng'] ?? ''}',
+            );
+          }
+        } catch (_) {}
       }
 
-      // 3. Mode + fee
-      String mode;
+      if (jobLat == null ||
+          jobLng == null ||
+          fundiLat == null ||
+          fundiLng == null ||
+          jobLat == 0) {
+        return {'km': 0.0, 'fee': 0, 'mode': 'boda', 'error': 'no coords'};
+      }
+
+      double meters = Geolocator.distanceBetween(
+        fundiLat,
+        fundiLng,
+        jobLat,
+        jobLng,
+      );
+      double km = meters / 1000;
+
+      // YOUR RULE: <=1km = 100 round trip
       int fee;
-      if (km <= 3) {
+      String mode;
+      if (km <= 1) {
+        fee = 100;
         mode = 'boda';
-        fee = 150 + (km * 50).toInt(); // base 150 + 50 per km
+      } else if (km <= 3) {
+        mode = 'boda';
+        fee = (100 + ((km - 1) * 60)).round();
       } else if (km <= 10) {
         mode = 'tuk';
-        fee = 300 + (km * 60).toInt();
+        fee = (100 + ((km - 1) * 60)).round();
       } else {
         mode = 'pickup';
-        fee = 500 + (km * 70).toInt();
+        fee = (100 + ((km - 1) * 60)).round();
       }
       if (fee < 100) fee = 100;
 
-      return {'km': km, 'fee': fee, 'mode': mode};
-    } catch (_) {
-      // NEVER throw - this is why your notifications went empty before
-      return {'km': 0.0, 'fee': 0, 'mode': 'boda'};
+      return {'km': km, 'fee': fee, 'mode': mode, 'meters': meters};
+    } catch (e) {
+      return {'km': 0.0, 'fee': 0, 'mode': 'boda', 'error': e.toString()};
     }
   }
 }

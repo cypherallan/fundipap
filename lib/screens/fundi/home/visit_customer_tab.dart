@@ -175,22 +175,25 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
         ).listen(
           (p) {
             double? d;
-            if (clientLat != null && clientLng != null)
+            if (clientLat != null && clientLng != null) {
               d = Geolocator.distanceBetween(
                 p.latitude,
                 p.longitude,
                 clientLat!,
                 clientLng!,
               );
-            if (mounted)
+            }
+            if (mounted) {
               setState(() {
                 pos = p;
                 distance = d;
                 loading = false;
-                if (clientLat == null)
+                if (clientLat == null) {
                   error =
                       'Client GPS not saved! Ask client to re-create job with location ON.';
+                }
               });
+            }
           },
           onError: (e) {
             setState(() {

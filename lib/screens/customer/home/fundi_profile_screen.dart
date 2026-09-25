@@ -60,7 +60,6 @@ class CustomerFundiProfileScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header card
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -123,14 +122,14 @@ class CustomerFundiProfileScreen extends StatelessWidget {
                               color: Colors.amber,
                             ),
                             Text(
-                              ' ${fundi['rating'] ?? 4.5} ',
+                              ' ${((fundi['rating'] ?? 4.5) as num).toStringAsFixed(1)} ',
                               style: GoogleFonts.montserrat(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 13,
                               ),
                             ),
                             Text(
-                              '(${fundi['reviews'] ?? fundi['jobs'] ?? 0} jobs)',
+                              '(${(fundi['reviews'] ?? fundi['jobs'] ?? 0).toString()} jobs)',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 color: Colors.black54,
@@ -155,12 +154,11 @@ class CustomerFundiProfileScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            // Stats
             Row(
               children: [
                 _statCard(
                   'Jobs',
-                  '${fundi['jobs'] ?? fundi['completedJobs'] ?? 0}',
+                  '${(fundi['jobs'] ?? fundi['completedJobs'] ?? 0).toString()}',
                 ),
                 const SizedBox(width: 10),
                 _statCard('Price', 'KES ${fundi['price'] ?? '-'}'),
@@ -169,7 +167,6 @@ class CustomerFundiProfileScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            // About
             Text(
               'About',
               style: GoogleFonts.montserrat(
@@ -224,7 +221,6 @@ class CustomerFundiProfileScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            // Reviews stream
             Text(
               'Reviews',
               style: GoogleFonts.montserrat(
@@ -282,7 +278,8 @@ class CustomerFundiProfileScreen extends StatelessWidget {
                               const Spacer(),
                               Row(
                                 children: List.generate(
-                                  (r['rating'] ?? 5) as int,
+                                  ((r['rating'] ?? 5) as num)
+                                      .toInt(), // FIXED HERE
                                   (_) => const Icon(
                                     Icons.star,
                                     size: 12,
