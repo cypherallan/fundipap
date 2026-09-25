@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'fundi_home_header.dart';
-import 'fundi_profile_banners.dart';
-import 'fundi_earnings_card.dart';
+import 'header.dart';
+import 'profile_banners.dart';
+import 'earnings_card.dart';
 import '../fundi_profile.dart';
 
 class FundiHomeHeaderSection extends StatelessWidget {

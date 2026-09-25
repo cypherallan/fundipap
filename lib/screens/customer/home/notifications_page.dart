@@ -4,8 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../confirm/confirm_fundi_page.dart';
-import 'customer_fundi_timeline_page.dart';
+import '../confirm/fundi_page.dart';
+import 'fundi_timeline_page.dart';
 
 class CustomerNotificationsPage extends StatefulWidget {
   const CustomerNotificationsPage({super.key});

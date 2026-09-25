@@ -5,9 +5,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../../../notifications/notification_bell.dart';
-import 'customer_home_filter_bar.dart';
-import 'customer_home_fundi_list.dart';
-import 'customer_home_header.dart';
+import 'filter_bar.dart';
+import 'fundi_list.dart';
+import 'header.dart';
 import '../rating/rate_fundi_screen.dart';
 
 class CustomerHome extends StatefulWidget {

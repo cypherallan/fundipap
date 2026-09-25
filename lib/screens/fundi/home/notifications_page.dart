@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import 'fundi_customer_timeline_page.dart';
+import 'customer_timeline_page.dart';
 
 class FundiNotificationsPage extends StatefulWidget {
   const FundiNotificationsPage({super.key});

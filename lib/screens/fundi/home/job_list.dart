@@ -3,8 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import 'fundi_home_logic.dart';
-import 'fundi_job_card.dart';
+import 'logic.dart';
+import 'job_card.dart';
 import 'job_details_screen.dart';
 
 class FundiHomeJobList extends StatelessWidget {

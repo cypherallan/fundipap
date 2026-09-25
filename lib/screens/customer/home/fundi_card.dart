@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import 'customer_fundi_profile_screen.dart';
+import 'fundi_profile_screen.dart';
 
 class CustomerHomeFundiCard extends StatelessWidget {
   final Map<String, dynamic> fundi;

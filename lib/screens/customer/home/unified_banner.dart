@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
-import '../confirm/confirm_fundi_page.dart';
+import '../confirm/fundi_page.dart';
 import '../tracking/customer_tracking_screen.dart';
 import '../../customer/my_jobs/customer_confirmed_jobs_page.dart';
 import '../confirm/client_price_approval_screen.dart';

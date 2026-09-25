@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import 'confirm_fundi_actions.dart';
-import 'confirm_fundi_profile_card.dart';
-import 'confirm_fundi_details_section.dart';
-import 'confirm_fundi_bid_card.dart';
-import 'confirm_fundi_reviews.dart';
-import 'confirm_fundi_bottom_actions.dart';
+import 'fundi_actions.dart';
+import 'fundi_profile_card.dart';
+import 'fundi_details_section.dart';
+import 'fundi_bid_card.dart';
+import 'fundi_reviews.dart';
+import 'fundi_bottom_actions.dart';
 
 class ConfirmFundiPage extends StatefulWidget {
   final String jobId;

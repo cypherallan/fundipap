@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import 'fundi_home_job_list.dart';
+import 'job_list.dart';
 
 class FundiHomeJobsTab extends StatelessWidget {
   final String search;

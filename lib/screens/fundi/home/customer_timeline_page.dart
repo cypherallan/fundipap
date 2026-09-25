@@ -2,8 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../my_jobs/fundi_request_new_price.dart';
-import 'fundi_visit_customer_tab.dart';
+import '../my_jobs/request_new_price.dart';
+import 'visit_customer_tab.dart';
 import '../../../widgets/animated_waiting_card.dart';
 import '../rating/rate_client_screen.dart'; // <-- SAME RULES AS RateFundiScreen
 

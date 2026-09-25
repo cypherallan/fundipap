@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'fundi_completed_jobs.dart';
+import 'completed_jobs.dart';
 
 class FundiCompletedWrapper extends StatelessWidget {
   const FundiCompletedWrapper({super.key});

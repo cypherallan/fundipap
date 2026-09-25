@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'customer_home_fundi_card.dart';
+import 'fundi_card.dart';
 
 class CustomerHomeFundiList extends StatelessWidget {
   final Position? userPos;

@@ -2,11 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'fundi_my_jobs_actions.dart';
-import 'fundi_my_jobs_pending_tab.dart';
-import 'fundi_my_jobs_confirmed_tab.dart';
-import 'fundi_my_jobs_rejected_tab.dart';
-import 'fundi_my_jobs_completed_tab.dart';
+import 'actions.dart';
+import 'pending_tab.dart';
+import 'confirmed_tab.dart';
+import 'rejected_tab.dart';
+import 'completed_tab.dart';
 
 class FundiMyJobsPage extends StatefulWidget {
   const FundiMyJobsPage({super.key});

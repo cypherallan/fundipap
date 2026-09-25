@@ -5,17 +5,17 @@ import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth/role_select_screen.dart';
 import 'screens/auth/auth_gate.dart';
-import 'screens/customer/home/customer_home.dart';
-import 'screens/customer/home/customer_notifications_page.dart';
+import 'screens/customer/home/home.dart';
+import 'screens/customer/home/notifications_page.dart';
 import 'screens/customer/my_jobs/post_job_screen.dart';
 import 'screens/customer/disputes_screen.dart';
 import 'screens/fundi/home/fundi_home.dart';
-import 'screens/fundi/home/fundi_notifications_page.dart';
+import 'screens/fundi/home/notifications_page.dart';
 import 'screens/fundi/disputes_screen.dart' as fundi_disputes;
 import 'services/auth_service.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/fundi/fundi_profile.dart';
-import 'screens/fundi/my_jobs/fundi_my_jobs_page.dart';
+import 'screens/fundi/my_jobs/my_jobs_page.dart';
 import 'screens/admin/admin_screen.dart'; // <-- ADDED
 
 class FundiPapApp extends StatelessWidget {
