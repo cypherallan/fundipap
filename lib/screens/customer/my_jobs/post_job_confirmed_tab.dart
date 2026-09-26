@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../../customer/confirm/client_price_approval_screen.dart';
+import '../../../services/job_cancel_service.dart'; // <-- NEW
 
 class ClientConfirmedTab extends StatelessWidget {
   final List<QueryDocumentSnapshot> docs;
@@ -28,10 +29,11 @@ class ClientConfirmedTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (docs.isEmpty)
+    if (docs.isEmpty) {
       return Center(
         child: Text('No confirmed jobs', style: GoogleFonts.inter()),
       );
+    }
     return ListView.builder(
       padding: const EdgeInsets.all(12),
       itemCount: docs.length,
@@ -54,6 +56,25 @@ class ClientConfirmedTab extends StatelessWidget {
         int newTotal = (reneg?['newLaborTotal'] ?? 0).toInt();
         int totalToRelease = newTotal > 0 ? newTotal : initialAmt + extraAmt;
         if (totalToRelease == 0) totalToRelease = initialAmt;
+
+        // For cancel math - transport needed for UI message, labour calc handled inside service
+        int transport = (job['transportFee'] ?? job['escrowTransport'] ?? 0)
+            .toInt();
+
+        bool isTravelling = job['travelling'] == true || status == 'travelling';
+        bool siteDone =
+            job['siteVisitDone'] == true || job['siteVisited'] == true;
+        bool isStarted = [
+          'in_progress',
+          'pending_completion',
+          'job_completed',
+          'completed',
+        ].contains(status);
+        bool arrived = isTravelling || siteDone || status == 'site_visit';
+
+        bool canClientCancel =
+            !isStarted &&
+            !['cancelled', 'cancelled_after_arrival'].contains(status);
 
         bool showRenegCard =
             reneg != null &&
@@ -189,7 +210,6 @@ class ClientConfirmedTab extends StatelessWidget {
                       onPressed: () async {
                         await onConfirmCompletion(jobId);
                         if (!context.mounted) return;
-                        // SUCCESS MESSAGE
                         showDialog(
                           context: context,
                           builder: (_) => AlertDialog(
@@ -301,6 +321,87 @@ class ClientConfirmedTab extends StatelessWidget {
                           fontWeight: FontWeight.w800,
                           fontSize: 12,
                           color: Colors.black,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // CANCEL BUTTON - CLIENT (FINAL LOGIC)
+                if (canClientCancel) ...[
+                  const SizedBox(height: 12),
+                  const Divider(),
+                  if (arrived)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info,
+                            size: 14,
+                            color: Colors.blue.shade700,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Fundi is on the way / at site. If you cancel, transport KES $transport goes to fundi, you get 95% labour back.',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                color: Colors.blue.shade800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.red.shade300),
+                        foregroundColor: Colors.red.shade700,
+                      ),
+                      icon: const Icon(Icons.cancel, size: 16),
+                      label: Text(
+                        arrived
+                            ? 'Cancel Job - You get 95% labour, Fundi gets KES $transport transport, 5% fee'
+                            : 'Cancel Job - You get 95% labour + 100% transport, 5% fee deducted',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      onPressed: () => JobCancelService.showCancelDialog(
+                        context: context,
+                        jobId: jobId,
+                        job: job,
+                        isClient: true,
+                      ),
+                    ),
+                  ),
+                ],
+                if (isStarted)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Text(
+                        'Job started - Cancel inactive for both. Must complete.',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          color: Colors.green.shade800,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),

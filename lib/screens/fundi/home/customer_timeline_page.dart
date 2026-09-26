@@ -6,6 +6,7 @@ import '../my_jobs/request_new_price.dart';
 import 'visit_customer_tab.dart';
 import '../../../widgets/animated_waiting_card.dart';
 import '../rating/rate_client_screen.dart';
+import '../../../services/job_cancel_service.dart'; // NEW
 
 class FundiCustomerTimelinePage extends StatelessWidget {
   final String jobId;
@@ -121,10 +122,11 @@ class FundiCustomerTimelinePage extends StatelessWidget {
           .doc(jobId)
           .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
+        }
         var job = snap.data!.data() as Map<String, dynamic>;
         var status = (job['status'] ?? '').toString();
         var escrow = (job['escrowStatus'] ?? 'pending').toString();
@@ -147,21 +149,21 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               job['fundiPayoutAmount'] ??
               labour - fundiAppFee + transport,
         );
-        int fundiSeesWaiting = labour + transport; // 5100 FUNDI VIEW
+        int fundiSeesWaiting = labour + transport;
 
         var reneg = job['renegotiation'] as Map<String, dynamic>?;
         String phase = (reneg?['currentPhase'] ?? '').toString();
         String rs = (reneg?['status'] ?? '').toString();
 
-        int newLabour = _toInt(reneg?['newLaborTotal'] ?? labour); // 6000
+        int newLabour = _toInt(reneg?['newLaborTotal'] ?? labour);
         int newFundiFee = _toInt(
           reneg?['newFundiAppFee'] ?? (newLabour * 0.05).round(),
-        ); // 300
+        );
         int extraLabour = _toInt(
           reneg?['extraLabor'] ?? job['extraLaborAmount'] ?? 0,
-        ); // 1000 FUNDI
-        int newTotalFundiLocked = newLabour + transport; // 6100 FUNDI
-        int newFundiReceivesVal = newLabour - newFundiFee + transport; // 5800
+        );
+        int newTotalFundiLocked = newLabour + transport;
+        int newFundiReceivesVal = newLabour - newFundiFee + transport;
 
         int releasedAmount = _toInt(
           job['fundiPayoutAmount'] ??
@@ -177,6 +179,55 @@ class FundiCustomerTimelinePage extends StatelessWidget {
         bool travelling = _toBool(job['travelling']) || status == 'travelling';
         bool extraPaid = (job['extraEscrowStatus'] ?? '') == 'paid';
         List parts = List.from(reneg?['partsNeeded'] ?? []);
+
+        // FINAL CANCEL LOGIC
+        bool isStarted =
+            status == 'in_progress' ||
+            phase == 'fundi_working' ||
+            status == 'job_completed' ||
+            status == 'pending_completion' ||
+            status == 'completed';
+        bool isCancelled = [
+          'cancelled',
+          'cancelled_after_arrival',
+        ].contains(status);
+        bool canFundiCancel =
+            (status == 'assigned' || status == 'confirmed') &&
+            !travelling &&
+            !siteDone &&
+            !isStarted &&
+            !isCancelled;
+
+        if (isCancelled) {
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(
+                clientName,
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+              ),
+              backgroundColor: FundipapColors.blackGray,
+              foregroundColor: Colors.white,
+            ),
+            body: ListView(
+              padding: const EdgeInsets.all(12),
+              children: [
+                _card(
+                  color: Colors.red.shade50,
+                  border: Colors.red,
+                  icon: Icons.cancel,
+                  iconColor: Colors.red,
+                  title: status == 'cancelled_after_arrival'
+                      ? 'Cancelled after arrival - Transport KES $transport to you'
+                      : 'Cancelled - Full refund to client',
+                  message:
+                      'Cancelled by ${job['cancelledBy'] ?? ''} - Reason: ${job['cancelReason'] ?? ''} - You get KES ${job['fundiPayout'] ?? 0}',
+                  time: 'Now',
+                  isDone: false,
+                ),
+              ],
+            ),
+          );
+        }
 
         if (status == 'completed' && escrowReleased) {
           List<Widget> doneTimeline = [];
@@ -390,6 +441,73 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               isDone: true,
             ),
           );
+          // Cancel allowed before travelling even without escrow
+          if (canFundiCancel) {
+            timeline.add(
+              Card(
+                color: Colors.red.shade50,
+                shape: RoundedRectangleBorder(
+                  side: BorderSide(color: Colors.red.shade200),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.cancel_outlined,
+                            size: 18,
+                            color: Colors.red.shade700,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Cancel this job?',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                              color: Colors.red.shade800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Before travelling - client gets full refund, you get 0. Will affect rating.',
+                        style: GoogleFonts.inter(fontSize: 11),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.red.shade400),
+                            foregroundColor: Colors.red.shade700,
+                          ),
+                          icon: const Icon(Icons.cancel, size: 16),
+                          label: Text(
+                            'CANCEL JOB - FULL REFUND TO CLIENT',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          onPressed: () => JobCancelService.showCancelDialog(
+                            context: context,
+                            jobId: jobId,
+                            job: job,
+                            isClient: false,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
           return Scaffold(
             appBar: AppBar(
               title: Text(
@@ -411,12 +529,12 @@ class FundiCustomerTimelinePage extends StatelessWidget {
         if (phase == 'waiting_for_client_to_buy_parts') {
           final oldLabor = _toInt(
             reneg?['oldLabor'] ?? job['agreedPrice'] ?? job['laborCost'] ?? 0,
-          ); // 5000
+          );
           final extraLabourInner = _toInt(
             job['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0,
-          ); // 1000
-          final fundiOldLocked = oldLabor + transport; // 5100
-          final fundiNewLocked = fundiOldLocked + extraLabourInner; // 6100
+          );
+          final fundiOldLocked = oldLabor + transport;
+          final fundiNewLocked = fundiOldLocked + extraLabourInner;
           timeline.add(
             OrangeAnimatedWaitingCard(
               title: 'Waiting for client to buy materials',
@@ -865,6 +983,111 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             isDone: true,
           ),
         );
+
+        // CANCEL - FUNDI ONLY BEFORE TRAVELLING, LOCKED AFTER
+        if (canFundiCancel) {
+          timeline.add(
+            Card(
+              color: Colors.red.shade50,
+              shape: RoundedRectangleBorder(
+                side: BorderSide(color: Colors.red.shade200),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.cancel_outlined,
+                          size: 18,
+                          color: Colors.red.shade700,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Cancel this job?',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                            color: Colors.red.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Before travelling - client gets full KES $fundiSeesWaiting refund, you get 0. Will affect badge.',
+                      style: GoogleFonts.inter(fontSize: 11),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: Colors.red.shade400),
+                          foregroundColor: Colors.red.shade700,
+                        ),
+                        icon: const Icon(Icons.cancel, size: 16),
+                        label: Text(
+                          'CANCEL JOB - FULL REFUND TO CLIENT',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        onPressed: () => JobCancelService.showCancelDialog(
+                          context: context,
+                          jobId: jobId,
+                          job: job,
+                          isClient: false,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        } else if (!isStarted && (travelling || siteDone)) {
+          timeline.add(
+            Card(
+              color: Colors.grey.shade100,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'Cancel locked after travelling. Only client can cancel now. You are flagged if you cancel to get transport fee.',
+                  style: GoogleFonts.inter(fontSize: 10, color: Colors.black54),
+                ),
+              ),
+            ),
+          );
+        } else if (isStarted) {
+          timeline.add(
+            Card(
+              color: Colors.green.shade50,
+              shape: RoundedRectangleBorder(
+                side: BorderSide(color: Colors.green.shade200),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'Job started - Cancel inactive for both. Must complete.',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    color: Colors.green.shade800,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
 
         return Scaffold(
           appBar: AppBar(

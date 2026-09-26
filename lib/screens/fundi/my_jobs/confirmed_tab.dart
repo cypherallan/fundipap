@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../theme/app_theme.dart';
 import 'add_part_receipt.dart';
 import 'request_new_price.dart';
+import '../../../services/job_cancel_service.dart'; // <-- NEW
 
 class FundiConfirmedTab extends StatelessWidget {
   final Stream<QuerySnapshot> jobsStream;
@@ -32,8 +33,7 @@ class FundiConfirmedTab extends StatelessWidget {
       'travelling': true,
       'siteVisitStarted': true,
       'travellingAt': FieldValue.serverTimestamp(),
-      'status':
-          'travelling', // client will see "Fundi is on the way" ONLY after this
+      'status': 'travelling',
       'updatedAt': FieldValue.serverTimestamp(),
     });
     if (!context.mounted) return;
@@ -74,7 +74,6 @@ class FundiConfirmedTab extends StatelessWidget {
         var docs = allDocs.where((d) {
           final data = d.data() as Map<String, dynamic>;
           final s = data['status']?.toString() ?? '';
-          // FIX: include travelling, otherwise job disappears after Start Site Visit
           return [
             'confirmed',
             'assigned',
@@ -106,6 +105,9 @@ class FundiConfirmedTab extends StatelessWidget {
                 job['siteVisitDone'] == true || job['siteVisited'] == true;
             bool isTravelling =
                 job['travelling'] == true || job['status'] == 'travelling';
+            bool isStarted =
+                job['status'] == 'in_progress' ||
+                job['status'] == 'pending_completion';
             int agreedPrice =
                 (job['agreedPrice'] ??
                         job['acceptedBidAmount'] ??
@@ -113,6 +115,13 @@ class FundiConfirmedTab extends StatelessWidget {
                         job['budget'] ??
                         0)
                     .toInt();
+
+            // FINAL CANCEL LOGIC: fundi can cancel ONLY before travelling
+            bool canFundiCancel =
+                (job['status'] == 'assigned' || job['status'] == 'confirmed') &&
+                !isTravelling &&
+                !siteDone &&
+                !isStarted;
 
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
@@ -142,7 +151,6 @@ class FundiConfirmedTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
 
-                  // STATE 1: CLIENT CONFIRMED, WAITING FOR ESCROW - DON'T SHOW "ON THE WAY"
                   if (escrow != 'held' && escrow != 'paid')
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -183,7 +191,6 @@ class FundiConfirmedTab extends StatelessWidget {
                       ),
                     ),
 
-                  // STATE 2: ESCROW PAID
                   if (escrow == 'held' || escrow == 'paid') ...[
                     if (!siteDone && !isTravelling) ...[
                       SizedBox(
@@ -301,7 +308,6 @@ class FundiConfirmedTab extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      // ... keep your renegotiation / START JOB / Mark Completed logic here unchanged
                       if (job['status'] == 'assigned' ||
                           job['status'] == 'site_visit')
                         Row(
@@ -365,6 +371,74 @@ class FundiConfirmedTab extends StatelessWidget {
                         ),
                     ],
                   ],
+
+                  // CANCEL BUTTON - FUNDI ONLY BEFORE TRAVELLING
+                  if (canFundiCancel) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: Colors.red.shade300),
+                          foregroundColor: Colors.red.shade700,
+                        ),
+                        icon: const Icon(Icons.cancel_outlined, size: 16),
+                        label: Text(
+                          'Cancel Job - Client gets full refund',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        onPressed: () => JobCancelService.showCancelDialog(
+                          context: context,
+                          jobId: jobId,
+                          job: job,
+                          isClient: false,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (!canFundiCancel &&
+                      !isStarted &&
+                      (job['status'] == 'travelling' || siteDone))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Cancel locked after travelling. Only client can cancel now.',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (isStarted)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Text(
+                          'Job started - Cancel inactive for both. Must complete.',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: Colors.green.shade800,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             );

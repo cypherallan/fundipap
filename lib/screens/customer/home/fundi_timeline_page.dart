@@ -6,6 +6,7 @@ import '../../customer/confirm/client_price_approval_screen.dart';
 import '../tracking/customer_tracking_screen.dart';
 import '../../../widgets/animated_waiting_card.dart';
 import '../rating/rate_fundi_screen.dart';
+import '../../../services/job_cancel_service.dart';
 
 class CustomerFundiTimelinePage extends StatefulWidget {
   final String jobId;
@@ -100,7 +101,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
     });
   }
 
-  // ===== FIXED - THIS NOW ACTUALLY RELEASES =====
   Future<void> _confirmCompletion(String jobId, String fundiId) async {
     if (_releasing) return;
     setState(() => _releasing = true);
@@ -124,7 +124,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
         j['fundiReceives'] ?? labour - fundiAppFee + transport,
       );
 
-      // use new values if renegotiated
       if (reneg != null && reneg['newLaborTotal'] != null) {
         int newLabour = _toInt(reneg['newLaborTotal']);
         int newTotalClient = _toInt(
@@ -137,20 +136,18 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
         );
         totalClient = newTotalClient > 0 ? newTotalClient : totalClient;
         fundiReceives = newFundiReceives > 0 ? newFundiReceives : fundiReceives;
-        labour = newLabour;
       }
 
       int alreadyLocked = _toInt(j['escrowAmount'] ?? totalClient);
 
-      // 1. Release in jobs
       await jobRef.update({
         'status': 'completed',
         'escrowStatus': 'released',
         'extraEscrowStatus': 'released',
         'clientConfirmedComplete': true,
         'completedAt': FieldValue.serverTimestamp(),
-        'totalReleasedAmount': totalClient, // what client paid 6400
-        'fundiPayoutAmount': fundiReceives, // what fundi gets 5800
+        'totalReleasedAmount': totalClient,
+        'fundiPayoutAmount': fundiReceives,
         'fundiReceives': fundiReceives,
         'totalClientPaid': totalClient,
         'initialEscrowReleased': alreadyLocked,
@@ -159,7 +156,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // 2. Release in escrowTransactions - use SET not UPDATE
       try {
         await FirebaseFirestore.instance
             .collection('escrowTransactions')
@@ -182,7 +178,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Released KES $totalClient to Fundi')),
       );
-
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => RateFundiScreen(
@@ -237,6 +232,81 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _cancelCard({
+    required Map<String, dynamic> job,
+    required bool isTravelling,
+    required bool siteDone,
+    required int transport,
+  }) {
+    bool arrived = isTravelling || siteDone;
+    return Card(
+      color: Colors.red.shade50,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.red.shade200),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.cancel_outlined,
+                  size: 18,
+                  color: Colors.red.shade700,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Cancel this job?',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    color: Colors.red.shade800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              arrived
+                  ? 'Fundi is on the way/at site. If you cancel: Transport KES $transport -> fundi, you get 95% labour back, 5% fee kept.'
+                  : 'Before travelling. You get 95% labour + 100% transport back. 5% labour fee kept for maintenance.',
+              style: GoogleFonts.inter(fontSize: 11),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: Colors.red.shade400),
+                  foregroundColor: Colors.red.shade700,
+                ),
+                icon: const Icon(Icons.cancel, size: 16),
+                label: Text(
+                  arrived
+                      ? 'CANCEL JOB - 95% LABOUR BACK + TRANSPORT TO FUNDI'
+                      : 'CANCEL JOB - 95% LABOUR + 100% TRANSPORT BACK',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                onPressed: () => JobCancelService.showCancelDialog(
+                  context: context,
+                  jobId: widget.jobId,
+                  job: job,
+                  isClient: true,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -323,6 +393,18 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                       job['acceptedBidId'] ??
                       '')
                   .toString();
+
+          bool isStarted =
+              status == 'in_progress' ||
+              phase == 'fundi_working' ||
+              status == 'job_completed' ||
+              status == 'pending_completion' ||
+              status == 'completed';
+          bool isCancelled = [
+            'cancelled',
+            'cancelled_after_arrival',
+          ].contains(status);
+          bool canClientCancel = !isStarted && !isCancelled;
 
           List<Widget> timeline = [];
           timeline.add(
@@ -453,6 +535,20 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
             return _buildReversedList(timeline);
           }
+          if (isCancelled) {
+            timeline.add(
+              _timelineCard(
+                title: status == 'cancelled_after_arrival'
+                    ? 'Job cancelled after arrival'
+                    : 'Job cancelled',
+                body:
+                    'Cancelled by ${job['cancelledBy'] ?? ''} - Refund KES ${job['clientRefund'] ?? ''} - Fee KES ${job['platformFee'] ?? ''} - Fundi gets KES ${job['fundiPayout'] ?? 0}',
+                icon: Icons.cancel,
+                isDone: false,
+              ),
+            );
+            return _buildReversedList(timeline);
+          }
 
           timeline.add(
             _timelineCard(
@@ -472,18 +568,17 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             ),
           );
 
-          final fundiName =
+          final fundiNameStr =
               (job['assignedFundiName'] ?? job['fundiName'] ?? 'your fundi')
                   .toString();
-
           timeline.add(
             _timelineCard(
               title: escrowDone
                   ? 'Escrow locked - KES $alreadyLocked secured'
                   : 'Lock KES $totalToPay to escrow now',
               body: escrowDone
-                  ? 'KES $alreadyLocked is secured. It will be released to $fundiName after you confirm the job is completed.'
-                  : 'This amount will be held in FundiApp and only released to Fundi $fundiName after you confirm the job is completed.',
+                  ? 'KES $alreadyLocked is secured. It will be released to $fundiNameStr after you confirm the job is completed.'
+                  : 'This amount will be held in FundiApp and only released to Fundi $fundiNameStr after you confirm the job is completed.',
               icon: Icons.lock,
               isDone: escrowDone,
               action: !escrowDone
@@ -502,7 +597,20 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   : null,
             ),
           );
-          if (!escrowDone) return _buildReversedList(timeline);
+
+          // FIX: Add cancel BEFORE early return so it shows immediately after escrow
+          if (!escrowDone) {
+            if (canClientCancel)
+              timeline.add(
+                _cancelCard(
+                  job: job,
+                  isTravelling: isTravelling,
+                  siteDone: siteDone,
+                  transport: transport,
+                ),
+              );
+            return _buildReversedList(timeline);
+          }
 
           if (!isTravelling &&
               !siteDone &&
@@ -569,7 +677,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
 
-          if (siteDone) {
+          if (siteDone)
             timeline.add(
               _timelineCard(
                 title: 'Fundi arrived - Currently on site - Done',
@@ -578,8 +686,19 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 isDone: true,
               ),
             );
+
+          if (!siteDone) {
+            if (canClientCancel)
+              timeline.add(
+                _cancelCard(
+                  job: job,
+                  isTravelling: isTravelling,
+                  siteDone: siteDone,
+                  transport: transport,
+                ),
+              );
+            return _buildReversedList(timeline);
           }
-          if (!siteDone) return _buildReversedList(timeline);
 
           if (needsExtraEscrow) {
             int extraToLock = _toInt(
@@ -615,6 +734,15 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ),
               ),
             );
+            if (canClientCancel)
+              timeline.add(
+                _cancelCard(
+                  job: job,
+                  isTravelling: isTravelling,
+                  siteDone: siteDone,
+                  transport: transport,
+                ),
+              );
             return _buildReversedList(timeline);
           } else if (reneg != null &&
               _toBool(reneg['requested']) &&
@@ -647,6 +775,15 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ),
               ),
             );
+            if (canClientCancel)
+              timeline.add(
+                _cancelCard(
+                  job: job,
+                  isTravelling: isTravelling,
+                  siteDone: siteDone,
+                  transport: transport,
+                ),
+              );
             return _buildReversedList(timeline);
           }
 
@@ -655,7 +792,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   renegStatus.contains('pending_extra_escrow') ||
                   phase == 'waiting_for_client_to_buy_parts' ||
                   phase == 'fundi_buying_parts')) {
-            if (!_toBool(reneg['requested']) || renegStatus != 'pending') {
+            if (!_toBool(reneg['requested']) || renegStatus != 'pending')
               timeline.add(
                 _timelineCard(
                   title: 'Price review - Reviewed - Done',
@@ -664,38 +801,26 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   isDone: true,
                 ),
               );
-            }
           }
 
           if (phase == 'waiting_for_client_to_buy_parts') {
             final oldLabor = _toInt(
               reneg?['oldLabor'] ?? job['laborCost'] ?? job['agreedPrice'] ?? 0,
-            ); // 5000
-            final transport = _toInt(job['transportFee'] ?? 0); // 100
-            final oldClientFee = (oldLabor * 0.05).round(); // 250
-            final alreadyLockedBase =
-                oldLabor +
-                transport +
-                oldClientFee; // 5350 - base, never changes
-
+            );
+            final transportVal = _toInt(job['transportFee'] ?? 0);
+            final oldClientFee = (oldLabor * 0.05).round();
+            final alreadyLockedBase = oldLabor + transportVal + oldClientFee;
             final extraLaborVal = _toInt(
               job['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0,
-            ); // 1000
+            );
             final extraAppVal = _toInt(
               job['extraClientAppFee'] ??
                   reneg?['extraApp'] ??
                   (extraLaborVal * 0.05).round(),
-            ); // 50
-            final extraToLockVal =
-                extraLaborVal +
-                extraAppVal; // 1050 - RECALC, don't trust stored double value
-
-            final newTotalVal =
-                alreadyLockedBase + extraToLockVal; // 5350 + 1050 = 6400 ✅
-            final totalLockedNow = _toInt(
-              job['escrowAmount'] ?? newTotalVal,
-            ); // 6400 after payment
-
+            );
+            final extraToLockVal = extraLaborVal + extraAppVal;
+            final newTotalVal = alreadyLockedBase + extraToLockVal;
+            final totalLockedNow = _toInt(job['escrowAmount'] ?? newTotalVal);
             timeline.add(
               _timelineCard(
                 title: 'You will buy parts - Confirm when bought',
@@ -725,7 +850,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               phase == 'fundi_working' ||
               status == 'in_progress' ||
               status.contains('completed')) {
-            if (phase != 'waiting_for_client_to_buy_parts') {
+            if (phase != 'waiting_for_client_to_buy_parts')
               timeline.add(
                 _timelineCard(
                   title: 'You bought parts - Done',
@@ -734,7 +859,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   isDone: true,
                 ),
               );
-            }
           }
 
           if (phase == 'client_claims_parts_bought') {
@@ -745,12 +869,21 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     'You marked parts as bought. Waiting for ${widget.fundiName} to confirm.',
               ),
             );
+            if (canClientCancel)
+              timeline.add(
+                _cancelCard(
+                  job: job,
+                  isTravelling: isTravelling,
+                  siteDone: siteDone,
+                  transport: transport,
+                ),
+              );
             return _buildReversedList(timeline);
           } else if (phase == 'parts_confirmed_by_fundi' ||
               phase == 'fundi_working' ||
               status == 'in_progress' ||
               status.contains('completed')) {
-            if (phase != 'waiting_for_client_to_buy_parts') {
+            if (phase != 'waiting_for_client_to_buy_parts')
               timeline.add(
                 _timelineCard(
                   title: 'Fundi confirmed parts - Done',
@@ -759,7 +892,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   isDone: true,
                 ),
               );
-            }
           }
 
           if (phase == 'parts_confirmed_by_fundi') {
@@ -771,6 +903,15 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     'Fundi confirmed your parts are available. Waiting for him to tap Start Job.',
               ),
             );
+            if (canClientCancel)
+              timeline.add(
+                _cancelCard(
+                  job: job,
+                  isTravelling: isTravelling,
+                  siteDone: siteDone,
+                  transport: transport,
+                ),
+              );
             return _buildReversedList(timeline);
           }
 
@@ -782,6 +923,15 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     '${widget.fundiName} arrived at $location and is on site. Waiting for him to Start Job.',
               ),
             );
+            if (canClientCancel)
+              timeline.add(
+                _cancelCard(
+                  job: job,
+                  isTravelling: isTravelling,
+                  siteDone: siteDone,
+                  transport: transport,
+                ),
+              );
             return _buildReversedList(timeline);
           } else if (status == 'in_progress' ||
               phase == 'fundi_working' ||
@@ -808,18 +958,17 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           }
 
           if (status == 'job_completed' || status == 'pending_completion') {
-            int oldLabour = _toInt(labour); // 5000
+            int oldLabour = _toInt(labour);
             int newLabour = _toInt(
               reneg?['newLaborTotal'] ??
                   oldLabour + _toInt(reneg?['extraLabor'] ?? 0),
-            ); // 6000
-            int transport = _toInt(job['transportFee'] ?? 0); // 100
-            int newClientFee = (newLabour * 0.05).round(); // 300
-            int newTotalClient = newLabour + transport + newClientFee; // 6400
+            );
+            int transportVal = _toInt(job['transportFee'] ?? 0);
+            int newClientFee = (newLabour * 0.05).round();
+            int newTotalClient = newLabour + transportVal + newClientFee;
             int totalToRelease = _toInt(
               reneg?['newTotalClientPays'] ?? newTotalClient,
-            ); // 6400
-
+            );
             timeline.add(
               _timelineCard(
                 title:
@@ -831,7 +980,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 extra: Column(
                   children: [
                     _feeRow('Labour:', 'KES $newLabour'),
-                    _feeRow('Transport:', 'KES $transport'),
+                    _feeRow('Transport:', 'KES $transportVal'),
                     _feeRow('App Maintenance cost 5%:', 'KES $newClientFee'),
                     Divider(height: 6),
                     _feeRow(
@@ -873,6 +1022,39 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               ),
             );
           }
+
+          // FINAL CANCEL - added last so it appears FIRST after reversal = immediately visible
+          if (canClientCancel)
+            timeline.add(
+              _cancelCard(
+                job: job,
+                isTravelling: isTravelling,
+                siteDone: siteDone,
+                transport: transport,
+              ),
+            );
+          if (isStarted)
+            timeline.add(
+              Card(
+                color: Colors.green.shade50,
+                shape: RoundedRectangleBorder(
+                  side: BorderSide(color: Colors.green.shade200),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    'Job started - Cancel inactive for both. Must complete the job.',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.green.shade800,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            );
+
           return _buildReversedList(timeline);
         },
       ),
