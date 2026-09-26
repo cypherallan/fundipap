@@ -175,8 +175,12 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
       }
 
       if (!mounted) return;
+      int displayRelease = labour + transport;
+      if (reneg != null && reneg['newLaborTotal'] != null) {
+        displayRelease = _toInt(reneg['newLaborTotal']) + transport;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Released KES $totalClient to Fundi')),
+        SnackBar(content: Text('Released KES $displayRelease to Fundi')),
       );
       Navigator.of(context).push(
         MaterialPageRoute(
@@ -315,6 +319,18 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              Navigator.of(
+                context,
+              ).pop(); // notification opened with no stack, just close or go back
+            }
+          },
+        ),
         title: Text(
           'Fundipap',
           style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
@@ -600,7 +616,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
 
           // FIX: Add cancel BEFORE early return so it shows immediately after escrow
           if (!escrowDone) {
-            if (canClientCancel)
+            if (canClientCancel) {
               timeline.add(
                 _cancelCard(
                   job: job,
@@ -609,6 +625,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   transport: transport,
                 ),
               );
+            }
             return _buildReversedList(timeline);
           }
 
@@ -677,7 +694,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
 
-          if (siteDone)
+          if (siteDone) {
             timeline.add(
               _timelineCard(
                 title: 'Fundi arrived - Currently on site - Done',
@@ -686,9 +703,10 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 isDone: true,
               ),
             );
+          }
 
           if (!siteDone) {
-            if (canClientCancel)
+            if (canClientCancel) {
               timeline.add(
                 _cancelCard(
                   job: job,
@@ -697,6 +715,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   transport: transport,
                 ),
               );
+            }
             return _buildReversedList(timeline);
           }
 
@@ -734,7 +753,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ),
               ),
             );
-            if (canClientCancel)
+            if (canClientCancel) {
               timeline.add(
                 _cancelCard(
                   job: job,
@@ -743,6 +762,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   transport: transport,
                 ),
               );
+            }
             return _buildReversedList(timeline);
           } else if (reneg != null &&
               _toBool(reneg['requested']) &&
@@ -775,7 +795,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ),
               ),
             );
-            if (canClientCancel)
+            if (canClientCancel) {
               timeline.add(
                 _cancelCard(
                   job: job,
@@ -784,6 +804,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   transport: transport,
                 ),
               );
+            }
             return _buildReversedList(timeline);
           }
 
@@ -792,7 +813,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   renegStatus.contains('pending_extra_escrow') ||
                   phase == 'waiting_for_client_to_buy_parts' ||
                   phase == 'fundi_buying_parts')) {
-            if (!_toBool(reneg['requested']) || renegStatus != 'pending')
+            if (!_toBool(reneg['requested']) || renegStatus != 'pending') {
               timeline.add(
                 _timelineCard(
                   title: 'Price review - Reviewed - Done',
@@ -801,6 +822,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   isDone: true,
                 ),
               );
+            }
           }
 
           if (phase == 'waiting_for_client_to_buy_parts') {
@@ -850,7 +872,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               phase == 'fundi_working' ||
               status == 'in_progress' ||
               status.contains('completed')) {
-            if (phase != 'waiting_for_client_to_buy_parts')
+            if (phase != 'waiting_for_client_to_buy_parts') {
               timeline.add(
                 _timelineCard(
                   title: 'You bought parts - Done',
@@ -859,6 +881,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   isDone: true,
                 ),
               );
+            }
           }
 
           if (phase == 'client_claims_parts_bought') {
@@ -869,7 +892,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     'You marked parts as bought. Waiting for ${widget.fundiName} to confirm.',
               ),
             );
-            if (canClientCancel)
+            if (canClientCancel) {
               timeline.add(
                 _cancelCard(
                   job: job,
@@ -878,12 +901,13 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   transport: transport,
                 ),
               );
+            }
             return _buildReversedList(timeline);
           } else if (phase == 'parts_confirmed_by_fundi' ||
               phase == 'fundi_working' ||
               status == 'in_progress' ||
               status.contains('completed')) {
-            if (phase != 'waiting_for_client_to_buy_parts')
+            if (phase != 'waiting_for_client_to_buy_parts') {
               timeline.add(
                 _timelineCard(
                   title: 'Fundi confirmed parts - Done',
@@ -892,6 +916,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   isDone: true,
                 ),
               );
+            }
           }
 
           if (phase == 'parts_confirmed_by_fundi') {
@@ -903,7 +928,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     'Fundi confirmed your parts are available. Waiting for him to tap Start Job.',
               ),
             );
-            if (canClientCancel)
+            if (canClientCancel) {
               timeline.add(
                 _cancelCard(
                   job: job,
@@ -912,6 +937,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   transport: transport,
                 ),
               );
+            }
             return _buildReversedList(timeline);
           }
 
@@ -923,7 +949,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     '${widget.fundiName} arrived at $location and is on site. Waiting for him to Start Job.',
               ),
             );
-            if (canClientCancel)
+            if (canClientCancel) {
               timeline.add(
                 _cancelCard(
                   job: job,
@@ -932,6 +958,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   transport: transport,
                 ),
               );
+            }
             return _buildReversedList(timeline);
           } else if (status == 'in_progress' ||
               phase == 'fundi_working' ||
