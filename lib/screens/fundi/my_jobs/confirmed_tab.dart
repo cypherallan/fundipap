@@ -482,12 +482,13 @@ class _VisitCustomerScreenState extends State<_VisitCustomerScreen> {
       double lng = (widget.job['customerLng'] ?? widget.job['lng'] ?? 34.7680)
           .toDouble();
       double d = Geolocator.distanceBetween(p.latitude, p.longitude, lat, lng);
-      if (mounted)
+      if (mounted) {
         setState(() {
           currentPos = p;
           distance = d;
           loading = false;
         });
+      }
       try {
         await FirebaseFirestore.instance
             .collection('jobs')

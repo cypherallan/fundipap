@@ -198,9 +198,63 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             !isStarted &&
             !isCancelled;
 
+        Widget fixedCancelBtn() {
+          return Container(
+            padding: EdgeInsets.fromLTRB(
+              12,
+              8,
+              12,
+              12 + MediaQuery.of(context).padding.bottom,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: Color(0x1A000000))),
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: Colors.red.shade400),
+                  foregroundColor: Colors.red.shade700,
+                ),
+                onPressed: () => JobCancelService.showCancelDialog(
+                  context: context,
+                  jobId: jobId,
+                  job: job,
+                  isClient: false,
+                ),
+                child: Text(
+                  'CANCEL JOB',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        Widget buildWithFixedCancel(Widget list) {
+          if (!canFundiCancel) return list;
+          return Column(
+            children: [
+              Expanded(child: list),
+              fixedCancelBtn(),
+            ],
+          );
+        }
+
         if (isCancelled) {
           return Scaffold(
             appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).canPop()
+                    ? Navigator.of(context).pop()
+                    : Navigator.of(context).maybePop(),
+              ),
               title: Text(
                 clientName,
                 style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
@@ -403,6 +457,12 @@ class FundiCustomerTimelinePage extends StatelessWidget {
           }
           return Scaffold(
             appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).canPop()
+                    ? Navigator.of(context).pop()
+                    : Navigator.of(context).maybePop(),
+              ),
               title: Text(
                 clientName,
                 style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
@@ -441,75 +501,21 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               isDone: true,
             ),
           );
-          // Cancel allowed before travelling even without escrow
-          if (canFundiCancel) {
-            timeline.add(
-              Card(
-                color: Colors.red.shade50,
-                shape: RoundedRectangleBorder(
-                  side: BorderSide(color: Colors.red.shade200),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.cancel_outlined,
-                            size: 18,
-                            color: Colors.red.shade700,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Cancel this job?',
-                            style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                              color: Colors.red.shade800,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Before travelling - client gets full refund, you get 0. Will affect rating.',
-                        style: GoogleFonts.inter(fontSize: 11),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Colors.red.shade400),
-                            foregroundColor: Colors.red.shade700,
-                          ),
-                          icon: const Icon(Icons.cancel, size: 16),
-                          label: Text(
-                            'CANCEL JOB - FULL REFUND TO CLIENT',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          onPressed: () => JobCancelService.showCancelDialog(
-                            context: context,
-                            jobId: jobId,
-                            job: job,
-                            isClient: false,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }
+          Widget list = ListView.separated(
+            padding: const EdgeInsets.all(12),
+            itemCount: timeline.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (_, i) => timeline[i],
+          );
+
           return Scaffold(
             appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).canPop()
+                    ? Navigator.of(context).pop()
+                    : Navigator.of(context).maybePop(),
+              ),
               title: Text(
                 clientName,
                 style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
@@ -517,12 +523,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               backgroundColor: FundipapColors.blackGray,
               foregroundColor: Colors.white,
             ),
-            body: ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: timeline.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (_, i) => timeline[i],
-            ),
+            body: buildWithFixedCancel(list),
           );
         }
 
@@ -984,73 +985,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
           ),
         );
 
-        // CANCEL - FUNDI ONLY BEFORE TRAVELLING, LOCKED AFTER
-        if (canFundiCancel) {
-          timeline.add(
-            Card(
-              color: Colors.red.shade50,
-              shape: RoundedRectangleBorder(
-                side: BorderSide(color: Colors.red.shade200),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.cancel_outlined,
-                          size: 18,
-                          color: Colors.red.shade700,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Cancel this job?',
-                          style: GoogleFonts.montserrat(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
-                            color: Colors.red.shade800,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Before travelling - client gets full KES $fundiSeesWaiting refund, you get 0. Will affect badge.',
-                      style: GoogleFonts.inter(fontSize: 11),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: Colors.red.shade400),
-                          foregroundColor: Colors.red.shade700,
-                        ),
-                        icon: const Icon(Icons.cancel, size: 16),
-                        label: Text(
-                          'CANCEL JOB - FULL REFUND TO CLIENT',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        onPressed: () => JobCancelService.showCancelDialog(
-                          context: context,
-                          jobId: jobId,
-                          job: job,
-                          isClient: false,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        } else if (!isStarted && (travelling || siteDone)) {
+        if (!isStarted && (travelling || siteDone)) {
           timeline.add(
             Card(
               color: Colors.grey.shade100,
@@ -1089,8 +1024,21 @@ class FundiCustomerTimelinePage extends StatelessWidget {
           );
         }
 
+        Widget list = ListView.separated(
+          padding: const EdgeInsets.all(12),
+          itemCount: timeline.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (_, i) => timeline[i],
+        );
+
         return Scaffold(
           appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.of(context).canPop()
+                  ? Navigator.of(context).pop()
+                  : Navigator.of(context).maybePop(),
+            ),
             title: Text(
               clientName,
               style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
@@ -1098,12 +1046,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             backgroundColor: FundipapColors.blackGray,
             foregroundColor: Colors.white,
           ),
-          body: ListView.separated(
-            padding: const EdgeInsets.all(12),
-            itemCount: timeline.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (_, i) => timeline[i],
-          ),
+          body: buildWithFixedCancel(list),
         );
       },
     );
