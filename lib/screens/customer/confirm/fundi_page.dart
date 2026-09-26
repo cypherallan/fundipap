@@ -34,15 +34,14 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
   @override
   bool loading = true;
 
-  // TRANSPORT + FEE STATE
   double distanceKm = 0;
-  int transportFee = 0;
+  int transportFee = 100; // START AT 100 NOT 0
   String transportMode = 'boda';
   int labor = 0;
-  int clientAppFee = 0; // 5% client sees
-  int fundiAppFee = 0; // 5% hidden, for DB
-  int totalClientPays = 0; // 5350
-  int fundiReceives = 0; // 4850
+  int clientAppFee = 0;
+  int fundiAppFee = 0;
+  int totalClientPays = 0;
+  int fundiReceives = 0;
   bool transportLoading = true;
 
   @override
@@ -75,30 +74,48 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                   as num)
               .toInt();
       int trans = t['fee'] as int;
-      int cFee = (lab * 0.05).round(); // client 5%
-      int fFee = (lab * 0.05).round(); // fundi 5% - hidden here
+      double km = t['km'] as double;
+
+      // YOUR RULE: min 100 if <=1km, never <100
+      if (trans < 100) trans = 100;
+      if (km <= 1.0 && trans < 100) trans = 100;
+
+      int cFee = (lab * 0.05).round();
+      int fFee = (lab * 0.05).round();
       setState(() {
-        distanceKm = t['km'] as double;
-        transportFee = trans;
+        distanceKm = km;
+        transportFee = trans; // always >=100
         transportMode = t['mode'] as String;
         labor = lab;
         clientAppFee = cFee;
         fundiAppFee = fFee;
         totalClientPays = lab + trans + cFee; // 5000+100+250=5350
-        fundiReceives = lab - fFee + trans; // 4850 - for DB only
+        fundiReceives = lab - fFee + trans;
         transportLoading = false;
       });
     } catch (_) {
-      if (mounted) setState(() => transportLoading = false);
+      if (mounted) {
+        setState(() {
+          // fallback to min rule even on error
+          if (transportFee < 100) transportFee = 100;
+          if (labor > 0) {
+            clientAppFee = (labor * 0.05).round();
+            fundiAppFee = (labor * 0.05).round();
+            totalClientPays = labor + transportFee + clientAppFee;
+            fundiReceives = labor - fundiAppFee + transportFee;
+          }
+          transportLoading = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (loading) {
+    if (loading)
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
     var combined = {...?user, ...?fundi, ...widget.bidData};
+    int effectiveTransport = transportFee < 100 ? 100 : transportFee;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F6F6),
@@ -116,10 +133,17 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         ],
       ),
       bottomNavigationBar: ConfirmFundiBottomActions(
-        bidData: widget.bidData,
+        bidData: {
+          ...widget.bidData,
+          'transportFee': effectiveTransport,
+          'distanceKm': distanceKm,
+        },
         labor: labor,
-        transportFee: transportFee,
-        total: totalClientPays, // BUTTON SHOWS ONLY TOTAL 5350
+        transportFee: effectiveTransport,
+        appFee: clientAppFee,
+        total: totalClientPays > 0
+            ? totalClientPays
+            : labor + effectiveTransport + clientAppFee,
         distanceKm: distanceKm,
         transportMode: transportMode,
         onReject: rejectFundi,
@@ -128,7 +152,7 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
           clientAppFee: clientAppFee,
           fundiAppFee: fundiAppFee,
           fundiReceives: fundiReceives,
-          transportFee: transportFee,
+          transportFee: effectiveTransport,
           labor: labor,
         ),
         onReport: reportFraud,
@@ -136,105 +160,18 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ConfirmFundiProfileCard(combined: combined),
             const SizedBox(height: 12),
             ConfirmFundiDetailsSection(combined: combined),
             const SizedBox(height: 12),
-            // RECEIPT CARD - CLIENT SEES THIS
-            Card(
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: Colors.black12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: transportLoading
-                    ? Row(
-                        children: [
-                          SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Calculating...',
-                            style: GoogleFonts.inter(fontSize: 12),
-                          ),
-                        ],
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.location_on,
-                                size: 18,
-                                color: Colors.blue.shade700,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Fundi is ${distanceKm < 1 ? '${(distanceKm * 1000).toStringAsFixed(0)}m' : '${distanceKm.toStringAsFixed(1)}km'} away',
-                                style: GoogleFonts.montserrat(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              Spacer(),
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  transportMode,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 12),
-                          _receiptRow('Fundi labour charges:', 'KES $labor'),
-                          SizedBox(height: 6),
-                          _receiptRow('Transport cost:', 'KES $transportFee'),
-                          SizedBox(height: 6),
-                          _receiptRow(
-                            'App maintenance cost:',
-                            'KES $clientAppFee',
-                          ),
-                          Divider(height: 20),
-                          _receiptRow(
-                            'Total to pay:',
-                            'KES $totalClientPays',
-                            isBold: true,
-                          ),
-                          SizedBox(height: 6),
-                          Text(
-                            'This amount will be locked and paid after job completion',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              color: Colors.black54,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-            const SizedBox(height: 12),
             ConfirmFundiBidCard(
               jobData: widget.jobData,
-              bidData: widget.bidData,
+              bidData: {
+                ...widget.bidData,
+                'transportFee': effectiveTransport,
+                'distanceKm': distanceKm,
+              },
             ),
             const SizedBox(height: 16),
             ConfirmFundiReviews(fundiId: widget.bidData['fundiId']),
@@ -242,29 +179,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
           ],
         ),
       ),
-    );
-  }
-
-  Widget _receiptRow(String label, String value, {bool isBold = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            color: Colors.black54,
-            fontWeight: isBold ? FontWeight.w700 : FontWeight.w400,
-          ),
-        ),
-        Text(
-          value,
-          style: GoogleFonts.montserrat(
-            fontSize: 13,
-            fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
-          ),
-        ),
-      ],
     );
   }
 }

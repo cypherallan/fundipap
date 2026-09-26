@@ -46,7 +46,7 @@ class FundiEarningsCard extends StatelessWidget {
           ),
           // NEW FORMULA TEXT
           Text(
-            'From $completedJobs jobs • After 5% app fee • Formula: Labour -5% + Transport = Payout',
+            'From $completedJobs jobs • After 5% app maintenance cost • Formula: Labour -5% + Transport = Payout',
             style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600),
           ),
           Text(

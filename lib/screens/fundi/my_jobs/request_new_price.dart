@@ -179,13 +179,9 @@ class _FundiRequestNewPriceScreenState
           });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Request sent: New Total KES $newTotalClient (Labour $newLaborTotal + Transport $transport + App $newClientFee)',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Request sent to client)')));
       Navigator.pop(context);
     } catch (e) {
       ScaffoldMessenger.of(
@@ -231,14 +227,14 @@ class _FundiRequestNewPriceScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Current: Labour KES $oldLabor + Transport KES $transport + App KES $oldClientFee = KES $oldTotalClient',
+                    'Current: Labour KES $oldLabor + Transport KES $transport = KES ${oldLabor + transport}',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w700,
                       fontSize: 11,
                     ),
                   ),
                   Text(
-                    'Transport does not change. App fee = 5% of labour.',
+                    'Transport does not change. App Maintenance Cost = 5% of labour.',
                     style: GoogleFonts.inter(
                       fontSize: 10,
                       color: Colors.black54,
@@ -417,7 +413,7 @@ class _FundiRequestNewPriceScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Bill for Client - NEW FORMULA',
+                    'Bill Summary - NEW PRICE',
                     style: GoogleFonts.montserrat(
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
@@ -427,34 +423,24 @@ class _FundiRequestNewPriceScreenState
                   const SizedBox(height: 8),
                   _billRow('Old Labour:', 'KES $oldLabor'),
                   _billRow(
+                    'Extra Labour:',
+                    'KES ${newLaborTotal - oldLabor}',
+                    highlight: true,
+                  ),
+                  _billRow(
                     'New Labour Total:',
                     'KES $newLaborTotal',
                     highlight: true,
                   ),
                   _billRow('Transport (same):', 'KES $transport'),
-                  _billRow(
-                    'App maintenance 5% of $newLaborTotal:',
-                    'KES $newClientFee',
-                  ),
                   const Divider(color: Colors.white24),
-                  _billRow('Old Total Paid:', 'KES $oldTotalClient'),
-                  _billRow(
-                    'New Total to Pay:',
-                    'KES $newTotalClient',
-                    highlightYellow: true,
-                  ),
+                  _billRow('Old Total Paid:', 'KES ${oldLabor + transport}'),
                   _billRow(
                     'Extra to Lock Now:',
-                    'KES $extraToLock',
+                    'KES ${newLaborTotal - oldLabor}',
                     highlightYellow: true,
                   ),
                   const SizedBox(height: 6),
-                  _billRow(
-                    'Fundi will receive:',
-                    'KES $newFundiReceives = $newLaborTotal - $newFundiFee + $transport',
-                    small: true,
-                  ),
-                  const SizedBox(height: 4),
                   Text(
                     'Parts: ${partsNeeded.where((p) => (p['name']?.text.trim().isNotEmpty ?? false)).length} items - KES $partsEstimateTotal separate (client buys)',
                     style: GoogleFonts.inter(
@@ -559,7 +545,7 @@ class _FundiRequestNewPriceScreenState
                 child: uploading
                     ? const CircularProgressIndicator()
                     : Text(
-                        'Send Request NEW TOTAL KES $newTotalClient (Extra KES $extraToLock)',
+                        'Send Request Extra to Pay KES ${newLaborTotal - oldLabor}',
                         style: GoogleFonts.montserrat(
                           fontWeight: FontWeight.w800,
                         ),

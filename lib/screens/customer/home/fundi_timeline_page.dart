@@ -180,11 +180,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Released KES $totalClient - Fundi gets KES $fundiReceives',
-          ),
-        ),
+        SnackBar(content: Text('Released KES $totalClient to Fundi')),
       );
 
       Navigator.of(context).push(
@@ -450,7 +446,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               _timelineCard(
                 title: 'Job completed by ${widget.fundiName} - Rated - Done',
                 body:
-                    'You rated ${job['clientRating'] ?? 5} stars - KES ${job['totalReleasedAmount'] ?? alreadyLocked} released. Fundi received $fundiReceives (after app fee).',
+                    'You rated ${job['clientRating'] ?? 5} stars - KES ${job['totalReleasedAmount'] ?? alreadyLocked} released. Fundi received $fundiReceives (after app maintenance cost).',
                 icon: Icons.check_circle,
                 isDone: true,
               ),
@@ -476,14 +472,18 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             ),
           );
 
+          final fundiName =
+              (job['assignedFundiName'] ?? job['fundiName'] ?? 'your fundi')
+                  .toString();
+
           timeline.add(
             _timelineCard(
               title: escrowDone
-                  ? 'Escrow locked - Done KES $alreadyLocked'
-                  : 'Lock KES $totalToPay to escrow',
+                  ? 'Escrow locked - KES $alreadyLocked secured'
+                  : 'Lock KES $totalToPay to escrow now',
               body: escrowDone
-                  ? 'KES $alreadyLocked secured\nLabour $labour + Transport $transport + App $clientAppFee'
-                  : 'You accepted bid. Receipt: Labour $labour + Transport $transport + App $clientAppFee = Total KES $totalToPay. Secure it to start.',
+                  ? 'KES $alreadyLocked is secured. It will be released to $fundiName after you confirm the job is completed.'
+                  : 'This amount will be held in FundiApp and only released to Fundi $fundiName after you confirm the job is completed.',
               icon: Icons.lock,
               isDone: escrowDone,
               action: !escrowDone
@@ -491,32 +491,13 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: FundipapColors.primaryYellow,
                         foregroundColor: Colors.black,
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       onPressed: () => _payEscrow(widget.jobId, agreed),
-                      child: Text('Pay KES ${totalToPay} to Escrow'),
-                    )
-                  : null,
-              extra: !escrowDone
-                  ? Container(
-                      margin: EdgeInsets.only(top: 8),
-                      padding: EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        children: [
-                          _feeRow('Fundi labour:', 'KES $labour'),
-                          _feeRow(transportLabel, 'KES $transport'),
-                          _feeRow('App fee:', 'KES $clientAppFee'),
-                          Divider(height: 8),
-                          _feeRow(
-                            'Total to lock:',
-                            'KES $totalToPay',
-                            bold: true,
-                          ),
-                        ],
-                      ),
+                      child: Text('Pay KES $totalToPay to Escrow'),
                     )
                   : null,
             ),
@@ -588,7 +569,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             );
           }
 
-          if (siteDone)
+          if (siteDone) {
             timeline.add(
               _timelineCard(
                 title: 'Fundi arrived - Currently on site - Done',
@@ -597,6 +578,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 isDone: true,
               ),
             );
+          }
           if (!siteDone) return _buildReversedList(timeline);
 
           if (needsExtraEscrow) {
@@ -686,11 +668,39 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           }
 
           if (phase == 'waiting_for_client_to_buy_parts') {
+            final oldLabor = _toInt(
+              reneg?['oldLabor'] ?? job['laborCost'] ?? job['agreedPrice'] ?? 0,
+            ); // 5000
+            final transport = _toInt(job['transportFee'] ?? 0); // 100
+            final oldClientFee = (oldLabor * 0.05).round(); // 250
+            final alreadyLockedBase =
+                oldLabor +
+                transport +
+                oldClientFee; // 5350 - base, never changes
+
+            final extraLaborVal = _toInt(
+              job['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0,
+            ); // 1000
+            final extraAppVal = _toInt(
+              job['extraClientAppFee'] ??
+                  reneg?['extraApp'] ??
+                  (extraLaborVal * 0.05).round(),
+            ); // 50
+            final extraToLockVal =
+                extraLaborVal +
+                extraAppVal; // 1050 - RECALC, don't trust stored double value
+
+            final newTotalVal =
+                alreadyLockedBase + extraToLockVal; // 5350 + 1050 = 6400 ✅
+            final totalLockedNow = _toInt(
+              job['escrowAmount'] ?? newTotalVal,
+            ); // 6400 after payment
+
             timeline.add(
               _timelineCard(
                 title: 'You will buy parts - Confirm when bought',
                 body:
-                    'Extra KES ${_toInt(job['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0)} locked. Buy the listed parts then confirm.',
+                    'Extra KES $extraToLockVal locked (Labour $extraLaborVal + App $extraAppVal). Total locked KES $totalLockedNow. Buy the listed parts then confirm.',
                 icon: Icons.shopping_cart,
                 isDone: false,
                 action: ElevatedButton(
@@ -709,14 +719,13 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ),
               ),
             );
-            return _buildReversedList(timeline);
           }
           if (phase == 'client_claims_parts_bought' ||
               phase == 'parts_confirmed_by_fundi' ||
               phase == 'fundi_working' ||
               status == 'in_progress' ||
               status.contains('completed')) {
-            if (phase != 'waiting_for_client_to_buy_parts')
+            if (phase != 'waiting_for_client_to_buy_parts') {
               timeline.add(
                 _timelineCard(
                   title: 'You bought parts - Done',
@@ -725,6 +734,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   isDone: true,
                 ),
               );
+            }
           }
 
           if (phase == 'client_claims_parts_bought') {
@@ -740,7 +750,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               phase == 'fundi_working' ||
               status == 'in_progress' ||
               status.contains('completed')) {
-            if (phase != 'waiting_for_client_to_buy_parts')
+            if (phase != 'waiting_for_client_to_buy_parts') {
               timeline.add(
                 _timelineCard(
                   title: 'Fundi confirmed parts - Done',
@@ -749,6 +759,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                   isDone: true,
                 ),
               );
+            }
           }
 
           if (phase == 'parts_confirmed_by_fundi') {
@@ -797,37 +808,37 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           }
 
           if (status == 'job_completed' || status == 'pending_completion') {
-            int newLabour = _toInt(reneg?['newLaborTotal'] ?? labour);
-            int newTotalClient = _toInt(
-              reneg?['newTotalClientPays'] ?? totalToPay,
-            );
-            int totalToRelease = newTotalClient > 0
-                ? newTotalClient
-                : totalToPay;
-            int finalFundiGets = _toInt(
-              reneg?['newFundiReceives'] ?? fundiReceives,
-            );
+            int oldLabour = _toInt(labour); // 5000
+            int newLabour = _toInt(
+              reneg?['newLaborTotal'] ??
+                  oldLabour + _toInt(reneg?['extraLabor'] ?? 0),
+            ); // 6000
+            int transport = _toInt(job['transportFee'] ?? 0); // 100
+            int newClientFee = (newLabour * 0.05).round(); // 300
+            int newTotalClient = newLabour + transport + newClientFee; // 6400
+            int totalToRelease = _toInt(
+              reneg?['newTotalClientPays'] ?? newTotalClient,
+            ); // 6400
 
             timeline.add(
               _timelineCard(
                 title:
                     'Job Completed by ${widget.fundiName} - Confirm & Release KES $totalToRelease',
                 body:
-                    'Fundi marked job as complete. Confirm to release KES $totalToRelease\nReceipt: Labour $newLabour + Transport $transport + App ${(newLabour * 0.05).round()} = $totalToRelease\nFundi will receive KES $finalFundiGets after app fee.',
+                    'Fundi marked job as complete. Confirm to release KES $totalToRelease',
                 icon: Icons.verified,
                 isDone: false,
                 extra: Column(
                   children: [
                     _feeRow('Labour:', 'KES $newLabour'),
-                    _feeRow(transportLabel, 'KES $transport'),
-                    _feeRow('App fee 5%:', 'KES ${(newLabour * 0.05).round()}'),
+                    _feeRow('Transport:', 'KES $transport'),
+                    _feeRow('App Maintenance cost 5%:', 'KES $newClientFee'),
                     Divider(height: 6),
                     _feeRow(
                       'Total you release:',
                       'KES $totalToRelease',
                       bold: true,
                     ),
-                    _feeRow('Fundi gets:', 'KES $finalFundiGets'),
                   ],
                 ),
                 action: SizedBox(

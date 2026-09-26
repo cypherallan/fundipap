@@ -170,34 +170,87 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
                 0)
             .toDouble();
 
-    // REAL TRANSPORT NOW
+    // REAL TRANSPORT WITH MIN 100 RULE
     var transport = await TransportCalculator.calc(
       jobData: jobData,
       fundiId: bidData['fundiId'],
     );
     int transportFee = transport['fee'] as int;
+    if (transportFee < 100) transportFee = 100; // YOUR RULE: min 100 if <=1km
     double km = transport['km'] as double;
     String mode = transport['mode'] as String;
-    int totalLocked = finalPrice.toInt() + transportFee;
+
+    int labour = finalPrice.toInt();
+    if (labour == 0) labour = (jobData['budgetMax'] ?? 1000) as int;
+    int clientAppFee = (labour * 0.05).round(); // 250 client sees
+    int fundiAppFee = (labour * 0.05).round(); // 250 hidden
+    int adminComm = clientAppFee + fundiAppFee; // 500
+    int totalLocked =
+        labour + transportFee + clientAppFee; // 5000+100+250=5350 CLIENT
+    int fundiPayout = labour - fundiAppFee + transportFee; // 4850 FUNDI
 
     await jobRef.update({
       'assignedFundi': bidData['fundiId'],
       'assignedFundiName': bidData['fundiName'],
       'assignedFundiPhone': bidData['fundiPhone'] ?? '',
       'acceptedBidId': bidRef.id,
-      'agreedPrice': finalPrice, // keep old field
-      'laborCost': finalPrice,
-      'transportFee': transportFee,
+      'agreedPrice': labour,
+      'laborCost': labour,
+      'transportFee': transportFee, // always >=100
       'transportDistanceKm': km,
       'transportMode': mode,
+      'clientAppFee': clientAppFee,
+      'fundiAppFee': fundiAppFee,
+      'adminCommission': adminComm,
       'totalCost': totalLocked,
-      'escrowAmount': totalLocked,
-      'escrowJob': finalPrice.toInt(),
+      'totalClientPays': totalLocked,
+      'fundiReceives': fundiPayout,
+      'fundiReceivesBreakdown': {
+        'labour': labour,
+        'transport': transportFee,
+        'appFee': -fundiAppFee,
+        'total': fundiPayout,
+      },
+      'escrowAmount': 0, // stays 0 until Mpesa paid
+      'escrowStatus': 'pending',
+      'escrowJob': labour,
       'escrowTransport': transportFee,
       'status': 'assigned',
-      'escrowStatus': 'pending',
+      'acceptedBidAmount': labour,
       'updatedAt': FieldValue.serverTimestamp(),
+      'fundiHasUnread': true,
     });
-    // ... rest same as before, set escrowTransactions amount = totalLocked
+
+    await bidRef.update({
+      'status': 'accepted',
+      'acceptedAt': FieldValue.serverTimestamp(),
+      'acceptedPrice': labour,
+      'transportFee': transportFee,
+      'clientAppFee': clientAppFee,
+      'fundiAppFee': fundiAppFee,
+      'totalCost': totalLocked,
+      'fundiReceives': fundiPayout,
+    });
+
+    await FirebaseFirestore.instance
+        .collection('escrowTransactions')
+        .doc(jobId)
+        .set({
+          'jobId': jobId,
+          'clientId': FirebaseAuth.instance.currentUser!.uid,
+          'fundiId': bidData['fundiId'],
+          'amount': totalLocked, // 5350 to be locked
+          'laborAmount': labour,
+          'transportAmount': transportFee,
+          'clientAppFee': clientAppFee,
+          'fundiAppFee': fundiAppFee,
+          'adminCommission': adminComm,
+          'fundiPayout': fundiPayout,
+          'status': 'pending_payment',
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+    if (!mounted) return;
+    Navigator.pop(context, true);
   }
 }

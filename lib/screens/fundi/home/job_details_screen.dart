@@ -110,7 +110,7 @@ class JobDetailsScreen extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            'Labour + Transport (App fee deducted on payout)',
+                            'Labour + Transport (App Maintenance Cost deducted on payout)',
                             style: GoogleFonts.inter(
                               fontSize: 10,
                               color: Colors.black54,

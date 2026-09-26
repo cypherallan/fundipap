@@ -141,47 +141,27 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               0,
         );
         int transport = _toInt(job['transportFee'] ?? 0);
-        int clientAppFee = _toInt(
-          job['clientAppFee'] ?? (labour * 0.05).round(),
-        );
         int fundiAppFee = _toInt(job['fundiAppFee'] ?? (labour * 0.05).round());
-        int totalClientPays = _toInt(
-          job['totalClientPays'] ??
-              job['totalCost'] ??
-              labour + transport + clientAppFee,
-        );
         int fundiReceives = _toInt(
           job['fundiReceives'] ??
               job['fundiPayoutAmount'] ??
               labour - fundiAppFee + transport,
         );
-        int fundiSeesWaiting = labour + transport;
+        int fundiSeesWaiting = labour + transport; // 5100 FUNDI VIEW
 
         var reneg = job['renegotiation'] as Map<String, dynamic>?;
         String phase = (reneg?['currentPhase'] ?? '').toString();
         String rs = (reneg?['status'] ?? '').toString();
 
-        int newLabour = _toInt(reneg?['newLaborTotal'] ?? labour);
-        int newClientFee = _toInt(
-          reneg?['newClientAppFee'] ?? (newLabour * 0.05).round(),
-        );
+        int newLabour = _toInt(reneg?['newLaborTotal'] ?? labour); // 6000
         int newFundiFee = _toInt(
           reneg?['newFundiAppFee'] ?? (newLabour * 0.05).round(),
-        );
-        int newTotalClient = _toInt(
-          reneg?['newTotalClientPays'] ?? newLabour + transport + newClientFee,
-        );
-        int newFundiReceives = _toInt(
-          reneg?['newFundiReceives'] ?? newLabour - newFundiFee + transport,
-        );
-        int extraLabour = _toInt(reneg?['extraLabor'] ?? 0);
-        int extraToLock = _toInt(
-          reneg?['extraToLock'] ??
-              reneg?['extraEscrowAmount'] ??
-              newTotalClient - totalClientPays,
-        );
-        if (extraToLock < 0)
-          extraToLock = _toInt(job['extraToLock'] ?? extraLabour);
+        ); // 300
+        int extraLabour = _toInt(
+          reneg?['extraLabor'] ?? job['extraLaborAmount'] ?? 0,
+        ); // 1000 FUNDI
+        int newTotalFundiLocked = newLabour + transport; // 6100 FUNDI
+        int newFundiReceivesVal = newLabour - newFundiFee + transport; // 5800
 
         int releasedAmount = _toInt(
           job['fundiPayoutAmount'] ??
@@ -192,7 +172,6 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             .toString();
         bool fundiConfirmedPayment = _toBool(job['fundiConfirmedPayment']);
         bool fundiRatedClient = _toBool(job['fundiRated']);
-
         bool siteDone =
             _toBool(job['siteVisitDone']) || _toBool(job['siteVisited']);
         bool travelling = _toBool(job['travelling']) || status == 'travelling';
@@ -220,7 +199,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'KES $releasedAmount Released!',
+                        'KES $fundiReceives Released!',
                         style: GoogleFonts.montserrat(
                           fontWeight: FontWeight.w800,
                           fontSize: 16,
@@ -241,19 +220,18 @@ class FundiCustomerTimelinePage extends StatelessWidget {
                               'App maintenance cost:',
                               '- KES $fundiAppFee',
                             ),
-                            Divider(),
+                            const Divider(),
                             _feeRow(
                               'Total to receive:',
                               'KES $fundiReceives',
                               bold: true,
                             ),
-                            _feeRow('Client paid:', 'KES $totalClientPays'),
                           ],
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'KES $releasedAmount has been released by $clientName. Confirm your M-Pesa. Client paid $totalClientPays you get $fundiReceives after fee.',
+                        'KES $fundiReceives has been released by $clientName. Confirm your M-Pesa.',
                         style: GoogleFonts.inter(fontSize: 11),
                         textAlign: TextAlign.center,
                       ),
@@ -269,7 +247,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
                           onPressed: () =>
                               _confirmPaymentReceived(context, clientId),
                           child: Text(
-                            'YES, I HAVE RECEIVED KES $releasedAmount',
+                            'YES, I HAVE RECEIVED KES $fundiReceives',
                             style: GoogleFonts.montserrat(
                               fontWeight: FontWeight.w800,
                               fontSize: 11,
@@ -291,7 +269,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
                 iconColor: Colors.green,
                 title: 'KES $releasedAmount confirmed - Done',
                 message:
-                    'You confirmed receipt: Labour $labour + Transport $transport - App $fundiAppFee = $fundiReceives (Client paid $totalClientPays)',
+                    'You confirmed receipt: Labour KES $labour + Transport KES $transport - App KES $fundiAppFee = KES $fundiReceives',
                 time: 'Done',
                 isDone: true,
               ),
@@ -397,7 +375,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               title:
                   'Waiting for client to pay KES $fundiSeesWaiting to escrow',
               message:
-                  'Client $clientName has confirmed you but has NOT locked money yet. You cannot start site visit until escrow is held. (Labour $labour + Transport $transport = $fundiSeesWaiting, client actually pays $totalClientPays inc. app fee)',
+                  'Client $clientName has confirmed you but has NOT locked money yet. You cannot start site visit until escrow is held.\n\nLabour KES $labour + Transport KES $transport = KES $fundiSeesWaiting',
             ),
           );
           timeline.add(
@@ -431,14 +409,36 @@ class FundiCustomerTimelinePage extends StatelessWidget {
         }
 
         if (phase == 'waiting_for_client_to_buy_parts') {
+          final oldLabor = _toInt(
+            reneg?['oldLabor'] ?? job['agreedPrice'] ?? job['laborCost'] ?? 0,
+          ); // 5000
+          final extraLabourInner = _toInt(
+            job['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0,
+          ); // 1000
+          final fundiOldLocked = oldLabor + transport; // 5100
+          final fundiNewLocked = fundiOldLocked + extraLabourInner; // 6100
           timeline.add(
             OrangeAnimatedWaitingCard(
               title: 'Waiting for client to buy materials',
               message:
-                  'Client locked extra KES $extraToLock (Labour $newLabour + Transport $transport + App $newClientFee = $newTotalClient). Waiting for ${parts.length} items.',
+                  'Client locked extra labour KES $extraLabourInner. Total locked KES $fundiNewLocked. Waiting for ${parts.length} items to be delivered.',
             ),
           );
         } else if (phase == 'client_claims_parts_bought') {
+          final oldLabour = _toInt(
+            job['agreedPrice'] ?? job['laborCost'] ?? 5000,
+          );
+          final newLabourInner = _toInt(
+            reneg?['newLaborTotal'] ??
+                oldLabour +
+                    _toInt(
+                      job['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0,
+                    ),
+          );
+          final extraLabourInner = _toInt(
+            job['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0,
+          );
+          final newTotalFundiLockedInner = newLabourInner + transport;
           timeline.add(
             _card(
               color: Colors.blue.shade50,
@@ -447,7 +447,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               iconColor: Colors.blue.shade800,
               title: 'Client says materials bought',
               message:
-                  'Client bought parts. Total locked $totalClientPays. Confirm to show START WORK. You will receive $fundiReceives',
+                  'Client bought parts. Total locked KES $newTotalFundiLockedInner secured (Extra $extraLabourInner). Confirm to show START WORK.',
               time: 'Now',
               isCurrent: true,
               action: ElevatedButton(
@@ -466,9 +466,9 @@ class FundiCustomerTimelinePage extends StatelessWidget {
         } else if (rs.contains('pending_extra_escrow')) {
           timeline.add(
             OrangeAnimatedWaitingCard(
-              title: 'Waiting for client to lock extra KES $extraToLock',
+              title: 'Waiting for client to lock extra KES $extraLabour',
               message:
-                  'You requested extra labour KES $extraLabour. New total client pays KES $newTotalClient = Labour $newLabour + Transport $transport + App $newClientFee. Extra to lock now KES $extraToLock. Client must lock before you start.',
+                  'You requested extra labour KES $extraLabour. New total KES $newTotalFundiLocked = Labour $newLabour + Transport $transport. Extra to lock now KES $extraLabour. Client must lock before you start.',
             ),
           );
         } else if (rs == 'pending' || rs == 'countered_by_fundi') {
@@ -476,20 +476,161 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             OrangeAnimatedWaitingCard(
               title: 'Waiting for client to confirm price review',
               message:
-                  'You sent new price: Labour $newLabour + Transport $transport + App $newClientFee = Total KES $newTotalClient (Extra KES $extraToLock). Waiting for $clientName to review.',
+                  'You requested new labour charge KES $extraLabour. Waiting for $clientName to review.',
             ),
           );
         } else if (phase == 'completed_by_fundi' ||
             status == 'job_completed' ||
             status == 'pending_completion') {
+          final oldLabour = _toInt(
+            reneg?['oldLabor'] ??
+                job['agreedPrice'] ??
+                job['laborCost'] ??
+                5000,
+          );
+          final newLabourInner = _toInt(
+            reneg?['newLaborTotal'] ??
+                oldLabour +
+                    _toInt(
+                      job['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0,
+                    ),
+          );
+          final extraLabourInner = (newLabourInner - oldLabour).clamp(
+            0,
+            999999,
+          );
+          final newFundiFeeInner = (newLabourInner * 0.05).round();
+          final totalCustomerLocked = newLabourInner + transport;
+          final fundiReceivesInner =
+              newLabourInner - newFundiFeeInner + transport;
+          Widget receiptRow(
+            String label,
+            String value, {
+            bool bold = false,
+            bool total = false,
+            bool deduct = false,
+          }) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    label,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+                      color: total ? Colors.green.shade800 : Colors.black87,
+                    ),
+                  ),
+                  Text(
+                    value,
+                    style: GoogleFonts.montserrat(
+                      fontSize: 11,
+                      fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+                      color: deduct
+                          ? Colors.red
+                          : total
+                          ? Colors.green.shade800
+                          : Colors.black,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
           timeline.add(
-            OrangeAnimatedWaitingCard(
-              title: 'Job Completed - Waiting for client confirmation',
-              message:
-                  'You marked $jobTitle as completed. Waiting for $clientName to confirm and release KES $totalClientPays (You will receive KES $fundiReceives after app fee KES $fundiAppFee).\nReceipt: Labour $labour + Transport $transport + App $clientAppFee = Client pays $totalClientPays, you get $fundiReceives.',
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.check_circle,
+                        color: Colors.green.shade800,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Job Completed - Waiting for confirmation',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'You marked $jobTitle as completed. Waiting for $clientName to confirm.',
+                    style: GoogleFonts.inter(fontSize: 11),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    child: Column(
+                      children: [
+                        receiptRow('Old Labour', 'KES $oldLabour'),
+                        receiptRow('Extra Labour', '+ KES $extraLabourInner'),
+                        receiptRow(
+                          'New Labour',
+                          'KES $newLabourInner',
+                          bold: true,
+                        ),
+                        receiptRow('Transport', 'KES $transport'),
+                        const Divider(),
+                        receiptRow(
+                          'Customer Locked',
+                          'KES $totalCustomerLocked',
+                          bold: true,
+                        ),
+                        receiptRow(
+                          'Your App Maintenance cost (5%)',
+                          '- KES $newFundiFeeInner',
+                          deduct: true,
+                        ),
+                        const Divider(thickness: 1.5),
+                        receiptRow(
+                          'YOU RECEIVE',
+                          'KES $fundiReceivesInner',
+                          bold: true,
+                          total: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         } else if (phase == 'parts_confirmed_by_fundi') {
+          final newLabourInner = _toInt(
+            reneg?['newLaborTotal'] ??
+                labour +
+                    _toInt(
+                      job['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0,
+                    ),
+          );
+          final newFundiFeeInner = (newLabourInner * 0.05).round();
+          final totalCustomerLocked = newLabourInner + transport;
+          final fundiReceivesInner =
+              newLabourInner - newFundiFeeInner + transport;
           timeline.add(
             _card(
               color: Colors.green.shade50,
@@ -498,7 +639,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               iconColor: Colors.green.shade800,
               title: 'Materials confirmed',
               message:
-                  'Press START WORK - Total client locked $totalClientPays, you get $fundiReceives',
+                  'Press START WORK - Customer locked KES $totalCustomerLocked secured, you get KES $fundiReceivesInner after app maintenance cost.',
               time: 'Now',
               isCurrent: true,
               action: ElevatedButton(
@@ -518,6 +659,17 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             ),
           );
         } else if (status == 'in_progress' || phase == 'fundi_working') {
+          final newLabourInner = _toInt(
+            reneg?['newLaborTotal'] ??
+                labour +
+                    _toInt(
+                      job['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0,
+                    ),
+          );
+          final newFundiFeeInner = (newLabourInner * 0.05).round();
+          final totalCustomerLocked = newLabourInner + transport;
+          final fundiReceivesInner =
+              newLabourInner - newFundiFeeInner + transport;
           timeline.add(
             _card(
               color: Colors.orange.shade50,
@@ -526,7 +678,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               iconColor: Colors.orange.shade800,
               title: 'You are working',
               message:
-                  'You are working on $jobTitle. Client paid $totalClientPays, you will get $fundiReceives.',
+                  'You are working on $jobTitle. Customer locked KES $totalCustomerLocked, you will get KES $fundiReceivesInner after fee.',
               time: 'Now',
               isCurrent: true,
               action: ElevatedButton(
@@ -554,7 +706,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               iconColor: Colors.blue,
               title: 'You are on the way',
               message:
-                  'Travelling to client - escrow $totalClientPays locked, you get $fundiReceives',
+                  'Travelling to client - escrow KES $fundiSeesWaiting locked, you get KES $fundiReceives',
               time: 'Now',
               isCurrent: true,
               action: ElevatedButton.icon(
@@ -571,9 +723,9 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               border: FundipapColors.blackGray,
               icon: Icons.location_on,
               iconColor: Colors.black,
-              title: 'Escrow locked - Start site visit',
+              title: 'Escrow locked - Done KES $fundiSeesWaiting',
               message:
-                  'Client paid KES $totalClientPays to escrow (Labour $labour + Transport $transport + App $clientAppFee). You will receive KES $fundiReceives after fee KES $fundiAppFee.',
+                  'Labour KES $labour + Transport KES $transport = KES $fundiSeesWaiting locked. You will receive KES $fundiReceives after fee KES $fundiAppFee',
               time: 'Now',
               isCurrent: true,
               action: SizedBox(
@@ -610,7 +762,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Next action - Client paid $totalClientPays, you get $fundiReceives',
+                    'Next action - Client locked KES $fundiSeesWaiting secured to escrow',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w800,
                       fontSize: 12,
@@ -663,10 +815,9 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             border: Colors.green,
             icon: Icons.lock,
             iconColor: Colors.green,
-            title:
-                'Escrow locked - Done KES $fundiSeesWaiting (Client paid $totalClientPays)',
+            title: 'Escrow locked - Done KES $fundiSeesWaiting',
             message:
-                'Client locked KES $totalClientPays (Labour $labour + Transport $transport + App $clientAppFee) - You will receive $fundiReceives after fee $fundiAppFee',
+                'Labour KES $labour + Transport KES $transport = KES $fundiSeesWaiting locked. You will receive KES $fundiReceives after fee KES $fundiAppFee',
             time: 'Done',
             isDone: true,
           ),
@@ -679,9 +830,9 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               icon: Icons.lock_open,
               iconColor: Colors.green.shade800,
               title:
-                  'Client locked extra KES $extraToLock - Done (Total $newTotalClient)',
+                  'Client locked extra KES $extraLabour - Done (Total $newTotalFundiLocked)',
               message:
-                  'Extra labour $extraLabour + App ${newClientFee - clientAppFee} = $extraToLock locked. New total $newTotalClient, you get $newFundiReceives',
+                  'Extra labour KES $extraLabour locked. New total KES $newTotalFundiLocked, you get KES $newFundiReceivesVal',
               time: 'Done',
               isDone: true,
             ),
@@ -709,7 +860,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             iconColor: Colors.green,
             title: 'Bid accepted - Done',
             message:
-                'Labour $labour + Transport $transport = $fundiSeesWaiting waiting label, client pays $totalClientPays',
+                'Labour KES $labour + Transport KES $transport = KES $fundiSeesWaiting locked',
             time: 'Earlier',
             isDone: true,
           ),

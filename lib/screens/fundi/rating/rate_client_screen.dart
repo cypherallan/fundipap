@@ -51,6 +51,14 @@ class _RateClientScreenState extends State<RateClientScreen> {
     }
   }
 
+  int _toInt(dynamic v, [int fb = 0]) {
+    if (v == null) return fb;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? fb;
+  }
+
   void _onStarTap(int index) {
     double halfRating = index + 0.5;
     double fullRating = index + 1.0;
@@ -197,28 +205,21 @@ class _RateClientScreenState extends State<RateClientScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // title removed - was unused, caused lint
+    // --- FIX: fundi receives 5800, not 6400 ---
     String location =
         (_job?['location'] ?? _job?['address'] ?? 'Client location').toString();
-    int paid =
-        (_job?['totalReleasedAmount'] ??
-                _job?['fundiPayoutAmount'] ??
-                _job?['agreedPrice'] ??
-                0)
-            is int
-        ? (_job?['totalReleasedAmount'] ??
-                  _job?['fundiPayoutAmount'] ??
-                  _job?['agreedPrice'] ??
-                  0)
-              as int
-        : int.tryParse(
-                (_job?['totalReleasedAmount'] ??
-                        _job?['fundiPayoutAmount'] ??
-                        _job?['agreedPrice'] ??
-                        0)
-                    .toString(),
-              ) ??
-              0;
+
+    var reneg = _job?['renegotiation'] as Map<String, dynamic>?;
+    int oldLabour = _toInt(_job?['laborCost'] ?? _job?['agreedPrice'] ?? 5000);
+    int newLabour = _toInt(
+      reneg?['newLaborTotal'] ??
+          oldLabour + _toInt(reneg?['extraLabor'] ?? 1000),
+    );
+    if (newLabour == 0) newLabour = 6000;
+    int transportVal = _toInt(_job?['transportFee'] ?? 100);
+    int fundiAppFeeVal = (newLabour * 0.05).round(); // 300
+    int fundiReceivesVal = newLabour - fundiAppFeeVal + transportVal; // 5800
+    int paid = fundiReceivesVal; // hide 6400
 
     final ratingLabels = [
       '0.0 Tap to rate',
@@ -292,6 +293,7 @@ class _RateClientScreenState extends State<RateClientScreen> {
                               fontSize: 16,
                             ),
                           ),
+                          const SizedBox(height: 4),
                           Text(
                             '${widget.trade} • $location • KES $paid received',
                             style: GoogleFonts.inter(

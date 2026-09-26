@@ -6,8 +6,8 @@ class ConfirmFundiBottomActions extends StatelessWidget {
   final Map<String, dynamic> bidData;
   final int labor;
   final int transportFee;
-  final int appFee; // NEW: 5% client sees = 250
-  final int total; // 5350
+  final int appFee;
+  final int total;
   final double distanceKm;
   final String transportMode;
   final VoidCallback onReject;
@@ -28,19 +28,30 @@ class ConfirmFundiBottomActions extends StatelessWidget {
     required this.onReport,
   });
 
+  int _enforceMinTransport(int fee, double km) {
+    // YOUR RULE: min 100 if <=1km, maths if >1km but never <100
+    if (fee <= 0) fee = 100;
+    if (km > 0 && km <= 1.0 && fee < 100) return 100;
+    if (fee < 100) return 100;
+    return fee;
+  }
+
   @override
   Widget build(BuildContext context) {
     int fundiAsk =
         (bidData['amount'] ?? bidData['bidAmount'] ?? bidData['price'] ?? 0)
             .toInt();
     int displayLabor = labor > 0 ? labor : fundiAsk;
-    int displayTransport = transportFee;
-    int displayAppFee = appFee > 0
-        ? appFee
-        : (displayLabor * 0.05).round(); // 250
+    int effectiveTransport = _enforceMinTransport(transportFee, distanceKm);
+    int displayAppFee = appFee > 0 ? appFee : (displayLabor * 0.05).round();
     int displayTotal = total > 0
         ? total
-        : displayLabor + displayTransport + displayAppFee; // 5350
+        : displayLabor + effectiveTransport + displayAppFee;
+
+    // Force total to always include min transport
+    if (total == 0 || transportFee == 0) {
+      displayTotal = displayLabor + effectiveTransport + displayAppFee;
+    }
 
     return SafeArea(
       child: Container(
@@ -49,7 +60,7 @@ class ConfirmFundiBottomActions extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (displayTotal > 0)
+            if (displayLabor > 0)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
@@ -62,11 +73,11 @@ class ConfirmFundiBottomActions extends StatelessWidget {
                 child: Column(
                   children: [
                     _row('Fundi labour charges:', 'KES $displayLabor'),
-                    SizedBox(height: 6),
-                    _row('Transport cost:', 'KES $displayTransport'),
-                    SizedBox(height: 6),
+                    const SizedBox(height: 6),
+                    _row('Transport cost:', 'KES $effectiveTransport'),
+                    const SizedBox(height: 6),
                     _row('App maintenance cost:', 'KES $displayAppFee'),
-                    Divider(height: 16),
+                    const Divider(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -86,7 +97,7 @@ class ConfirmFundiBottomActions extends StatelessWidget {
                         ),
                       ],
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       'This total will be locked and paid',
                       style: GoogleFonts.inter(
