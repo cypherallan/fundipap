@@ -41,6 +41,12 @@ class HomeNavigator extends StatefulWidget {
 
 class _HomeNavigatorState extends State<HomeNavigator> {
   int _index = 0;
+  int _refreshId = 0;
+  Future<void> _handleRefresh() async {
+    setState(() => _refreshId++);
+    await Future.delayed(const Duration(milliseconds: 700));
+  }
+
   AppBar _buildAppBar() {
     bool isFundi = widget.role == 'fundi';
     bool showBackOnNotifications = _index == 1; // 1 = Notifications tab
@@ -122,15 +128,19 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   Widget build(BuildContext context) {
     if (widget.role == 'fundi') {
       final fundiPages = [
-        const FundiHome(),
-        const FundiNotificationsPage(),
-        const FundiMyJobsPage(),
-        const FundiProfile(),
-        const fundi_disputes.FundiDisputesScreen(),
+        FundiHome(key: ValueKey('fh_$_refreshId')),
+        FundiNotificationsPage(key: ValueKey('fn_$_refreshId')),
+        FundiMyJobsPage(key: ValueKey('fmj_$_refreshId')),
+        FundiProfile(key: ValueKey('fp_$_refreshId')),
+        fundi_disputes.FundiDisputesScreen(key: ValueKey('fd_$_refreshId')),
       ];
       return Scaffold(
         appBar: _buildAppBar(),
-        body: fundiPages[_index.clamp(0, 4)],
+        body: RefreshIndicator(
+          onRefresh: _handleRefresh,
+          color: FundipapColors.primaryYellow,
+          child: fundiPages[_index.clamp(0, 4)],
+        ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _index.clamp(0, 4),
           backgroundColor: Colors.white,
@@ -172,15 +182,23 @@ class _HomeNavigatorState extends State<HomeNavigator> {
       );
     }
     final pages = [
-      const CustomerHome(),
-      const CustomerNotificationsPage(),
-      const PostJobScreen(),
-      const DisputesScreen(),
-      ProfileScreen(email: widget.email, role: widget.role),
+      CustomerHome(key: ValueKey('ch_$_refreshId')),
+      CustomerNotificationsPage(key: ValueKey('cn_$_refreshId')),
+      PostJobScreen(key: ValueKey('cp_$_refreshId')),
+      DisputesScreen(key: ValueKey('cd_$_refreshId')),
+      ProfileScreen(
+        email: widget.email,
+        role: widget.role,
+        key: ValueKey('cpr_$_refreshId'),
+      ),
     ];
     return Scaffold(
       appBar: _buildAppBar(),
-      body: pages[_index.clamp(0, 4)],
+      body: RefreshIndicator(
+        onRefresh: _handleRefresh,
+        color: FundipapColors.primaryYellow,
+        child: pages[_index.clamp(0, 4)],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index.clamp(0, 4),
         backgroundColor: Colors.white,

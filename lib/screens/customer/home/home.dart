@@ -233,43 +233,61 @@ class _CustomerHomeState extends State<CustomerHome> {
     );
   }
 
+  Future<void> _onRefresh() async {
+    await _getLocation();
+    await _loadMe();
+    _loadCompletedCount();
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    return Column(
-      children: [
-        Container(
-          color: FundipapColors.blackGray,
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: CustomerHomeHeader(
-                  me: _me,
-                  profilePct: _profilePct,
-                  completedJobs: _completedJobs,
-                  onProfileTap: () {},
-                ),
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      color: FundipapColors.primaryYellow,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(
+            child: Container(
+              color: FundipapColors.blackGray,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: CustomerHomeHeader(
+                      me: _me,
+                      profilePct: _profilePct,
+                      completedJobs: _completedJobs,
+                      onProfileTap: () {},
+                    ),
+                  ),
+                  NotificationBell(userId: uid, iconColor: Colors.white),
+                ],
               ),
-              NotificationBell(userId: uid, iconColor: Colors.white),
-            ],
+            ),
           ),
-        ),
-        CustomerHomeFilterBar(
-          radius: _radius,
-          filter: _filter,
-          onRadiusChanged: (v) => setState(() => _radius = v),
-          onFilterChanged: (v) => setState(() => _filter = v),
-        ),
-        if (_loadingLoc) const LinearProgressIndicator(),
-        Expanded(
-          child: CustomerHomeFundiList(
-            userPos: _userPos,
-            radius: _radius,
-            filter: _filter,
+          SliverToBoxAdapter(
+            child: CustomerHomeFilterBar(
+              radius: _radius,
+              filter: _filter,
+              onRadiusChanged: (v) => setState(() => _radius = v),
+              onFilterChanged: (v) => setState(() => _filter = v),
+            ),
           ),
-        ),
-      ],
+          if (_loadingLoc)
+            const SliverToBoxAdapter(child: LinearProgressIndicator()),
+          SliverFillRemaining(
+            hasScrollBody: true,
+            child: CustomerHomeFundiList(
+              userPos: _userPos,
+              radius: _radius,
+              filter: _filter,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

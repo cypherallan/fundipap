@@ -24,7 +24,16 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
   @override
   void initState() {
     super.initState();
+    _initListeners();
+  }
+
+  void _initListeners() {
     var uid = FirebaseAuth.instance.currentUser!.uid;
+    _jobsSub?.cancel();
+    _activeSub?.cancel();
+    for (var s in _bidsSubs.values) s.cancel();
+    _bidsSubs.clear();
+
     _jobsSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('customerId', isEqualTo: uid)
@@ -82,6 +91,12 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
         .listen((snap) {
           if (mounted) setState(() => _activeJobs = snap.docs);
         });
+  }
+
+  Future<void> _onRefresh() async {
+    _initListeners();
+    setState(() {});
+    await Future.delayed(const Duration(milliseconds: 700));
   }
 
   Future<void> _markThisFundiAsRead(String fundiKey) async {
@@ -157,8 +172,8 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
         'type': 'bid',
         'isPendingBid': b['status'] == 'pending',
         'isRead': b['isRead'] == true,
-        'totalCost': 0, // FIX: add default
-        'transportFee': 0, // FIX: add default
+        'totalCost': 0,
+        'transportFee': 0,
       };
     }
 
@@ -236,174 +251,183 @@ class _CustomerNotificationsPageState extends State<CustomerNotificationsPage> {
           ),
         ),
         Expanded(
-          child: list.isEmpty
-              ? Center(
-                  child: Text(
-                    'No jobs yet',
-                    style: GoogleFonts.inter(color: Colors.black54),
-                  ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: list.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) {
-                    var g = list[i];
-                    String fundiKey = g['fundiId'] as String;
-                    int badgeCount = fundiUnreadCounts[fundiKey] ?? 0;
-                    bool isUnreadGroup = badgeCount > 0;
-                    bool isNewPrice = g['isNewPrice'] == true;
-
-                    Color cardColor;
-                    Color borderColor;
-                    if (isNewPrice) {
-                      cardColor = Colors.orange.shade50;
-                      borderColor = Colors.orange;
-                    } else if (isUnreadGroup) {
-                      cardColor = Colors.yellow.shade50;
-                      borderColor = FundipapColors.primaryYellow;
-                    } else {
-                      cardColor = Colors.white;
-                      borderColor = Colors.black12;
-                    }
-
-                    // FIX: safe cast
-                    final int transportFee = (g['transportFee'] as int?) ?? 0;
-                    final int totalCost = (g['totalCost'] as int?) ?? 0;
-
-                    return Card(
-                      color: cardColor,
-                      shape: RoundedRectangleBorder(
-                        side: BorderSide(color: borderColor),
-                        borderRadius: BorderRadius.circular(12),
+          child: RefreshIndicator(
+            onRefresh: _onRefresh,
+            color: FundipapColors.primaryYellow,
+            child: list.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      const SizedBox(height: 200),
+                      Center(
+                        child: Text(
+                          'No jobs yet',
+                          style: GoogleFonts.inter(color: Colors.black54),
+                        ),
                       ),
-                      child: ListTile(
-                        leading: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            CircleAvatar(
-                              radius: 22,
-                              backgroundColor: FundipapColors.blackGray,
-                              child: Text(
-                                (g['fundiName'] as String)[0].toUpperCase(),
-                                style: const TextStyle(color: Colors.white),
+                    ],
+                  )
+                : ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(12),
+                    itemCount: list.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, i) {
+                      var g = list[i];
+                      String fundiKey = g['fundiId'] as String;
+                      int badgeCount = fundiUnreadCounts[fundiKey] ?? 0;
+                      bool isUnreadGroup = badgeCount > 0;
+                      bool isNewPrice = g['isNewPrice'] == true;
+
+                      Color cardColor;
+                      Color borderColor;
+                      if (isNewPrice) {
+                        cardColor = Colors.orange.shade50;
+                        borderColor = Colors.orange;
+                      } else if (isUnreadGroup) {
+                        cardColor = Colors.yellow.shade50;
+                        borderColor = FundipapColors.primaryYellow;
+                      } else {
+                        cardColor = Colors.white;
+                        borderColor = Colors.black12;
+                      }
+
+                      final int transportFee = (g['transportFee'] as int?) ?? 0;
+                      final int totalCost = (g['totalCost'] as int?) ?? 0;
+
+                      return Card(
+                        color: cardColor,
+                        shape: RoundedRectangleBorder(
+                          side: BorderSide(color: borderColor),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ListTile(
+                          leading: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              CircleAvatar(
+                                radius: 22,
+                                backgroundColor: FundipapColors.blackGray,
+                                child: Text(
+                                  (g['fundiName'] as String)[0].toUpperCase(),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
                               ),
-                            ),
-                            if (badgeCount > 0)
-                              Positioned(
-                                right: -4,
-                                bottom: -4,
-                                child: Container(
-                                  padding: const EdgeInsets.all(5),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: Colors.white,
-                                      width: 2,
+                              if (badgeCount > 0)
+                                Positioned(
+                                  right: -4,
+                                  bottom: -4,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 2,
+                                      ),
                                     ),
-                                  ),
-                                  child: Text(
-                                    '$badgeCount',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w800,
+                                    child: Text(
+                                      '$badgeCount',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                          ],
-                        ),
-                        title: Text(
-                          g['category'],
-                          style: GoogleFonts.montserrat(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
+                            ],
                           ),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              g['fundiName'],
-                              style: GoogleFonts.inter(fontSize: 11),
+                          title: Text(
+                            g['category'],
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
                             ),
-                            if (isNewPrice)
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                'New price requested',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  color: Colors.orange.shade800,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                                g['fundiName'],
+                                style: GoogleFonts.inter(fontSize: 11),
                               ),
-                            if (transportFee > 0)
-                              Text(
-                                'Total KES $totalCost (incl. transport $transportFee)',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  color: Colors.black54,
+                              if (isNewPrice)
+                                Text(
+                                  'New price requested',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    color: Colors.orange.shade800,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                              ),
-                          ],
-                        ),
-                        trailing: isUnreadGroup
-                            ? const Icon(
-                                Icons.circle,
-                                color: Colors.red,
-                                size: 10,
-                              )
-                            : const Icon(Icons.chevron_right),
-                        onTap: () async {
-                          await _markThisFundiAsRead(fundiKey);
-                          if (!context.mounted) return;
-                          if (g['type'] == 'bid' && g['isPendingBid'] == true) {
-                            final confirmed = await Navigator.push<bool>(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ConfirmFundiPage(
-                                  jobId: g['jobId'],
-                                  jobData: g['jobData'],
-                                  bidId: g['bidId'],
-                                  bidData: g['bidData'],
+                              if (transportFee > 0)
+                                Text(
+                                  'Total KES $totalCost (incl. transport $transportFee)',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    color: Colors.black54,
+                                  ),
                                 ),
-                              ),
-                            );
-                            if (confirmed == true && context.mounted) {
-                              // AFTER CONFIRM - GO TO TIMELINE, timeline listens to job stream so it will have transport + escrow
-                              Navigator.pushReplacement(
+                            ],
+                          ),
+                          trailing: isUnreadGroup
+                              ? const Icon(
+                                  Icons.circle,
+                                  color: Colors.red,
+                                  size: 10,
+                                )
+                              : const Icon(Icons.chevron_right),
+                          onTap: () async {
+                            await _markThisFundiAsRead(fundiKey);
+                            if (!context.mounted) return;
+                            if (g['type'] == 'bid' &&
+                                g['isPendingBid'] == true) {
+                              final confirmed = await Navigator.push<bool>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ConfirmFundiPage(
+                                    jobId: g['jobId'],
+                                    jobData: g['jobData'],
+                                    bidId: g['bidId'],
+                                    bidData: g['bidData'],
+                                  ),
+                                ),
+                              );
+                              if (confirmed == true && context.mounted) {
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => CustomerFundiTimelinePage(
+                                      jobId: g['jobId'],
+                                      fundiName: g['fundiName'],
+                                      trade: g['category'],
+                                      jobData: g['jobData'],
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                            } else {
+                              Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => CustomerFundiTimelinePage(
                                     jobId: g['jobId'],
                                     fundiName: g['fundiName'],
                                     trade: g['category'],
-                                    jobData:
-                                        g['jobData'], // stream will update to include totalCost/transportFee automatically
+                                    jobData: g['jobData'],
                                   ),
                                 ),
                               );
-                              return;
                             }
-                          } else {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => CustomerFundiTimelinePage(
-                                  jobId: g['jobId'],
-                                  fundiName: g['fundiName'],
-                                  trade: g['category'],
-                                  jobData: g['jobData'],
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    );
-                  },
-                ),
+                          },
+                        ),
+                      );
+                    },
+                  ),
+          ),
         ),
       ],
     );

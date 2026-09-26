@@ -21,6 +21,12 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
   @override
   void initState() {
     super.initState();
+    _initListeners();
+  }
+
+  void _initListeners() {
+    _bidsSub?.cancel();
+    _jobsSub?.cancel();
     var uid = FirebaseAuth.instance.currentUser!.uid;
     _bidsSub = FirebaseFirestore.instance
         .collectionGroup('bids')
@@ -69,13 +75,18 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     );
   }
 
+  Future<void> _onRefresh() async {
+    _initListeners();
+    if (mounted) setState(() {});
+    await Future.delayed(const Duration(milliseconds: 700));
+  }
+
   bool _isWaiting(Map<String, dynamic> job) {
     var status = (job['status'] ?? '').toString();
     var escrow = (job['escrowStatus'] ?? 'pending').toString();
     var reneg = job['renegotiation'] as Map<String, dynamic>?;
     String rs = (reneg?['status'] ?? '').toString();
 
-    // completed jobs are NEVER waiting - push to bottom
     const completed = [
       'completed',
       'job_completed',
@@ -85,14 +96,11 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     ];
     if (completed.contains(status)) return false;
 
-    // ANY renegotiation that needs action is waiting - HIGHEST PRIORITY
     if (reneg != null && reneg['requested'] == true) {
-      if (rs == 'pending')
-        return true; // you are waiting for client to confirm price review
+      if (rs == 'pending') return true;
       if (rs == 'countered_by_client') return true;
     }
 
-    // active flow - all these are waiting/active and must be above completed
     const active = [
       'accepted',
       'assigned',
@@ -104,7 +112,6 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     ];
     if (active.contains(status)) return true;
 
-    // escrow not locked yet but bid accepted = waiting for payment
     bool locked = escrow == 'held' || escrow == 'paid' || escrow == 'locked';
     if (!locked && status == 'accepted') return true;
 
@@ -115,16 +122,15 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     var reneg = job['renegotiation'] as Map<String, dynamic>?;
     String rs = (reneg?['status'] ?? '').toString();
     String status = (job['status'] ?? '').toString();
-    if (reneg != null && rs == 'pending')
-      return 0; // waiting for client to confirm price review - TOP
+    if (reneg != null && rs == 'pending') return 0;
     if (reneg != null && rs == 'countered_by_client') return 1;
-    if (status == 'accepted') return 2; // waiting for escrow
+    if (status == 'accepted') return 2;
     if (status == 'assigned' || status == 'confirmed') return 3;
     if (status == 'travelling') return 4;
     if (status == 'site_visit') return 5;
     if (status == 'in_progress') return 6;
     if (status == 'pending_completion') return 7;
-    return 10; // completed
+    return 10;
   }
 
   Future<void> _markThisClientAsRead(String clientKey) async {
@@ -211,7 +217,6 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       var cName = (job['customerName'] ?? job['clientName'] ?? '').toString();
       if (title.isEmpty || cName.isEmpty) continue;
       var clientId = (job['customerId'] ?? cName).toString();
-      // TRANSPORT SAFE READ
       int labor = (job['laborCost'] ?? job['agreedPrice'] ?? 0).toInt();
       int transport = (job['transportFee'] ?? 0).toInt();
       int total = (job['totalCost'] ?? job['escrowAmount'] ?? labor).toInt();
@@ -220,7 +225,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         'clientName': cName,
         'clientId': clientId,
         'category': title,
-        'jobData': job, // already has transport fields
+        'jobData': job,
         'latestAt': (job['updatedAt'] is Timestamp)
             ? (job['updatedAt'] as Timestamp).toDate()
             : DateTime.now(),
@@ -238,24 +243,20 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       bool aWaiting = _isWaiting(aJob);
       bool bWaiting = _isWaiting(bJob);
 
-      // 1. WAITING FIRST - always on top, even if read
       if (aWaiting && !bWaiting) return -1;
       if (!aWaiting && bWaiting) return 1;
 
-      // 2. Inside waiting group, sort by priority (pending price review = top)
       if (aWaiting && bWaiting) {
         int pa = _waitingPriority(aJob);
         int pb = _waitingPriority(bJob);
         if (pa != pb) return pa.compareTo(pb);
       }
 
-      // 3. Unread first
       bool aUnread = a['isRead'] == false;
       bool bUnread = b['isRead'] == false;
       if (aUnread && !bUnread) return -1;
       if (!aUnread && bUnread) return 1;
 
-      // 4. Latest first
       return (b['latestAt'] as DateTime).compareTo((a['latestAt'] as DateTime));
     });
 
@@ -294,176 +295,190 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
           ),
         ),
         Expanded(
-          child: list.isEmpty
-              ? Center(
-                  child: Text('No notifications', style: GoogleFonts.inter()),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: list.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) {
-                    var g = list[i];
-                    String clientKey = g['clientId'];
-                    int badge = clientUnreadCounts[clientKey] ?? 0;
-                    bool isUnreadGroup = badge > 0;
-                    var jobData = g['jobData'] as Map<String, dynamic>;
-                    var reneg =
-                        jobData['renegotiation'] as Map<String, dynamic>?;
-                    bool isPendingPrice =
-                        reneg != null &&
-                        reneg['requested'] == true &&
-                        reneg['status'] == 'pending';
-                    bool isCountered =
-                        reneg != null &&
-                        reneg['status'] == 'countered_by_client';
-                    bool isWaiting = _isWaiting(jobData);
-
-                    Color cardColor;
-                    Color borderColor;
-                    if (isPendingPrice) {
-                      cardColor = Colors.orange.shade50;
-                      borderColor = Colors.orange;
-                    } else if (isCountered) {
-                      cardColor = Colors.blue.shade50;
-                      borderColor = Colors.blue;
-                    } else if (isWaiting) {
-                      cardColor = Colors.yellow.shade50;
-                      borderColor = FundipapColors.primaryYellow;
-                    } else {
-                      cardColor = Colors.white;
-                      borderColor = Colors.black12;
-                    }
-
-                    return Card(
-                      color: cardColor,
-                      shape: RoundedRectangleBorder(
-                        side: BorderSide(
-                          color: borderColor,
-                          width: isWaiting ? 1.6 : 1,
+          child: RefreshIndicator(
+            onRefresh: _onRefresh,
+            color: FundipapColors.primaryYellow,
+            child: list.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      const SizedBox(height: 200),
+                      Center(
+                        child: Text(
+                          'No notifications',
+                          style: GoogleFonts.inter(),
                         ),
-                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: ListTile(
-                        leading: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            CircleAvatar(
-                              radius: 22,
-                              backgroundColor: FundipapColors.blackGray,
-                              child: Text(
-                                (g['clientName'] as String)[0].toUpperCase(),
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            ),
-                            if (badge > 0)
-                              Positioned(
-                                right: -4,
-                                bottom: -4,
-                                child: Container(
-                                  padding: const EdgeInsets.all(5),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: Colors.white,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    '$badge',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        title: Text(
-                          g['category'],
-                          style: GoogleFonts.montserrat(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
+                    ],
+                  )
+                : ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(12),
+                    itemCount: list.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, i) {
+                      var g = list[i];
+                      String clientKey = g['clientId'];
+                      int badge = clientUnreadCounts[clientKey] ?? 0;
+                      bool isUnreadGroup = badge > 0;
+                      var jobData = g['jobData'] as Map<String, dynamic>;
+                      var reneg =
+                          jobData['renegotiation'] as Map<String, dynamic>?;
+                      bool isPendingPrice =
+                          reneg != null &&
+                          reneg['requested'] == true &&
+                          reneg['status'] == 'pending';
+                      bool isCountered =
+                          reneg != null &&
+                          reneg['status'] == 'countered_by_client';
+                      bool isWaiting = _isWaiting(jobData);
+
+                      Color cardColor;
+                      Color borderColor;
+                      if (isPendingPrice) {
+                        cardColor = Colors.orange.shade50;
+                        borderColor = Colors.orange;
+                      } else if (isCountered) {
+                        cardColor = Colors.blue.shade50;
+                        borderColor = Colors.blue;
+                      } else if (isWaiting) {
+                        cardColor = Colors.yellow.shade50;
+                        borderColor = FundipapColors.primaryYellow;
+                      } else {
+                        cardColor = Colors.white;
+                        borderColor = Colors.black12;
+                      }
+
+                      return Card(
+                        color: cardColor,
+                        shape: RoundedRectangleBorder(
+                          side: BorderSide(
+                            color: borderColor,
+                            width: isWaiting ? 1.6 : 1,
                           ),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              g['clientName'],
-                              style: GoogleFonts.inter(fontSize: 11),
-                            ),
-                            Builder(
-                              builder: (_) {
-                                final int transport =
-                                    (g['transport'] as int?) ??
-                                    (g['jobData']['transportFee'] as int?) ??
-                                    0;
-                                final int total =
-                                    (g['total'] as int?) ??
-                                    (g['jobData']['totalCost'] as int?) ??
-                                    (g['jobData']['escrowAmount'] as int?) ??
-                                    0;
-                                if (transport > 0 && total > 0) {
-                                  return Text(
-                                    'KES $total total (incl. transport $transport)',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 10,
-                                      color: Colors.black54,
+                        child: ListTile(
+                          leading: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              CircleAvatar(
+                                radius: 22,
+                                backgroundColor: FundipapColors.blackGray,
+                                child: Text(
+                                  (g['clientName'] as String)[0].toUpperCase(),
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                              if (badge > 0)
+                                Positioned(
+                                  right: -4,
+                                  bottom: -4,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 2,
+                                      ),
                                     ),
-                                  );
-                                }
-                                return const SizedBox.shrink();
-                              },
+                                    child: Text(
+                                      '$badge',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          title: Text(
+                            g['category'],
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
                             ),
-                            if (isPendingPrice)
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                'Waiting for client to confirm price review',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  color: Colors.orange.shade800,
-                                  fontWeight: FontWeight.w700,
+                                g['clientName'],
+                                style: GoogleFonts.inter(fontSize: 11),
+                              ),
+                              Builder(
+                                builder: (_) {
+                                  final int transport =
+                                      (g['transport'] as int?) ??
+                                      (g['jobData']['transportFee'] as int?) ??
+                                      0;
+                                  final int total =
+                                      (g['total'] as int?) ??
+                                      (g['jobData']['totalCost'] as int?) ??
+                                      (g['jobData']['escrowAmount'] as int?) ??
+                                      0;
+                                  if (transport > 0 && total > 0) {
+                                    return Text(
+                                      'KES $total total (incl. transport $transport)',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 10,
+                                        color: Colors.black54,
+                                      ),
+                                    );
+                                  }
+                                  return const SizedBox.shrink();
+                                },
+                              ),
+                              if (isPendingPrice)
+                                Text(
+                                  'Waiting for client to confirm price review',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    color: Colors.orange.shade800,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              if (isCountered)
+                                Text(
+                                  'Client countered price',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    color: Colors.blue.shade700,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          trailing: isUnreadGroup
+                              ? const Icon(
+                                  Icons.circle,
+                                  color: Colors.red,
+                                  size: 10,
+                                )
+                              : const Icon(Icons.chevron_right),
+                          onTap: () async {
+                            await _markThisClientAsRead(clientKey);
+                            if (!context.mounted) return;
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FundiCustomerTimelinePage(
+                                  jobId: g['jobId'],
+                                  clientName: g['clientName'],
+                                  jobTitle: g['category'],
                                 ),
                               ),
-                            if (isCountered)
-                              Text(
-                                'Client countered price',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  color: Colors.blue.shade700,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                          ],
+                            );
+                          },
                         ),
-                        trailing: isUnreadGroup
-                            ? const Icon(
-                                Icons.circle,
-                                color: Colors.red,
-                                size: 10,
-                              )
-                            : const Icon(Icons.chevron_right),
-                        onTap: () async {
-                          await _markThisClientAsRead(clientKey);
-                          if (!context.mounted) return;
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => FundiCustomerTimelinePage(
-                                jobId: g['jobId'],
-                                clientName: g['clientName'],
-                                jobTitle: g['category'],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                ),
+                      );
+                    },
+                  ),
+          ),
         ),
       ],
     );

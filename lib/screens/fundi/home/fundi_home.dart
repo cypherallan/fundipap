@@ -43,6 +43,15 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
     });
   }
 
+  Future<void> _onRefresh() async {
+    await loadMe();
+    if (mounted) {
+      await loadLocation(context);
+    }
+    await _enforcePendingRating();
+    if (mounted) setState(() {});
+  }
+
   Future<void> _enforcePendingRating() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null || !mounted) return;
@@ -98,96 +107,129 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
       length: 3,
       child: Scaffold(
         backgroundColor: FundipapColors.blackGray,
-        body: Container(
-          color: FundipapColors.blackGray,
-          child: Column(
-            children: [
-              FundiHomeHeaderSection(
-                me: me,
-                profilePct: profilePct,
-                completedJobs: completedJobs,
-                totalEarned: totalEarned,
-                onReloadMe: loadMe,
-              ),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 20),
-                decoration: BoxDecoration(
-                  color: Colors.white10,
-                  borderRadius: BorderRadius.circular(12),
+        body: RefreshIndicator(
+          onRefresh: _onRefresh,
+          color: FundipapColors.primaryYellow,
+          child: NestedScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            headerSliverBuilder: (context, innerBoxIsScrolled) {
+              return [
+                SliverToBoxAdapter(
+                  child: FundiHomeHeaderSection(
+                    me: me,
+                    profilePct: profilePct,
+                    completedJobs: completedJobs,
+                    totalEarned: totalEarned,
+                    onReloadMe: loadMe,
+                  ),
                 ),
-                child: TabBar(
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  dividerColor: Colors.transparent,
-                  indicator: BoxDecoration(
-                    color: FundipapColors.primaryYellow,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  labelColor: Colors.black,
-                  unselectedLabelColor: Colors.white70,
-                  labelStyle: GoogleFonts.montserrat(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                  tabs: [
-                    Tab(
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          border: Border(
-                            right: BorderSide(color: Colors.white24, width: 1),
+                SliverToBoxAdapter(
+                  child: Container(
+                    color: FundipapColors.blackGray,
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 20),
+                          decoration: BoxDecoration(
+                            color: Colors.white10,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: TabBar(
+                            indicatorSize: TabBarIndicatorSize.tab,
+                            dividerColor: Colors.transparent,
+                            indicator: BoxDecoration(
+                              color: FundipapColors.primaryYellow,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            labelColor: Colors.black,
+                            unselectedLabelColor: Colors.white70,
+                            labelStyle: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                            tabs: [
+                              Tab(
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    border: Border(
+                                      right: BorderSide(
+                                        color: Colors.white24,
+                                        width: 1,
+                                      ),
+                                    ),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const Text('Jobs Near You'),
+                                ),
+                              ),
+                              Tab(
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    border: Border(
+                                      right: BorderSide(
+                                        color: Colors.white24,
+                                        width: 1,
+                                      ),
+                                    ),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const Text('Completed • Rate Client'),
+                                ),
+                              ),
+                              Tab(
+                                child: StreamBuilder<QuerySnapshot>(
+                                  stream: FirebaseFirestore.instance
+                                      .collection('chats')
+                                      .where(
+                                        'participants',
+                                        arrayContains: FirebaseAuth
+                                            .instance
+                                            .currentUser!
+                                            .uid,
+                                      )
+                                      .snapshots(),
+                                  builder: (_, snap) {
+                                    int total = 0;
+                                    String myId =
+                                        FirebaseAuth.instance.currentUser!.uid;
+                                    if (snap.hasData) {
+                                      for (var doc in snap.data!.docs) {
+                                        var map =
+                                            doc.data() as Map<String, dynamic>;
+                                        var counts =
+                                            map['unreadCounts']
+                                                as Map<String, dynamic>?;
+                                        total +=
+                                            ((counts?[myId] as num?)?.toInt() ??
+                                            0);
+                                      }
+                                    }
+                                    return Badge(
+                                      isLabelVisible: total > 0,
+                                      label: Text('$total'),
+                                      child: const Text('Messages'),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        alignment: Alignment.center,
-                        child: const Text('Jobs Near You'),
-                      ),
+                        const SizedBox(height: 12),
+                      ],
                     ),
-                    Tab(
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          border: Border(
-                            right: BorderSide(color: Colors.white24, width: 1),
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: const Text('Completed • Rate Client'),
-                      ),
-                    ),
-                    Tab(
-                      child: StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('chats')
-                            .where(
-                              'participants',
-                              arrayContains:
-                                  FirebaseAuth.instance.currentUser!.uid,
-                            )
-                            .snapshots(),
-                        builder: (_, snap) {
-                          int total = 0;
-                          String myId = FirebaseAuth.instance.currentUser!.uid;
-                          if (snap.hasData) {
-                            for (var doc in snap.data!.docs) {
-                              var map = doc.data() as Map<String, dynamic>;
-                              var counts =
-                                  map['unreadCounts'] as Map<String, dynamic>?;
-                              total += ((counts?[myId] as num?)?.toInt() ?? 0);
-                            }
-                          }
-                          return Badge(
-                            isLabelVisible: total > 0,
-                            label: Text('$total'),
-                            child: const Text('Messages'),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: TabBarView(
-                  children: [
-                    FundiHomeJobsTab(
+              ];
+            },
+            body: Container(
+              color: FundipapColors.blackGray,
+              child: TabBarView(
+                children: [
+                  RefreshIndicator(
+                    onRefresh: _onRefresh,
+                    child: FundiHomeJobsTab(
                       search: search,
                       onSearchChanged: (v) =>
                           setState(() => search = v.toLowerCase()),
@@ -198,12 +240,18 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                       onBid: bidForJob,
                       currentPos: currentPos,
                     ),
-                    const FundiCompletedWrapper(),
-                    const ChatListScreen(),
-                  ],
-                ),
+                  ),
+                  RefreshIndicator(
+                    onRefresh: _onRefresh,
+                    child: const FundiCompletedWrapper(),
+                  ),
+                  RefreshIndicator(
+                    onRefresh: _onRefresh,
+                    child: const ChatListScreen(),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
