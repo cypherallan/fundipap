@@ -4,12 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 
-/// FINAL CANCEL SERVICE - 5% only on labour, transport never charged fee
-/// Rules locked with user:
-/// Before travelling: client 95% labour + 100% transport, fee 5% labour, fundi 0
-/// After site visit (travelling/site_visit): client 95% labour, fundi transport, fee 5% labour
-/// Fundi can cancel ONLY before travelling, after travelling locked
-/// After in_progress (Start Job clicked): both cannot cancel
+/// FINAL CANCEL SERVICE - FIXED FOR NO-ESCROW CASE
+/// Rule: If money NOT locked to escrow, no figures dialog, just cancel - 0 fee
 
 class JobCancelService {
   static const double feeRate = 0.05;
@@ -43,7 +39,6 @@ class JobCancelService {
       'pending_completion',
       'job_completed',
     ].contains(status);
-    // Fundi can cancel only in assigned/confirmed and not travelling/siteDone/started
     if (started) return false;
     if (travelling || siteDone) return false;
     return ['assigned', 'confirmed'].contains(status);
@@ -66,17 +61,14 @@ class JobCancelService {
       'pending_completion',
       'job_completed',
     ].contains(status);
-    bool arrived =
-        travelling ||
-        siteDone; // for refund logic: has fundi travelled/arrived?
+    bool arrived = travelling || siteDone;
 
-    // Guard: Fundi locked after travelling
     if (!isClient) {
       if (isStarted) {
         await _showBlocked(
           context,
           'Cannot cancel',
-          'Job already started (START JOB clicked). Must be completed. Contact support for disputes.',
+          'Job already started (START JOB clicked). Must be completed.',
         );
         return;
       }
@@ -84,7 +76,7 @@ class JobCancelService {
         await _showBlocked(
           context,
           'Cannot cancel now',
-          'You already started travelling / marked site visit. Only client can cancel now. Cancelling to get transport fee is flagged as fraud and lowers your badge.',
+          'You already started travelling / marked site visit. Only client can cancel now.',
         );
         return;
       }
@@ -93,7 +85,7 @@ class JobCancelService {
         await _showBlocked(
           context,
           'Cannot cancel',
-          'Fundi already started the job. Job must be completed. Use dispute if issue.',
+          'Fundi already started the job. Use dispute if issue.',
         );
         return;
       }
@@ -102,7 +94,6 @@ class JobCancelService {
     String reason = isClient ? clientReasons[0] : fundiReasons[0];
     final otherCtrl = TextEditingController();
 
-    // Parse amounts - supports both old jobs with transport and new jobs without
     int labour = _toInt(
       job['currentLabour'] ??
           job['agreedPrice'] ??
@@ -111,7 +102,6 @@ class JobCancelService {
           job['budget'] ??
           0,
     );
-    // If renegotiation after price review, use new labour
     var reneg = job['renegotiation'] as Map<String, dynamic>?;
     if (reneg != null && reneg['newLaborTotal'] != null) {
       labour = _toInt(reneg['newLaborTotal']);
@@ -120,21 +110,80 @@ class JobCancelService {
     int escrowAmount = _toInt(job['escrowAmount'] ?? 0);
     int total = escrowAmount > 0 ? escrowAmount : (labour + transport);
 
-    // Calculate with your rule: 5% ONLY on labour
+    // --- NEW FIX: If no money locked, just cancel, no figures ---
+    String escrowStatusStr = (job['escrowStatus'] ?? '').toString();
+    bool escrowLocked =
+        escrowAmount > 0 ||
+        escrowStatusStr == 'held' ||
+        escrowStatusStr == 'locked' ||
+        job['escrowDone'] == true;
+
+    if (!escrowLocked) {
+      // No money locked - just ask "are you sure?" no fee math
+      bool? ok = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(
+            'Cancel this job?',
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to cancel this job? No money has been locked to escrow yet, so there is no fee.',
+            style: GoogleFonts.inter(fontSize: 12),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('No, Keep Job'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Yes, Cancel Job'),
+            ),
+          ],
+        ),
+      );
+
+      if (ok != true) return; // user said no
+
+      await _performCancel(
+        context: context,
+        jobId: jobId,
+        job: job,
+        isClient: isClient,
+        arrived: false,
+        labour: labour,
+        transport: transport,
+        total: 0,
+        platformFee: 0,
+        clientRefund: 0,
+        fundiGets: 0,
+        reason: 'Cancelled before escrow',
+        details: 'No money locked yet - no fee',
+        escrowWasLocked: false,
+      );
+      return;
+    }
+
+    // --- Escrow IS locked, show normal money dialog ---
     late int platformFee, clientRefund, fundiGets;
     if (isClient) {
       platformFee = (labour * feeRate).round();
       if (!arrived) {
-        // Before travelling: 95% labour + 100% transport back
         clientRefund = (labour * 0.95).round() + transport;
         fundiGets = 0;
       } else {
-        // After site visit: transport -> fundi, 95% labour -> client
         clientRefund = (labour * 0.95).round();
         fundiGets = transport;
       }
     } else {
-      // Fundi cancel before travelling: full refund, no fee
       platformFee = 0;
       clientRefund = total;
       fundiGets = 0;
@@ -161,7 +210,6 @@ class JobCancelService {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // BREAKDOWN - VISIBLE 5% ON LABOUR ONLY
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -182,7 +230,7 @@ class JobCancelService {
                       const SizedBox(height: 8),
                       _row('Labour:', 'KES $labour'),
                       _row('Transport:', 'KES $transport'),
-                      if (escrowAmount > 0) _row('Total locked:', 'KES $total'),
+                      _row('Total locked:', 'KES $total'),
                       const Divider(),
                       Container(
                         padding: const EdgeInsets.all(8),
@@ -193,69 +241,34 @@ class JobCancelService {
                         child: Column(
                           children: [
                             _row(
-                              '5% Maintenance (labour only):',
+                              'App maintenance (5% labour):',
                               'KES $platformFee',
                               color: Colors.red.shade700,
-                            ),
-                            _row(
-                              'Client gets back:',
-                              'KES $clientRefund',
                               bold: true,
-                              color: Colors.green.shade700,
                             ),
                             _row(
-                              'Fundi gets:',
-                              'KES $fundiGets',
-                              color: Colors.blue.shade700,
+                              isClient
+                                  ? (arrived
+                                        ? 'You get back:'
+                                        : 'You get back:')
+                                  : 'Client gets back:',
+                              'KES $clientRefund',
+                              color: Colors.green.shade700,
+                              bold: true,
                             ),
+                            if (fundiGets > 0)
+                              _row(
+                                'Fundi gets (transport):',
+                                'KES $fundiGets',
+                                color: Colors.blue.shade700,
+                                bold: true,
+                              ),
                           ],
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        isClient
-                            ? (arrived
-                                  ? 'Fundi travelled. Transport KES $transport goes to fundi. You get 95% of labour KES ${(labour * 0.95).round()}. 5% KES $platformFee kept for app maintenance.'
-                                  : 'Before travelling. You get 95% labour KES ${(labour * 0.95).round()} + 100% transport KES $transport = KES $clientRefund. 5% KES $platformFee kept for app maintenance (labour only).')
-                            : 'Client gets full KES $clientRefund refund. You get 0. Will affect rating & badge.',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          color: Colors.black54,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                if (isClient)
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          color: Colors.red.shade700,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'WARNING: 5% of labour (KES $platformFee) will be deducted. Transport ${arrived ? "KES $transport goes to fundi" : "100% refunded"}. Proceed?',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.red.shade800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 const SizedBox(height: 12),
                 Text(
                   'Why are you cancelling? *',
@@ -264,24 +277,25 @@ class JobCancelService {
                     fontSize: 12,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
                   value: reason,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason',
+                    border: OutlineInputBorder(),
+                  ),
                   items: (isClient ? clientReasons : fundiReasons)
                       .map(
-                        (e) => DropdownMenuItem(
-                          value: e,
+                        (r) => DropdownMenuItem(
+                          value: r,
                           child: Text(
-                            e,
+                            r,
                             style: GoogleFonts.inter(fontSize: 12),
                           ),
                         ),
                       )
                       .toList(),
                   onChanged: (v) => setSt(() => reason = v!),
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                  ),
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -329,6 +343,7 @@ class JobCancelService {
                   fundiGets: fundiGets,
                   reason: reason,
                   details: otherCtrl.text.trim(),
+                  escrowWasLocked: true,
                 );
               },
               child: Text(
@@ -400,6 +415,7 @@ class JobCancelService {
     required int fundiGets,
     required String reason,
     required String details,
+    bool escrowWasLocked = true,
   }) async {
     try {
       final db = FirebaseFirestore.instance;
@@ -423,26 +439,28 @@ class JobCancelService {
         'clientRefund': clientRefund,
         'fundiPayout': fundiGets,
         'transportFeeStatus': fundiGets > 0 ? 'released' : 'refunded',
-        'escrowStatus': 'refunded',
+        'escrowStatus': escrowWasLocked ? 'refunded' : 'pending',
         'cancelledAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      await db.collection('escrowTransactions').doc(jobId).set({
-        'jobId': jobId,
-        'labour': labour,
-        'transport': transport,
-        'total': total,
-        'platformFee': platformFee,
-        'clientRefund': clientRefund,
-        'fundiGets': fundiGets,
-        'cancelledBy': isClient ? 'client' : 'fundi',
-        'arrived': arrived,
-        'refundReason': isClient
-            ? 'Client cancel - 5% on labour only'
-            : 'Fundi cancel before travelling',
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      if (escrowWasLocked) {
+        await db.collection('escrowTransactions').doc(jobId).set({
+          'jobId': jobId,
+          'labour': labour,
+          'transport': transport,
+          'total': total,
+          'platformFee': platformFee,
+          'clientRefund': clientRefund,
+          'fundiGets': fundiGets,
+          'cancelledBy': isClient ? 'client' : 'fundi',
+          'arrived': arrived,
+          'refundReason': isClient
+              ? 'Client cancel - 5% on labour only'
+              : 'Fundi cancel before travelling',
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
 
       if (fundiGets > 0 && fundiId.isNotEmpty) {
         await db.collection('transportTransactions').doc(jobId).set({
@@ -465,6 +483,7 @@ class JobCancelService {
         'platformFee': platformFee,
         'reason': reason,
         'details': details,
+        'escrowWasLocked': escrowWasLocked,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -472,7 +491,6 @@ class JobCancelService {
         await db.collection('users').doc(fundiId).set({
           'cancellationCount': FieldValue.increment(1),
           'lastCancellationAt': FieldValue.serverTimestamp(),
-          'needsRatingReview': true,
         }, SetOptions(merge: true));
       }
 
@@ -480,9 +498,11 @@ class JobCancelService {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              isClient
-                  ? 'Cancelled. You get KES $clientRefund, fee KES $platformFee'
-                  : 'Cancelled. Client refunded KES $clientRefund',
+              escrowWasLocked
+                  ? (isClient
+                        ? 'Cancelled. You get KES $clientRefund, fee KES $platformFee'
+                        : 'Cancelled. Client refunded KES $clientRefund')
+                  : 'Job cancelled. No money was locked, so no fee.',
             ),
             backgroundColor: Colors.green,
           ),
