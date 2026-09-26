@@ -63,10 +63,12 @@ class FundiConfirmedTab extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: jobsStream,
       builder: (_, snap) {
-        if (snap.hasError)
+        if (snap.hasError) {
           return Center(child: SelectableText('Error: ${snap.error}'));
-        if (!snap.hasData)
+        }
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
         final allDocs = snap.data!.docs;
         var docs = allDocs.where((d) {
@@ -84,13 +86,14 @@ class FundiConfirmedTab extends StatelessWidget {
           ].contains(s);
         }).toList();
 
-        if (docs.isEmpty)
+        if (docs.isEmpty) {
           return Center(
             child: Text(
               'No confirmed jobs',
               style: GoogleFonts.inter(color: Colors.black45),
             ),
           );
+        }
 
         return ListView.builder(
           padding: const EdgeInsets.all(12),
