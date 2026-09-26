@@ -240,81 +240,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
     );
   }
 
-  Widget _cancelCard({
-    required Map<String, dynamic> job,
-    required bool isTravelling,
-    required bool siteDone,
-    required int transport,
-  }) {
-    bool arrived = isTravelling || siteDone;
-    return Card(
-      color: Colors.red.shade50,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.red.shade200),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.cancel_outlined,
-                  size: 18,
-                  color: Colors.red.shade700,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Cancel this job?',
-                  style: GoogleFonts.montserrat(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
-                    color: Colors.red.shade800,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              arrived
-                  ? 'Fundi is on the way/at site. If you cancel: Transport KES $transport -> fundi, you get 95% labour back, 5% fee kept.'
-                  : 'Before travelling. You get 95% labour + 100% transport back. 5% labour fee kept for maintenance.',
-              style: GoogleFonts.inter(fontSize: 11),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: Colors.red.shade400),
-                  foregroundColor: Colors.red.shade700,
-                ),
-                icon: const Icon(Icons.cancel, size: 16),
-                label: Text(
-                  arrived
-                      ? 'CANCEL JOB - 95% LABOUR BACK + TRANSPORT TO FUNDI'
-                      : 'CANCEL JOB - 95% LABOUR + 100% TRANSPORT BACK',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                onPressed: () => JobCancelService.showCancelDialog(
-                  context: context,
-                  jobId: widget.jobId,
-                  job: job,
-                  isClient: true,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -421,6 +346,50 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             'cancelled_after_arrival',
           ].contains(status);
           bool canClientCancel = !isStarted && !isCancelled;
+
+          Widget buildWithFixedCancel(Widget list) {
+            if (!canClientCancel) return list;
+            return Column(
+              children: [
+                Expanded(child: list),
+                Container(
+                  padding: EdgeInsets.fromLTRB(
+                    12,
+                    8,
+                    12,
+                    12 + MediaQuery.of(context).padding.bottom,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    border: Border(top: BorderSide(color: Color(0x1A000000))),
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.red.shade400),
+                        foregroundColor: Colors.red.shade700,
+                      ),
+                      onPressed: () => JobCancelService.showCancelDialog(
+                        context: context,
+                        jobId: widget.jobId,
+                        job: job,
+                        isClient: true,
+                      ),
+                      child: Text(
+                        'CANCEL JOB',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
 
           List<Widget> timeline = [];
           timeline.add(
@@ -537,7 +506,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ),
               ),
             );
-            return _buildReversedList(timeline);
+            return buildWithFixedCancel(_buildReversedList(timeline));
           }
           if (status == 'completed' && clientRated) {
             timeline.add(
@@ -549,7 +518,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 isDone: true,
               ),
             );
-            return _buildReversedList(timeline);
+            return buildWithFixedCancel(_buildReversedList(timeline));
           }
           if (isCancelled) {
             timeline.add(
@@ -563,7 +532,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 isDone: false,
               ),
             );
-            return _buildReversedList(timeline);
+            return buildWithFixedCancel(_buildReversedList(timeline));
           }
 
           timeline.add(
@@ -616,17 +585,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
 
           // FIX: Add cancel BEFORE early return so it shows immediately after escrow
           if (!escrowDone) {
-            if (canClientCancel) {
-              timeline.add(
-                _cancelCard(
-                  job: job,
-                  isTravelling: isTravelling,
-                  siteDone: siteDone,
-                  transport: transport,
-                ),
-              );
-            }
-            return _buildReversedList(timeline);
+            return buildWithFixedCancel(_buildReversedList(timeline));
           }
 
           if (!isTravelling &&
@@ -706,17 +665,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           }
 
           if (!siteDone) {
-            if (canClientCancel) {
-              timeline.add(
-                _cancelCard(
-                  job: job,
-                  isTravelling: isTravelling,
-                  siteDone: siteDone,
-                  transport: transport,
-                ),
-              );
-            }
-            return _buildReversedList(timeline);
+            return buildWithFixedCancel(_buildReversedList(timeline));
           }
 
           if (needsExtraEscrow) {
@@ -753,17 +702,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ),
               ),
             );
-            if (canClientCancel) {
-              timeline.add(
-                _cancelCard(
-                  job: job,
-                  isTravelling: isTravelling,
-                  siteDone: siteDone,
-                  transport: transport,
-                ),
-              );
-            }
-            return _buildReversedList(timeline);
+            return buildWithFixedCancel(_buildReversedList(timeline));
           } else if (reneg != null &&
               _toBool(reneg['requested']) &&
               renegStatus == 'pending') {
@@ -795,17 +734,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ),
               ),
             );
-            if (canClientCancel) {
-              timeline.add(
-                _cancelCard(
-                  job: job,
-                  isTravelling: isTravelling,
-                  siteDone: siteDone,
-                  transport: transport,
-                ),
-              );
-            }
-            return _buildReversedList(timeline);
+            return buildWithFixedCancel(_buildReversedList(timeline));
           }
 
           if (reneg != null &&
@@ -892,17 +821,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     'You marked parts as bought. Waiting for ${widget.fundiName} to confirm.',
               ),
             );
-            if (canClientCancel) {
-              timeline.add(
-                _cancelCard(
-                  job: job,
-                  isTravelling: isTravelling,
-                  siteDone: siteDone,
-                  transport: transport,
-                ),
-              );
-            }
-            return _buildReversedList(timeline);
+            return buildWithFixedCancel(_buildReversedList(timeline));
           } else if (phase == 'parts_confirmed_by_fundi' ||
               phase == 'fundi_working' ||
               status == 'in_progress' ||
@@ -928,17 +847,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     'Fundi confirmed your parts are available. Waiting for him to tap Start Job.',
               ),
             );
-            if (canClientCancel) {
-              timeline.add(
-                _cancelCard(
-                  job: job,
-                  isTravelling: isTravelling,
-                  siteDone: siteDone,
-                  transport: transport,
-                ),
-              );
-            }
-            return _buildReversedList(timeline);
+            return buildWithFixedCancel(_buildReversedList(timeline));
           }
 
           if (status == 'site_visit' && phase.isEmpty) {
@@ -949,17 +858,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     '${widget.fundiName} arrived at $location and is on site. Waiting for him to Start Job.',
               ),
             );
-            if (canClientCancel) {
-              timeline.add(
-                _cancelCard(
-                  job: job,
-                  isTravelling: isTravelling,
-                  siteDone: siteDone,
-                  transport: transport,
-                ),
-              );
-            }
-            return _buildReversedList(timeline);
+            return buildWithFixedCancel(_buildReversedList(timeline));
           } else if (status == 'in_progress' ||
               phase == 'fundi_working' ||
               status.contains('completed')) {
@@ -981,7 +880,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                     '${widget.trade} in progress at $location. ${widget.fundiName} is working. Waiting for him to tap MARK JOB AS COMPLETED.',
               ),
             );
-            return _buildReversedList(timeline);
+            return buildWithFixedCancel(_buildReversedList(timeline));
           }
 
           if (status == 'job_completed' || status == 'pending_completion') {
@@ -1049,18 +948,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               ),
             );
           }
-
-          // FINAL CANCEL - added last so it appears FIRST after reversal = immediately visible
-          if (canClientCancel)
-            timeline.add(
-              _cancelCard(
-                job: job,
-                isTravelling: isTravelling,
-                siteDone: siteDone,
-                transport: transport,
-              ),
-            );
-          if (isStarted)
+          if (isStarted) {
             timeline.add(
               Card(
                 color: Colors.green.shade50,
@@ -1081,8 +969,9 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ),
               ),
             );
+          }
 
-          return _buildReversedList(timeline);
+          return buildWithFixedCancel(_buildReversedList(timeline));
         },
       ),
     );
