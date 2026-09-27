@@ -34,12 +34,14 @@ class FundiPapApp extends StatelessWidget {
 class HomeNavigator extends StatefulWidget {
   final String role;
   final String email;
-  final int initialIndex; // <-- ADD THIS
+  final int initialIndex;
+  final int initialJobStatusTab; // <-- ADD
   const HomeNavigator({
     super.key,
     this.role = 'client',
     this.email = '',
     this.initialIndex = 0,
+    this.initialJobStatusTab = 0,
   });
   @override
   State<HomeNavigator> createState() => _HomeNavigatorState();
@@ -197,7 +199,10 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     final pages = [
       CustomerHome(key: ValueKey('ch_$_refreshId')),
       CustomerNotificationsPage(key: ValueKey('cn_$_refreshId')),
-      PostJobScreen(key: ValueKey('cp_$_refreshId')),
+      PostJobScreen(
+        key: ValueKey('cp_$_refreshId'),
+        initialTabIndex: widget.initialJobStatusTab,
+      ), // <-- CHANGE
       DisputesScreen(key: ValueKey('cd_$_refreshId')),
       ProfileScreen(
         email: widget.email,

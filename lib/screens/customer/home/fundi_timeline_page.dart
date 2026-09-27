@@ -251,18 +251,14 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            // If we have a back stack, just pop
-            if (Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
-              return;
-            }
-            // No stack (notification / black screen case) -> go to Job Status tab
+            // After cancel, go straight to Cancelled tab
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(
                 builder: (_) => HomeNavigator(
                   role: 'client',
                   email: FirebaseAuth.instance.currentUser?.email ?? '',
-                  initialIndex: 2, // 2 = Job Status tab where Cancelled lives
+                  initialIndex: 2, // Job Status outer tab
+                  initialJobStatusTab: 4, // Cancelled inner tab
                 ),
               ),
               (r) => false,

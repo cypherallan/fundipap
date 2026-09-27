@@ -14,7 +14,8 @@ import 'post_job_completed_tab.dart';
 import 'post_job_cancelled_tab.dart'; // <-- add this file
 
 class PostJobScreen extends StatefulWidget {
-  const PostJobScreen({super.key});
+  final int initialTabIndex;
+  const PostJobScreen({super.key, this.initialTabIndex = 0});
   @override
   State<PostJobScreen> createState() => _PostJobScreenState();
 }
@@ -28,7 +29,8 @@ class _PostJobScreenState extends State<PostJobScreen>
   Widget build(BuildContext context) {
     var uid = FirebaseAuth.instance.currentUser!.uid;
     return DefaultTabController(
-      length: 5, // 4 -> 5 FIX FOR BLACK SCREEN
+      length: 5,
+      initialIndex: widget.initialTabIndex, // <-- ADD THIS
       child: Column(
         children: [
           Container(
