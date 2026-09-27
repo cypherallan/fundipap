@@ -265,7 +265,6 @@ class FundiCustomerTimelinePage extends StatelessWidget {
         if (isCancelled) {
           final String title;
           final String message;
-
           switch (status) {
             case 'cancelled_before_payment':
               title = 'Client cancelled';
@@ -279,7 +278,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               title =
                   'Cancelled after arrival - Transport KES $transport to you';
               message =
-                  'Cancelled by ${job['cancelledBy'] ?? ''} - Reason: ${job['cancelReason'] ?? ''}';
+                  'Cancelled by ${job['cancelledBy'] ?? ''} - Reason: ${job['cancelledBy'] ?? ''} ${job['cancelReason'] ?? ''}';
               break;
             default:
               title = 'Cancelled - Full refund to client';
@@ -312,6 +311,59 @@ class FundiCustomerTimelinePage extends StatelessWidget {
                   message: message,
                   time: 'Now',
                   isDone: false,
+                ),
+                // NEW: If this cancelled job was reposted, show button to view new job
+                FutureBuilder<QuerySnapshot>(
+                  future: FirebaseFirestore.instance
+                      .collection('jobs')
+                      .where('repostedFrom', isEqualTo: jobId)
+                      .where(
+                        'status',
+                        whereIn: [
+                          'open',
+                          'assigned',
+                          'confirmed',
+                          'travelling',
+                          'site_visit',
+                          'in_progress',
+                        ],
+                      )
+                      .limit(1)
+                      .get(),
+                  builder: (ctx, repSnap) {
+                    if (!repSnap.hasData || repSnap.data!.docs.isEmpty)
+                      return const SizedBox();
+                    var newDoc = repSnap.data!.docs.first;
+                    return Card(
+                      color: Colors.green.shade50,
+                      child: ListTile(
+                        title: Text(
+                          'Client reposted this job',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'New job is open for bidding again',
+                          style: GoogleFonts.inter(fontSize: 11),
+                        ),
+                        trailing: ElevatedButton(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => FundiCustomerTimelinePage(
+                                jobId: newDoc.id,
+                                clientName: clientName,
+                                jobTitle: jobTitle,
+                              ),
+                            ),
+                          ),
+                          child: const Text('VIEW NEW JOB'),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

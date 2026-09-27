@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../fundi/home/fundi_customer_timeline_page.dart'; // adjust import to your FundiCustomerTimelinePage path
 
 class FundiCancelledTab extends StatelessWidget {
   final Stream<QuerySnapshot> jobsStream;
@@ -15,14 +16,12 @@ class FundiCancelledTab extends StatelessWidget {
         if (!snap.hasData)
           return const Center(child: CircularProgressIndicator());
 
-        var docs = snap.data!.docs
-            .where(
-              (d) => [
-                'cancelled',
-                'cancelled_after_arrival',
-              ].contains((d.data() as Map)['status']),
-            )
-            .toList();
+        var docs = snap.data!.docs.where((d) {
+          var status = ((d.data() as Map)['status'] ?? '')
+              .toString()
+              .toLowerCase();
+          return status.contains('cancel'); // catches all 4 cancelled types
+        }).toList();
 
         if (docs.isEmpty) {
           return Center(
@@ -37,7 +36,8 @@ class FundiCancelledTab extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           itemCount: docs.length,
           itemBuilder: (_, i) {
-            var job = docs[i].data() as Map<String, dynamic>;
+            var doc = docs[i];
+            var job = doc.data() as Map<String, dynamic>;
             bool byClient = (job['cancelledBy'] ?? '') == 'client';
             bool afterArrival = job['status'] == 'cancelled_after_arrival';
             int transport =
@@ -104,7 +104,6 @@ class FundiCancelledTab extends StatelessWidget {
                           style: GoogleFonts.inter(fontSize: 11),
                         ),
                         const SizedBox(height: 4),
-                        // FIXED: no else-if with comma
                         if (byClient && afterArrival)
                           Text(
                             'You get transport: KES $transport',
@@ -129,6 +128,60 @@ class FundiCancelledTab extends StatelessWidget {
                           ),
                       ],
                     ),
+                  ),
+                  // NEW: If client reposted this cancelled job, show VIEW NEW JOB
+                  FutureBuilder<QuerySnapshot>(
+                    future: FirebaseFirestore.instance
+                        .collection('jobs')
+                        .where('repostedFrom', isEqualTo: doc.id)
+                        .where(
+                          'status',
+                          whereIn: [
+                            'open',
+                            'assigned',
+                            'confirmed',
+                            'travelling',
+                            'site_visit',
+                            'in_progress',
+                          ],
+                        )
+                        .limit(1)
+                        .get(),
+                    builder: (ctx, repSnap) {
+                      if (!repSnap.hasData || repSnap.data!.docs.isEmpty)
+                        return const SizedBox();
+                      var newDoc = repSnap.data!.docs.first;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
+                            ),
+                            icon: const Icon(Icons.refresh, size: 14),
+                            label: Text(
+                              'CLIENT REPOSTED - VIEW NEW JOB',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11,
+                              ),
+                            ),
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FundiCustomerTimelinePage(
+                                  jobId: newDoc.id,
+                                  clientName: job['customerName'] ?? 'Client',
+                                  jobTitle: job['title'] ?? '',
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

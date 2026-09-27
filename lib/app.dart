@@ -10,7 +10,7 @@ import 'screens/customer/home/customer_notifications_page.dart';
 import 'screens/customer/my_jobs/post_job_screen.dart';
 import 'screens/customer/disputes_screen.dart';
 import 'screens/fundi/home/fundi_home.dart';
-import 'screens/fundi/home/notifications_page.dart';
+import 'screens/fundi/home/fundi_notifications_page.dart';
 import 'screens/fundi/disputes_screen.dart' as fundi_disputes;
 import 'services/auth_service.dart';
 import 'screens/profile/profile_screen.dart';

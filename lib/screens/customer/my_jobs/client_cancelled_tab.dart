@@ -50,6 +50,15 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
       final newRef = db.collection('jobs').doc();
       final Map<String, dynamic> newJob = {
         'customerId': uid,
+        'customerName':
+            oldJob['customerName'] ??
+            oldJob['clientName'] ??
+            oldJob['customerUsername'] ??
+            'Client',
+        'clientName':
+            oldJob['clientName'] ?? oldJob['customerName'] ?? 'Client',
+        'customerUsername':
+            oldJob['customerUsername'] ?? oldJob['customerName'],
         'title': oldJob['title'],
         'description': oldJob['description'],
         'categoryId': oldJob['categoryId'],
@@ -68,6 +77,7 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
         'longitude': oldJob['longitude'],
         'address': oldJob['address'],
         'status': 'open',
+        'cancelled': false,
         'escrowStatus': 'pending',
         'escrowAmount': 0,
         'agreedPrice': null,
@@ -77,8 +87,11 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
-
       await newRef.set(newJob);
+      await db.collection('jobs').doc(oldJobId).update({
+        'reposted': true,
+        'repostedAs': newRef.id,
+      });
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
