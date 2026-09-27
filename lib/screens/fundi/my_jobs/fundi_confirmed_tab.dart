@@ -33,6 +33,8 @@ class FundiConfirmedTab extends StatelessWidget {
       'travelling': true,
       'siteVisitStarted': true,
       'travellingAt': FieldValue.serverTimestamp(),
+      'siteVisitStartedAt':
+          FieldValue.serverTimestamp(), // <-- ADD for 2h30m rule
       'status': 'travelling',
       'updatedAt': FieldValue.serverTimestamp(),
     });

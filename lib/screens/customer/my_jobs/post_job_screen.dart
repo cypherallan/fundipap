@@ -11,7 +11,7 @@ import 'post_job_pending_tab.dart';
 import 'post_job_confirmed_tab.dart';
 import 'post_job_rejected_tab.dart';
 import 'post_job_completed_tab.dart';
-import 'post_job_cancelled_tab.dart'; // <-- add this file
+import 'client_cancelled_tab.dart'; // <-- add this file
 
 class PostJobScreen extends StatefulWidget {
   final int initialTabIndex;

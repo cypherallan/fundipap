@@ -175,17 +175,21 @@ class JobCancelService {
     // --- Escrow IS locked, show normal money dialog ---
     late int platformFee, clientRefund, fundiGets;
     if (isClient) {
-      platformFee = (labour * feeRate).round();
       if (!arrived) {
-        clientRefund = (labour * 0.95).round() + transport;
+        // BEFORE TRAVEL - Client cancels
+        platformFee = (labour * feeRate).round(); // 250 / 300
+        clientRefund = labour + transport; // 5100 / 6100
         fundiGets = 0;
       } else {
-        clientRefund = (labour * 0.95).round();
-        fundiGets = transport;
+        // AFTER SITE VISIT - Client cancels: 100 to fundi, never to client
+        platformFee = (labour * feeRate).round(); // 250 / 300
+        clientRefund = (labour * 0.95).round(); // 4750 / 5700
+        fundiGets = transport; // 100
       }
     } else {
+      // Fundi cancels BEFORE travel - Full refund
       platformFee = 0;
-      clientRefund = total;
+      clientRefund = total; // FULL 5,350 / 6,400
       fundiGets = 0;
     }
 
@@ -520,6 +524,66 @@ class JobCancelService {
         );
       }
     }
+  }
+
+  // AUTO-CANCEL AFTER 2h30m NO ARRIVAL
+  static Future<void> checkAndAutoCancelIfExpired({
+    required String jobId,
+    required Map<String, dynamic> job,
+  }) async {
+    final startedAt =
+        job['siteVisitStartedAt'] ??
+        job['travellingAt'] ??
+        job['startedTravellingAt'];
+    if (startedAt == null) return;
+
+    DateTime startTime;
+    if (startedAt is Timestamp) {
+      startTime = startedAt.toDate();
+    } else if (startedAt is DateTime)
+      // ignore: curly_braces_in_flow_control_structures
+      startTime = startedAt;
+    else
+      return;
+
+    final elapsed = DateTime.now().difference(startTime);
+    bool siteDone =
+        job['siteVisitDone'] == true ||
+        job['siteVisited'] == true ||
+        job['fundiArrivedAt'] != null;
+
+    if (siteDone) return;
+    if (elapsed.inMinutes < 150) return; // 2h30m = 150min
+
+    // Expired - full refund to client
+    final db = FirebaseFirestore.instance;
+    int total = _toInt(job['escrowAmount'] ?? 0);
+    if (total == 0) {
+      int labour = _toInt(job['currentLabour'] ?? job['agreedPrice'] ?? 0);
+      int transport = _toInt(job['transportFee'] ?? 0);
+      total = labour + transport + (labour * feeRate).round();
+    }
+
+    await db.collection('jobs').doc(jobId).update({
+      'status': 'auto_cancelled_no_arrival',
+      'cancelled': true,
+      'autoCancelled': true,
+      'cancelledBy': 'system',
+      'cancelReason': 'Fundi took too long to arrive',
+      'clientRefund': total,
+      'platformFee': 0,
+      'fundiPayout': 0,
+      'escrowStatus': 'refunded',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    await db.collection('cancellationLogs').add({
+      'jobId': jobId,
+      'cancelledBy': 'system',
+      'reason': 'No arrival within 2h30m - 20km rule',
+      'clientRefund': total,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
   static int _toInt(dynamic v) {

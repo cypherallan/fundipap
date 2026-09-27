@@ -62,6 +62,8 @@ class FundiCustomerTimelinePage extends StatelessWidget {
       'travelling': true,
       'siteVisitStarted': true,
       'travellingAt': FieldValue.serverTimestamp(),
+      'siteVisitStartedAt':
+          FieldValue.serverTimestamp(), // <- ADD for 2h30m auto-cancel
       'status': 'travelling',
       'customerHasUnread': true,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -113,7 +115,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
     Map<String, dynamic> job,
   ) async {
     String status = (job['status'] ?? '').toString();
-    if (['cancelled', 'cancelled_after_arrival'].contains(status)) {
+    if (status.toLowerCase().contains('cancel')) {
       _goBackToMyJobs(context, tab: 4);
       return;
     }
@@ -204,10 +206,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             status == 'job_completed' ||
             status == 'pending_completion' ||
             status == 'completed';
-        bool isCancelled = [
-          'cancelled',
-          'cancelled_after_arrival',
-        ].contains(status);
+        bool isCancelled = status.toLowerCase().contains('cancel');
         bool canFundiCancel =
             (status == 'assigned' || status == 'confirmed') &&
             !travelling &&
@@ -264,6 +263,30 @@ class FundiCustomerTimelinePage extends StatelessWidget {
         }
 
         if (isCancelled) {
+          final String title;
+          final String message;
+
+          switch (status) {
+            case 'cancelled_before_payment':
+              title = 'Client cancelled';
+              message = 'Client cancelled this job before paying to escrow.';
+              break;
+            case 'auto_cancelled_no_arrival':
+              title = 'Auto-cancelled - No arrival - No payout';
+              message = 'You did not arrive in time. Client got full refund.';
+              break;
+            case 'cancelled_after_arrival':
+              title =
+                  'Cancelled after arrival - Transport KES $transport to you';
+              message =
+                  'Cancelled by ${job['cancelledBy'] ?? ''} - Reason: ${job['cancelReason'] ?? ''}';
+              break;
+            default:
+              title = 'Cancelled - Full refund to client';
+              message =
+                  'Cancelled by ${job['cancelledBy'] ?? ''} - Reason: ${job['cancelReason'] ?? ''}';
+          }
+
           return Scaffold(
             appBar: AppBar(
               leading: IconButton(
@@ -285,11 +308,8 @@ class FundiCustomerTimelinePage extends StatelessWidget {
                   border: Colors.red,
                   icon: Icons.cancel,
                   iconColor: Colors.red,
-                  title: status == 'cancelled_after_arrival'
-                      ? 'Cancelled after arrival - Transport KES $transport to you'
-                      : 'Cancelled - Full refund to client',
-                  message:
-                      'Cancelled by ${job['cancelledBy'] ?? ''} - Reason: ${job['cancelReason'] ?? ''}',
+                  title: title,
+                  message: message,
                   time: 'Now',
                   isDone: false,
                 ),

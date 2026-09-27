@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'actions.dart';
 import 'pending_tab.dart';
-import 'confirmed_tab.dart';
+import 'fundi_confirmed_tab.dart';
 import 'rejected_tab.dart';
-import 'completed_tab.dart';
+import 'fundi_completed_tab.dart';
 import 'fundi_cancelled_tab.dart'; // <-- NEW
 
 class FundiMyJobsPage extends StatefulWidget {

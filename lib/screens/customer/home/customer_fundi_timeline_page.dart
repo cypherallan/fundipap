@@ -350,10 +350,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               status == 'job_completed' ||
               status == 'pending_completion' ||
               status == 'completed';
-          bool isCancelled = [
-            'cancelled',
-            'cancelled_after_arrival',
-          ].contains(status);
+          bool isCancelled = status.toLowerCase().contains('cancel');
           bool canClientCancel = !isStarted && !isCancelled;
 
           Widget buildWithFixedCancel(Widget list) {
@@ -530,13 +527,38 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             return buildWithFixedCancel(_buildReversedList(timeline));
           }
           if (isCancelled) {
+            String title;
+            String body;
+            final by = job['cancelledBy'] ?? '';
+            final refund = job['clientRefund'] ?? 0;
+            final fee = job['platformFee'] ?? 0;
+            final payout = job['fundiPayout'] ?? 0;
+
+            switch (status) {
+              case 'cancelled_before_payment':
+                title = 'Job cancelled';
+                body = 'Cancelled by $by. No charge - payment was not made.';
+                break;
+              case 'auto_cancelled_no_arrival':
+                title = 'Auto-cancelled - Fundi did not arrive';
+                body =
+                    'Fundi did not arrive in time. Full refund KES $refund to client.';
+                break;
+              case 'cancelled_after_arrival':
+                title = 'Job cancelled after arrival';
+                body =
+                    'Cancelled by $by - Refund KES $refund - Fee KES $fee - Fundi gets KES $payout';
+                break;
+              default:
+                title = 'Job cancelled';
+                body =
+                    'Cancelled by $by - Refund KES $refund - Fee KES $fee - Fundi gets KES $payout';
+            }
+
             timeline.add(
               _timelineCard(
-                title: status == 'cancelled_after_arrival'
-                    ? 'Job cancelled after arrival'
-                    : 'Job cancelled',
-                body:
-                    'Cancelled by ${job['cancelledBy'] ?? ''} - Refund KES ${job['clientRefund'] ?? ''} - Fee KES ${job['platformFee'] ?? ''} - Fundi gets KES ${job['fundiPayout'] ?? 0}',
+                title: title,
+                body: body,
                 icon: Icons.cancel,
                 isDone: false,
               ),
