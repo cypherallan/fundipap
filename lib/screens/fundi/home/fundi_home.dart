@@ -32,6 +32,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
   String mySkill = 'General';
   @override
   Position? currentPos;
+  bool _isRatingLock = false; // prevent loop
 
   @override
   void initState() {
@@ -45,59 +46,100 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
 
   Future<void> _onRefresh() async {
     await loadMe();
-    if (mounted) {
-      await loadLocation(context);
-    }
+    if (mounted) await loadLocation(context);
     await _enforcePendingRating();
     if (mounted) setState(() {});
   }
 
   Future<void> _enforcePendingRating() async {
+    if (_isRatingLock) return;
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null || !mounted) return;
     try {
       final opt = const GetOptions(source: Source.server);
+
+      // ONLY query completed + released jobs, not assigned
       var s1 = await FirebaseFirestore.instance
           .collection('jobs')
           .where('acceptedBidId', isEqualTo: uid)
+          .where('status', isEqualTo: 'completed')
+          .where('escrowStatus', isEqualTo: 'released')
+          .limit(5)
           .get(opt);
       var s2 = await FirebaseFirestore.instance
           .collection('jobs')
           .where('fundiId', isEqualTo: uid)
+          .where('status', isEqualTo: 'completed')
+          .where('escrowStatus', isEqualTo: 'released')
+          .limit(5)
           .get(opt);
       var s3 = await FirebaseFirestore.instance
           .collection('jobs')
           .where('assignedFundiId', isEqualTo: uid)
+          .where('status', isEqualTo: 'completed')
+          .where('escrowStatus', isEqualTo: 'released')
+          .limit(5)
+          .get(opt);
+      var s4 = await FirebaseFirestore.instance
+          .collection('jobs')
+          .where('assignedFundi', isEqualTo: uid)
+          .where('status', isEqualTo: 'completed')
+          .where('escrowStatus', isEqualTo: 'released')
+          .limit(5)
           .get(opt);
 
       final map = <String, QueryDocumentSnapshot>{};
-      for (var d in [...s1.docs, ...s2.docs, ...s3.docs]) map[d.id] = d;
-      final unrated = map.values
-          .where(
-            (d) => (d.data() as Map<String, dynamic>)['fundiRated'] != true,
-          )
-          .toList();
+      for (var d in [...s1.docs, ...s2.docs, ...s3.docs, ...s4.docs])
+        map[d.id] = d;
+
+      final unrated = map.values.where((d) {
+        var data = d.data() as Map<String, dynamic>;
+        String status = (data['status'] ?? '').toString();
+        String escrow = (data['escrowStatus'] ?? '').toString();
+        bool isCancelled = [
+          'cancelled',
+          'cancelled_after_arrival',
+        ].contains(status);
+        bool fundiRated = data['fundiRated'] == true;
+        bool fundiConfirmed = data['fundiConfirmedPayment'] == true;
+        // STRICT: only completed + released + confirmed + not cancelled + not rated
+        return !isCancelled &&
+            !fundiRated &&
+            status == 'completed' &&
+            escrow == 'released' &&
+            fundiConfirmed;
+      }).toList();
 
       if (unrated.isNotEmpty && mounted) {
+        _isRatingLock = true;
         var first = unrated.first;
         var data = first.data() as Map<String, dynamic>;
-        Navigator.of(context, rootNavigator: true).push(
-          MaterialPageRoute(
-            builder: (_) => RateClientScreen(
-              jobId: first.id,
-              clientId: (data['customerId'] ?? data['clientId'] ?? '')
-                  .toString(),
-              clientName:
-                  (data['customerName'] ?? data['clientName'] ?? 'Client')
+        // small delay to avoid flash when landing on home
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (!mounted) {
+          _isRatingLock = false;
+          return;
+        }
+        Navigator.of(context, rootNavigator: true)
+            .push(
+              MaterialPageRoute(
+                builder: (_) => RateClientScreen(
+                  jobId: first.id,
+                  clientId: (data['customerId'] ?? data['clientId'] ?? '')
                       .toString(),
-              trade: (data['subcategoryName'] ?? data['title'] ?? '')
-                  .toString(),
-            ),
-          ),
-        );
+                  clientName:
+                      (data['customerName'] ?? data['clientName'] ?? 'Client')
+                          .toString(),
+                  trade: (data['subcategoryName'] ?? data['title'] ?? '')
+                      .toString(),
+                ),
+              ),
+            )
+            .then((_) => _isRatingLock = false);
       }
     } catch (e) {
       debugPrint('LOCK ERR $e');
+      _isRatingLock = false;
     }
   }
 

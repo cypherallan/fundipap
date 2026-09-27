@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../../../app.dart'; // HomeNavigator = bottom tabs host
+import '../../../app.dart';
 
 class RateClientScreen extends StatefulWidget {
   final String jobId;
@@ -27,6 +27,7 @@ class _RateClientScreenState extends State<RateClientScreen> {
   bool _submitting = false;
   Map<String, dynamic>? _job;
   bool _loadingJob = true;
+  bool _redirected = false;
 
   @override
   void initState() {
@@ -41,14 +42,48 @@ class _RateClientScreenState extends State<RateClientScreen> {
           .doc(widget.jobId)
           .get();
       if (!mounted) return;
+      var data = doc.data();
       setState(() {
-        _job = doc.data();
+        _job = data;
         _loadingJob = false;
       });
+      if (data == null) {
+        _goHome();
+        return;
+      }
+
+      String status = (data['status'] ?? '').toString();
+      String escrow = (data['escrowStatus'] ?? '').toString();
+      bool isCancelled = [
+        'cancelled',
+        'cancelled_after_arrival',
+      ].contains(status);
+      bool fundiRated = _toBool(data['fundiRated']);
+      bool fundiConfirmed = _toBool(data['fundiConfirmedPayment']);
+
+      if (isCancelled || fundiRated) {
+        _goHome();
+        return;
+      }
+
+      bool isCompleted = status == 'completed';
+      bool isReleased = escrow == 'released';
+      if (!isCompleted || !isReleased || !fundiConfirmed) {
+        _goToMyJobs();
+        return;
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => _loadingJob = false);
+      _goHome();
     }
+  }
+
+  bool _toBool(dynamic v) {
+    if (v == null) return false;
+    if (v is bool) return v;
+    if (v is int) return v != 0;
+    return v.toString().toLowerCase() == 'true';
   }
 
   int _toInt(dynamic v, [int fb = 0]) {
@@ -71,14 +106,35 @@ class _RateClientScreenState extends State<RateClientScreen> {
     }
   }
 
-  Future<void> _goHomeWithTabs() async {
+  Future<void> _goHome() async {
+    if (_redirected) return;
+    _redirected = true;
     if (!mounted) return;
     final email = FirebaseAuth.instance.currentUser?.email ?? '';
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) => HomeNavigator(role: 'fundi', email: email),
+        builder: (_) =>
+            HomeNavigator(role: 'fundi', email: email, initialIndex: 0),
       ),
-      (route) => false,
+      (r) => false,
+    );
+  }
+
+  Future<void> _goToMyJobs() async {
+    if (_redirected) return;
+    _redirected = true;
+    if (!mounted) return;
+    final email = FirebaseAuth.instance.currentUser?.email ?? '';
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => HomeNavigator(
+          role: 'fundi',
+          email: email,
+          initialIndex: 2,
+          initialJobStatusTab: 1,
+        ),
+      ),
+      (r) => false,
     );
   }
 
@@ -102,6 +158,13 @@ class _RateClientScreenState extends State<RateClientScreen> {
           .doc(widget.jobId);
       var jobSnap = await jobRef.get();
       var jobData = jobSnap.data() ?? {};
+      if ([
+        'cancelled',
+        'cancelled_after_arrival',
+      ].contains(jobData['status'])) {
+        await _goHome();
+        return;
+      }
 
       String effectiveClientId = widget.clientId.trim();
       if (effectiveClientId.isEmpty) {
@@ -121,7 +184,7 @@ class _RateClientScreenState extends State<RateClientScreen> {
           'fundiRatedAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
-        await _goHomeWithTabs();
+        await _goHome();
         return;
       }
 
@@ -170,7 +233,7 @@ class _RateClientScreenState extends State<RateClientScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      await _goHomeWithTabs();
+      await _goHome();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -205,10 +268,20 @@ class _RateClientScreenState extends State<RateClientScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // --- FIX: fundi receives 5800, not 6400 ---
+    if (_loadingJob)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+
+    String status = (_job?['status'] ?? '').toString();
+    if (['cancelled', 'cancelled_after_arrival'].contains(status)) {
+      Future.microtask(() => _goHome());
+      return const Scaffold(
+        body: Center(child: Text('Cancelled - redirecting...')),
+      );
+    }
+
+    // --- your original beautiful UI calculations ---
     String location =
         (_job?['location'] ?? _job?['address'] ?? 'Client location').toString();
-
     var reneg = _job?['renegotiation'] as Map<String, dynamic>?;
     int oldLabour = _toInt(_job?['laborCost'] ?? _job?['agreedPrice'] ?? 5000);
     int newLabour = _toInt(
@@ -217,9 +290,9 @@ class _RateClientScreenState extends State<RateClientScreen> {
     );
     if (newLabour == 0) newLabour = 6000;
     int transportVal = _toInt(_job?['transportFee'] ?? 100);
-    int fundiAppFeeVal = (newLabour * 0.05).round(); // 300
-    int fundiReceivesVal = newLabour - fundiAppFeeVal + transportVal; // 5800
-    int paid = fundiReceivesVal; // hide 6400
+    int fundiAppFeeVal = (newLabour * 0.05).round();
+    int fundiReceivesVal = newLabour - fundiAppFeeVal + transportVal;
+    int paid = fundiReceivesVal;
 
     final ratingLabels = [
       '0.0 Tap to rate',
@@ -262,111 +335,109 @@ class _RateClientScreenState extends State<RateClientScreen> {
           ),
           backgroundColor: Colors.orange.shade50,
         ),
-        body: _loadingJob
-            ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Center(
-                      child: Column(
-                        children: [
-                          CircleAvatar(
-                            radius: 36,
-                            backgroundColor: FundipapColors.blackGray,
-                            child: Text(
-                              widget.clientName.isNotEmpty
-                                  ? widget.clientName[0].toUpperCase()
-                                  : 'C',
-                              style: const TextStyle(
-                                fontSize: 28,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Job done for ${widget.clientName}',
-                            style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${widget.trade} • $location • KES $paid received',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: Colors.black54,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Center(
+                    CircleAvatar(
+                      radius: 36,
+                      backgroundColor: FundipapColors.blackGray,
                       child: Text(
-                        'Your rating for client',
-                        style: GoogleFonts.montserrat(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
+                        widget.clientName.isNotEmpty
+                            ? widget.clientName[0].toUpperCase()
+                            : 'C',
+                        style: const TextStyle(
+                          fontSize: 28,
+                          color: Colors.white,
                         ),
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(5, (i) => _buildStar(i)),
-                    ),
-                    const SizedBox(height: 6),
-                    Center(
-                      child: Text(
-                        ratingLabel,
-                        style: GoogleFonts.montserrat(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
+                    Text(
+                      'Job done for ${widget.clientName}',
+                      style: GoogleFonts.montserrat(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _reviewCtrl,
-                      maxLines: 4,
-                      decoration: InputDecoration(
-                        hintText: 'How was ${widget.clientName} as a client?',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${widget.trade} • $location • KES $paid received',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: Colors.black54,
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: FundipapColors.primaryYellow,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: _submitting ? null : _submitRating,
-                        child: _submitting
-                            ? const CircularProgressIndicator()
-                            : Text(
-                                'SUBMIT & UNLOCK APP',
-                                style: GoogleFonts.montserrat(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                      ),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
               ),
+              const SizedBox(height: 20),
+              Center(
+                child: Text(
+                  'Your rating for client',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (i) => _buildStar(i)),
+              ),
+              const SizedBox(height: 6),
+              Center(
+                child: Text(
+                  ratingLabel,
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _reviewCtrl,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  hintText: 'How was ${widget.clientName} as a client?',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: FundipapColors.primaryYellow,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: _submitting ? null : _submitRating,
+                  child: _submitting
+                      ? const CircularProgressIndicator()
+                      : Text(
+                          'SUBMIT & UNLOCK APP',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
