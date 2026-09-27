@@ -33,7 +33,10 @@ class FundiHomeJobList extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('jobs')
-          .where('status', isEqualTo: 'open') // hides all cancelled_*
+          .where(
+            'status',
+            whereIn: ['open', 'accepted', 'assigned', 'confirmed'],
+          ) // keep visible until escrow held
           .snapshots(),
       builder: (context, snap) {
         if (!snap.hasData) {
@@ -47,15 +50,20 @@ class FundiHomeJobList extends StatelessWidget {
             .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
             .toList();
 
-        // FIX: hide assigned jobs + any cancelled that slipped through
+        // FIXED: hide only when escrow locked, cancelled, or old reposted doc
         docs = docs.where((m) {
-          var assigned = m['assignedFundiId'];
-          var assigned2 = m['assignedFundi'];
           var status = (m['status'] ?? '').toString().toLowerCase();
-          bool isAssigned =
-              (assigned != null && assigned.toString().isNotEmpty) ||
-              (assigned2 != null && assigned2.toString().isNotEmpty);
-          return !isAssigned && !status.contains('cancel') && status == 'open';
+          var escrow = (m['escrowStatus'] ?? 'pending')
+              .toString()
+              .toLowerCase();
+          if (status.contains('cancel') ||
+              status.contains('complete') ||
+              status == 'closed')
+            return false;
+          if (m['reposted'] == true) return false;
+          if (['held', 'paid', 'locked', 'released'].contains(escrow))
+            return false; // client locked money = remove from near you
+          return true;
         }).toList();
 
         if (search.isNotEmpty) {
@@ -63,7 +71,7 @@ class FundiHomeJobList extends StatelessWidget {
               .where(
                 (m) => "${m['title']} ${m['description']} ${m['category']}"
                     .toLowerCase()
-                    .contains(search),
+                    .contains(search.toLowerCase()),
               )
               .toList();
         }
@@ -163,23 +171,7 @@ class FundiHomeJobList extends StatelessWidget {
                                       reason,
                                       style: GoogleFonts.inter(fontSize: 12),
                                     ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      'Category: ${bidData?['rejectionCategory'] ?? ''}',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 10,
-                                        color: Colors.black54,
-                                      ),
-                                    ),
                                   ],
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'You can no longer bid on this job.',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  color: Colors.black54,
                                 ),
                               ),
                             ],
@@ -201,11 +193,6 @@ class FundiHomeJobList extends StatelessWidget {
                                     .doc(uid)
                                     .update({'deletedForFundi': true});
                                 Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Job removed from your list'),
-                                  ),
-                                );
                               },
                               child: const Text(
                                 'Delete Bid',
