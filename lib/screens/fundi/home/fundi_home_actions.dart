@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../services/location_service.dart';
 import 'logic.dart';
-import 'bid_dialog.dart';
+import 'fundi_bid_dialog.dart';
 
 mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
   String get search;

@@ -33,7 +33,7 @@ class FundiHomeJobList extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('jobs')
-          .where('status', isEqualTo: 'open')
+          .where('status', isEqualTo: 'open') // hides all cancelled_*
           .snapshots(),
       builder: (context, snap) {
         if (!snap.hasData) {
@@ -46,6 +46,18 @@ class FundiHomeJobList extends StatelessWidget {
         var docs = snap.data!.docs
             .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
             .toList();
+
+        // FIX: hide assigned jobs + any cancelled that slipped through
+        docs = docs.where((m) {
+          var assigned = m['assignedFundiId'];
+          var assigned2 = m['assignedFundi'];
+          var status = (m['status'] ?? '').toString().toLowerCase();
+          bool isAssigned =
+              (assigned != null && assigned.toString().isNotEmpty) ||
+              (assigned2 != null && assigned2.toString().isNotEmpty);
+          return !isAssigned && !status.contains('cancel') && status == 'open';
+        }).toList();
+
         if (search.isNotEmpty) {
           docs = docs
               .where(
