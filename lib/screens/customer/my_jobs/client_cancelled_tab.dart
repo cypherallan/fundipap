@@ -27,7 +27,6 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final db = FirebaseFirestore.instance;
 
-      // PREVENT DUPLICATE: check if open repost already exists
       final existing = await db
           .collection('jobs')
           .where('repostedFrom', isEqualTo: oldJobId)
@@ -37,6 +36,10 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
           .get();
 
       if (existing.docs.isNotEmpty) {
+        await db.collection('jobs').doc(oldJobId).update({
+          'reposted': true,
+          'repostedAs': existing.docs.first.id,
+        });
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -128,6 +131,7 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
             (job['escrowAmount'] ?? 0) == 0 &&
             (job['escrowStatus'] ?? 'pending') != 'held';
         bool isReposting = _reposting.contains(doc.id);
+        bool alreadyReposted = job['reposted'] == true; // <-- key check
 
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
@@ -157,13 +161,25 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
                       ),
                     ),
                     const Spacer(),
-                    Text(
-                      job['cancelledAt'] != null ? 'Cancelled' : '',
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        color: Colors.black54,
+                    if (alreadyReposted)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'REPOSTED',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 10,
+                            color: Colors.green.shade700,
+                          ),
+                        ),
                       ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -229,10 +245,14 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: FundipapColors.primaryYellow,
-                      foregroundColor: Colors.black,
+                      backgroundColor: alreadyReposted
+                          ? Colors.grey.shade300
+                          : FundipapColors.primaryYellow,
+                      foregroundColor: alreadyReposted
+                          ? Colors.black54
+                          : Colors.black,
                     ),
-                    onPressed: isReposting
+                    onPressed: (isReposting || alreadyReposted)
                         ? null
                         : () => _repostSameDetails(context, job, doc.id),
                     icon: isReposting
@@ -241,9 +261,14 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.replay, size: 16),
+                        : Icon(
+                            alreadyReposted ? Icons.check_circle : Icons.replay,
+                            size: 16,
+                          ),
                     label: Text(
-                      isReposting
+                      alreadyReposted
+                          ? 'Job Reposted ✓'
+                          : isReposting
                           ? 'Reposting...'
                           : 'Repost Same Details for New Bids',
                       style: GoogleFonts.montserrat(

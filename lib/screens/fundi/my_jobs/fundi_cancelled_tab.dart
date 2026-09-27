@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../fundi/home/fundi_customer_timeline_page.dart'; // adjust import to your FundiCustomerTimelinePage path
+import '../../fundi/home/fundi_customer_timeline_page.dart';
 
 class FundiCancelledTab extends StatelessWidget {
   final Stream<QuerySnapshot> jobsStream;
@@ -9,6 +10,7 @@ class FundiCancelledTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
     return StreamBuilder<QuerySnapshot>(
       stream: jobsStream,
       builder: (_, snap) {
@@ -20,7 +22,7 @@ class FundiCancelledTab extends StatelessWidget {
           var status = ((d.data() as Map)['status'] ?? '')
               .toString()
               .toLowerCase();
-          return status.contains('cancel'); // catches all 4 cancelled types
+          return status.contains('cancel');
         }).toList();
 
         if (docs.isEmpty) {
@@ -129,57 +131,124 @@ class FundiCancelledTab extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // NEW: If client reposted this cancelled job, show VIEW NEW JOB
+                  // NEW LOGIC FOR REPOSTED JOB BUTTON
                   FutureBuilder<QuerySnapshot>(
                     future: FirebaseFirestore.instance
                         .collection('jobs')
                         .where('repostedFrom', isEqualTo: doc.id)
-                        .where(
-                          'status',
-                          whereIn: [
-                            'open',
-                            'assigned',
-                            'confirmed',
-                            'travelling',
-                            'site_visit',
-                            'in_progress',
-                          ],
-                        )
                         .limit(1)
                         .get(),
                     builder: (ctx, repSnap) {
                       if (!repSnap.hasData || repSnap.data!.docs.isEmpty)
                         return const SizedBox();
                       var newDoc = repSnap.data!.docs.first;
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black,
-                              foregroundColor: Colors.white,
-                            ),
-                            icon: const Icon(Icons.refresh, size: 14),
-                            label: Text(
-                              'CLIENT REPOSTED - VIEW NEW JOB',
-                              style: GoogleFonts.montserrat(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 11,
+                      var newJob = newDoc.data() as Map<String, dynamic>;
+                      var escrow = (newJob['escrowStatus'] ?? '').toString();
+                      var status = (newJob['status'] ?? '')
+                          .toString()
+                          .toLowerCase();
+                      bool escrowLocked =
+                          [
+                            'held',
+                            'paid',
+                            'locked',
+                            'released',
+                          ].contains(escrow) ||
+                          status != 'open';
+
+                      if (escrowLocked) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.grey.shade300,
+                                foregroundColor: Colors.black54,
                               ),
+                              icon: const Icon(Icons.block, size: 14),
+                              label: Text(
+                                'Job Unavailable',
+                                style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              onPressed: null,
                             ),
-                            onPressed: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => FundiCustomerTimelinePage(
-                                  jobId: newDoc.id,
-                                  clientName: job['customerName'] ?? 'Client',
-                                  jobTitle: job['title'] ?? '',
+                          ),
+                        );
+                      }
+
+                      // Check if fundi already placed bid on reposted job
+                      return FutureBuilder<QuerySnapshot>(
+                        future: newDoc.reference
+                            .collection('bids')
+                            .where('fundiId', isEqualTo: uid)
+                            .limit(1)
+                            .get(),
+                        builder: (ctx2, bidSnap) {
+                          bool alreadyBid =
+                              bidSnap.hasData && bidSnap.data!.docs.isNotEmpty;
+                          if (alreadyBid) {
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green.shade100,
+                                    foregroundColor: Colors.green.shade800,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.check_circle,
+                                    size: 14,
+                                  ),
+                                  label: Text(
+                                    'You already placed a bid for this job',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                  onPressed: null,
+                                ),
+                              ),
+                            );
+                          }
+                          // Else show VIEW NEW JOB
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.black,
+                                  foregroundColor: Colors.white,
+                                ),
+                                icon: const Icon(Icons.refresh, size: 14),
+                                label: Text(
+                                  'CLIENT REPOSTED - VIEW NEW JOB',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => FundiCustomerTimelinePage(
+                                      jobId: newDoc.id,
+                                      clientName:
+                                          newJob['customerName'] ?? 'Client',
+                                      jobTitle: newJob['title'] ?? '',
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ),
+                          );
+                        },
                       );
                     },
                   ),
