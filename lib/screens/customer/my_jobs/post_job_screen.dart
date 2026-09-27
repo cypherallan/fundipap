@@ -11,6 +11,7 @@ import 'post_job_pending_tab.dart';
 import 'post_job_confirmed_tab.dart';
 import 'post_job_rejected_tab.dart';
 import 'post_job_completed_tab.dart';
+import 'post_job_cancelled_tab.dart'; // <-- add this file
 
 class PostJobScreen extends StatefulWidget {
   const PostJobScreen({super.key});
@@ -27,7 +28,7 @@ class _PostJobScreenState extends State<PostJobScreen>
   Widget build(BuildContext context) {
     var uid = FirebaseAuth.instance.currentUser!.uid;
     return DefaultTabController(
-      length: 4,
+      length: 5, // 4 -> 5 FIX FOR BLACK SCREEN
       child: Column(
         children: [
           Container(
@@ -45,6 +46,7 @@ class _PostJobScreenState extends State<PostJobScreen>
                 Tab(text: 'Confirmed'),
                 Tab(text: 'Rejected'),
                 Tab(text: 'Completed'),
+                Tab(text: 'Cancelled'),
               ],
             ),
           ),
@@ -132,6 +134,17 @@ class _PostJobScreenState extends State<PostJobScreen>
                           )
                           .toList(),
                       onRate: showClientRateFundiDialog,
+                    ),
+                    ClientCancelledTab(
+                      // <-- NEW
+                      docs: allDocs
+                          .where(
+                            (d) => [
+                              'cancelled',
+                              'cancelled_after_arrival',
+                            ].contains((d.data() as Map)['status']),
+                          )
+                          .toList(),
                     ),
                   ],
                 );

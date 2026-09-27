@@ -34,14 +34,27 @@ class FundiPapApp extends StatelessWidget {
 class HomeNavigator extends StatefulWidget {
   final String role;
   final String email;
-  const HomeNavigator({super.key, this.role = 'client', this.email = ''});
+  final int initialIndex; // <-- ADD THIS
+  const HomeNavigator({
+    super.key,
+    this.role = 'client',
+    this.email = '',
+    this.initialIndex = 0,
+  });
   @override
   State<HomeNavigator> createState() => _HomeNavigatorState();
 }
 
 class _HomeNavigatorState extends State<HomeNavigator> {
-  int _index = 0;
+  late int _index;
   int _refreshId = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex; // <-- paste here
+  }
+
   Future<void> _handleRefresh() async {
     setState(() => _refreshId++);
     await Future.delayed(const Duration(milliseconds: 700));

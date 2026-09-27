@@ -502,11 +502,13 @@ class JobCancelService {
                   ? (isClient
                         ? 'Cancelled. You get KES $clientRefund, fee KES $platformFee'
                         : 'Cancelled. Client refunded KES $clientRefund')
-                  : 'Job cancelled. No money was locked, so no fee.',
+                  : 'Job cancelled - no fee, no escrow was locked',
             ),
             backgroundColor: Colors.green,
           ),
         );
+        // DO NOT POP HERE - let the StreamBuilder show the cancelled card
+        // User will press back arrow once to go to Cancelled tab
       }
     } catch (e) {
       if (context.mounted) {

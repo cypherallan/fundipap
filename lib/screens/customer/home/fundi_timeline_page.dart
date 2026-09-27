@@ -7,6 +7,8 @@ import '../tracking/customer_tracking_screen.dart';
 import '../../../widgets/animated_waiting_card.dart';
 import '../rating/rate_fundi_screen.dart';
 import '../../../services/job_cancel_service.dart';
+import '../../../app.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class CustomerFundiTimelinePage extends StatefulWidget {
   final String jobId;
@@ -244,16 +246,27 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
+            // If we have a back stack, just pop
             if (Navigator.of(context).canPop()) {
               Navigator.of(context).pop();
-            } else {
-              Navigator.of(
-                context,
-              ).pop(); // notification opened with no stack, just close or go back
+              return;
             }
+            // No stack (notification / black screen case) -> go to Job Status tab
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(
+                builder: (_) => HomeNavigator(
+                  role: 'client',
+                  email: FirebaseAuth.instance.currentUser?.email ?? '',
+                  initialIndex: 2, // 2 = Job Status tab where Cancelled lives
+                ),
+              ),
+              (r) => false,
+            );
           },
         ),
         title: Text(
