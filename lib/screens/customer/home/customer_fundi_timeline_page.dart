@@ -9,6 +9,7 @@ import '../rating/rate_fundi_screen.dart';
 import '../../../services/job_cancel_service.dart';
 import '../../../app.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../widgets/job_chat_section.dart';
 
 class CustomerFundiTimelinePage extends StatefulWidget {
   final String jobId;
@@ -251,14 +252,13 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            // After cancel, go straight to Cancelled tab
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(
                 builder: (_) => HomeNavigator(
                   role: 'client',
                   email: FirebaseAuth.instance.currentUser?.email ?? '',
-                  initialIndex: 2, // Job Status outer tab
-                  initialJobStatusTab: 4, // Cancelled inner tab
+                  initialIndex: 2,
+                  initialJobStatusTab: 4,
                 ),
               ),
               (r) => false,
@@ -269,6 +269,63 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           'Fundipap',
           style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline),
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.white,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                builder: (_) => DraggableScrollableSheet(
+                  expand: false,
+                  initialChildSize: 0.85,
+                  minChildSize: 0.5,
+                  maxChildSize: 0.95,
+                  builder: (context, scrollCtrl) => Padding(
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(context).viewInsets.bottom,
+                    ),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 12),
+                        Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Chat with ${widget.fundiName}',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const Divider(),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            controller: scrollCtrl,
+                            padding: const EdgeInsets.all(12),
+                            child: JobChatSection(
+                              jobId: widget.jobId,
+                              isClient: true,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance

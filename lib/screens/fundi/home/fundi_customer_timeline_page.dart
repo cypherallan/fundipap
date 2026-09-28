@@ -9,6 +9,7 @@ import '../rating/rate_client_screen.dart';
 import '../../../services/job_cancel_service.dart';
 import '../../../app.dart'; // for HomeNavigator
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../widgets/job_chat_section.dart';
 
 class FundiCustomerTimelinePage extends StatelessWidget {
   final String jobId;
@@ -290,7 +291,10 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             appBar: AppBar(
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => _goBackToMyJobs(context, tab: 4),
+                onPressed: () => _goBackToMyJobs(
+                  context,
+                  tab: 2,
+                ), // use tab 4 for cancelled, tab 3 for completed, tab 1 for escrow-not-done
               ),
               title: Text(
                 clientName,
@@ -298,6 +302,66 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               ),
               backgroundColor: FundipapColors.blackGray,
               foregroundColor: Colors.white,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  tooltip: 'Chat',
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.white,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(16),
+                        ),
+                      ),
+                      builder: (_) => DraggableScrollableSheet(
+                        expand: false,
+                        initialChildSize: 0.85,
+                        minChildSize: 0.5,
+                        maxChildSize: 0.95,
+                        builder: (context, scrollCtrl) => Padding(
+                          padding: EdgeInsets.only(
+                            bottom: MediaQuery.of(context).viewInsets.bottom,
+                          ),
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 12),
+                              Container(
+                                width: 40,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade300,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Chat with $clientName',
+                                style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const Divider(),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  controller: scrollCtrl,
+                                  padding: const EdgeInsets.all(12),
+                                  child: JobChatSection(
+                                    jobId: jobId,
+                                    isClient: false,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
             body: ListView(
               padding: const EdgeInsets.all(12),
@@ -544,7 +608,10 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             appBar: AppBar(
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => _goBackToMyJobs(context, tab: 3),
+                onPressed: () => _goBackToMyJobs(
+                  context,
+                  tab: 2,
+                ), // use tab 4 for cancelled, tab 3 for completed, tab 1 for escrow-not-done
               ),
               title: Text(
                 clientName,
@@ -552,6 +619,66 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               ),
               backgroundColor: FundipapColors.blackGray,
               foregroundColor: Colors.white,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  tooltip: 'Chat',
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.white,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(16),
+                        ),
+                      ),
+                      builder: (_) => DraggableScrollableSheet(
+                        expand: false,
+                        initialChildSize: 0.85,
+                        minChildSize: 0.5,
+                        maxChildSize: 0.95,
+                        builder: (context, scrollCtrl) => Padding(
+                          padding: EdgeInsets.only(
+                            bottom: MediaQuery.of(context).viewInsets.bottom,
+                          ),
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 12),
+                              Container(
+                                width: 40,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade300,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Chat with $clientName',
+                                style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const Divider(),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  controller: scrollCtrl,
+                                  padding: const EdgeInsets.all(12),
+                                  child: JobChatSection(
+                                    jobId: jobId,
+                                    isClient: false,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
             body: ListView.separated(
               padding: const EdgeInsets.all(12),
@@ -594,7 +721,10 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             appBar: AppBar(
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => _goBackToMyJobs(context, tab: 1),
+                onPressed: () => _goBackToMyJobs(
+                  context,
+                  tab: 2,
+                ), // use tab 4 for cancelled, tab 3 for completed, tab 1 for escrow-not-done
               ),
               title: Text(
                 clientName,
@@ -602,6 +732,66 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               ),
               backgroundColor: FundipapColors.blackGray,
               foregroundColor: Colors.white,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  tooltip: 'Chat',
+                  onPressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.white,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(16),
+                        ),
+                      ),
+                      builder: (_) => DraggableScrollableSheet(
+                        expand: false,
+                        initialChildSize: 0.85,
+                        minChildSize: 0.5,
+                        maxChildSize: 0.95,
+                        builder: (context, scrollCtrl) => Padding(
+                          padding: EdgeInsets.only(
+                            bottom: MediaQuery.of(context).viewInsets.bottom,
+                          ),
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 12),
+                              Container(
+                                width: 40,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade300,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Chat with $clientName',
+                                style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const Divider(),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  controller: scrollCtrl,
+                                  padding: const EdgeInsets.all(12),
+                                  child: JobChatSection(
+                                    jobId: jobId,
+                                    isClient: false,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
             body: buildWithFixedCancel(list),
           );
@@ -903,7 +1093,10 @@ class FundiCustomerTimelinePage extends StatelessWidget {
           appBar: AppBar(
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
-              onPressed: () => _goBackToMyJobs(context, tab: 2),
+              onPressed: () => _goBackToMyJobs(
+                context,
+                tab: 2,
+              ), // use tab 4 for cancelled, tab 3 for completed, tab 1 for escrow-not-done
             ),
             title: Text(
               clientName,
@@ -911,6 +1104,66 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             ),
             backgroundColor: FundipapColors.blackGray,
             foregroundColor: Colors.white,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.chat_bubble_outline),
+                tooltip: 'Chat',
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.white,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(16),
+                      ),
+                    ),
+                    builder: (_) => DraggableScrollableSheet(
+                      expand: false,
+                      initialChildSize: 0.85,
+                      minChildSize: 0.5,
+                      maxChildSize: 0.95,
+                      builder: (context, scrollCtrl) => Padding(
+                        padding: EdgeInsets.only(
+                          bottom: MediaQuery.of(context).viewInsets.bottom,
+                        ),
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 12),
+                            Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade300,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Chat with $clientName',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const Divider(),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                controller: scrollCtrl,
+                                padding: const EdgeInsets.all(12),
+                                child: JobChatSection(
+                                  jobId: jobId,
+                                  isClient: false,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
           body: buildWithFixedCancel(list),
         );
