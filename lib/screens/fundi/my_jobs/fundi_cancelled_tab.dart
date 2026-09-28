@@ -8,6 +8,14 @@ class FundiCancelledTab extends StatelessWidget {
   final Stream<QuerySnapshot> jobsStream;
   const FundiCancelledTab({super.key, required this.jobsStream});
 
+  int _toInt(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? 0;
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
@@ -40,10 +48,15 @@ class FundiCancelledTab extends StatelessWidget {
           itemBuilder: (_, i) {
             var doc = docs[i];
             var job = doc.data() as Map<String, dynamic>;
-            bool byClient = (job['cancelledBy'] ?? '') == 'client';
-            bool afterArrival = job['status'] == 'cancelled_after_arrival';
-            int transport =
-                (job['transportFee'] ?? job['fundiPayout'] ?? 0) as int;
+            bool byClient =
+                (job['cancelledBy'] ?? '').toString().toLowerCase() == 'client';
+            bool afterArrival =
+                job['status'] == 'cancelled_after_arrival' ||
+                (job['wasPriceRequestPending'] == true);
+            // FIXED: safe int parse
+            int transport = _toInt(
+              job['transportFee'] ?? job['fundiPayout'] ?? 0,
+            );
 
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
@@ -131,7 +144,6 @@ class FundiCancelledTab extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // NEW LOGIC FOR REPOSTED JOB BUTTON
                   FutureBuilder<QuerySnapshot>(
                     future: FirebaseFirestore.instance
                         .collection('jobs')
@@ -179,8 +191,6 @@ class FundiCancelledTab extends StatelessWidget {
                           ),
                         );
                       }
-
-                      // Check if fundi already placed bid on reposted job
                       return FutureBuilder<QuerySnapshot>(
                         future: newDoc.reference
                             .collection('bids')
@@ -216,7 +226,6 @@ class FundiCancelledTab extends StatelessWidget {
                               ),
                             );
                           }
-                          // Else show VIEW NEW JOB
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: SizedBox(

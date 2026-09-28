@@ -132,6 +132,13 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
             (job['escrowStatus'] ?? 'pending') != 'held';
         bool isReposting = _reposting.contains(doc.id);
         bool alreadyReposted = job['reposted'] == true; // <-- key check
+        String cancelledBy = (job['cancelledBy'] ?? '')
+            .toString()
+            .toLowerCase();
+        String fundiName =
+            (job['assignedFundiName'] ?? job['fundiName'] ?? 'Fundi')
+                .toString();
+        bool isFundiCancelled = cancelledBy == 'fundi';
 
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
@@ -161,6 +168,14 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
                       ),
                     ),
                     const Spacer(),
+                    Text(
+                      isFundiCancelled ? 'By $fundiName' : 'By You',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     if (alreadyReposted)
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -203,7 +218,9 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
                   ),
                   child: beforeEscrow
                       ? Text(
-                          'You cancelled this job before you paid to escrow.',
+                          isFundiCancelled
+                              ? '$fundiName cancelled this job before you paid to escrow. No charge.'
+                              : 'You cancelled this job before you paid to escrow.',
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             color: Colors.black87,

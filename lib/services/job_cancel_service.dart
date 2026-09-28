@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 
-/// FINAL CANCEL SERVICE - FIXED FOR NO-ESCROW CASE
-/// Rule: If money NOT locked to escrow, no figures dialog, just cancel - 0 fee
+/// FINAL CANCEL SERVICE - FIXED FOR PRICE REQUEST PENDING BUG
+/// Bug: labour 6000, transport 100, total locked 5350 -> showed refund 5700 (> locked)
+/// Fix: when renegotiation pending + extra NOT locked, use OLD labour for fee/refund
 
 class JobCancelService {
   static const double feeRate = 0.05;
@@ -44,6 +45,19 @@ class JobCancelService {
     return ['assigned', 'confirmed'].contains(status);
   }
 
+  static bool _isFundiPriceRequestPending(Map<String, dynamic> job) {
+    var reneg = job['renegotiation'] as Map<String, dynamic>?;
+    if (reneg == null) return false;
+    var requested = reneg['requested'] == true;
+    var status = (reneg['status'] ?? '').toString().toLowerCase();
+    var requestedBy = (reneg['requestedBy'] ?? '').toString().toLowerCase();
+    if (requested && status == 'pending' && requestedBy != 'client')
+      return true;
+    if (status == 'pending' && requestedBy == 'fundi') return true;
+    if (requested && status == 'pending') return true;
+    return false;
+  }
+
   static Future<void> showCancelDialog({
     required BuildContext context,
     required String jobId,
@@ -62,6 +76,8 @@ class JobCancelService {
       'job_completed',
     ].contains(status);
     bool arrived = travelling || siteDone;
+    bool priceRequestPending = _isFundiPriceRequestPending(job);
+    bool effectiveArrived = arrived || priceRequestPending;
 
     if (!isClient) {
       if (isStarted) {
@@ -94,7 +110,8 @@ class JobCancelService {
     String reason = isClient ? clientReasons[0] : fundiReasons[0];
     final otherCtrl = TextEditingController();
 
-    int labour = _toInt(
+    // OLD labour (what's currently locked)
+    int oldLabour = _toInt(
       job['currentLabour'] ??
           job['agreedPrice'] ??
           job['acceptedBidAmount'] ??
@@ -103,14 +120,52 @@ class JobCancelService {
           0,
     );
     var reneg = job['renegotiation'] as Map<String, dynamic>?;
-    if (reneg != null && reneg['newLaborTotal'] != null) {
-      labour = _toInt(reneg['newLaborTotal']);
+    // Keep oldLabour from reneg if available
+    if (reneg != null && reneg['oldLabor'] != null) {
+      oldLabour = _toInt(reneg['oldLabor']);
     }
+
+    // NEW labour (fundi requested)
+    int newLabour = oldLabour;
+    if (reneg != null && reneg['newLaborTotal'] != null) {
+      newLabour = _toInt(reneg['newLaborTotal']);
+    }
+
     int transport = _toInt(job['transportFee'] ?? job['escrowTransport'] ?? 0);
     int escrowAmount = _toInt(job['escrowAmount'] ?? 0);
-    int total = escrowAmount > 0 ? escrowAmount : (labour + transport);
+    int totalLocked = escrowAmount > 0
+        ? escrowAmount
+        : (oldLabour + transport + (oldLabour * feeRate).round());
 
-    // --- NEW FIX: If no money locked, just cancel, no figures ---
+    // Is extra escrow already locked?
+    int newTotalExpected =
+        newLabour + transport + (newLabour * feeRate).round();
+    bool extraLocked =
+        escrowAmount >= newTotalExpected && newLabour != oldLabour;
+
+    // CRITICAL FIX: if price request pending and extra NOT locked, use OLD labour for math
+    int labourForCalc = oldLabour;
+    if (priceRequestPending) {
+      if (extraLocked) {
+        labourForCalc = newLabour; // extra already paid, use new
+      } else {
+        labourForCalc = oldLabour; // still 5350 locked, use old 5000
+      }
+    } else {
+      // normal case - if new labour exists and is accepted/paid, use it
+      labourForCalc =
+          (reneg != null &&
+              reneg['newLaborTotal'] != null &&
+              !priceRequestPending)
+          ? newLabour
+          : oldLabour;
+      // if reneg accepted but not pending, use new
+      if (reneg != null &&
+          (reneg['status'] ?? '').toString().contains('accepted')) {
+        labourForCalc = newLabour;
+      }
+    }
+
     String escrowStatusStr = (job['escrowStatus'] ?? '').toString();
     bool escrowLocked =
         escrowAmount > 0 ||
@@ -119,7 +174,6 @@ class JobCancelService {
         job['escrowDone'] == true;
 
     if (!escrowLocked) {
-      // No money locked - just ask "are you sure?" no fee math
       bool? ok = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
@@ -150,16 +204,14 @@ class JobCancelService {
           ],
         ),
       );
-
-      if (ok != true) return; // user said no
-
+      if (ok != true) return;
       await _performCancel(
         context: context,
         jobId: jobId,
         job: job,
         isClient: isClient,
         arrived: false,
-        labour: labour,
+        labour: labourForCalc,
         transport: transport,
         total: 0,
         platformFee: 0,
@@ -168,29 +220,33 @@ class JobCancelService {
         reason: 'Cancelled before escrow',
         details: 'No money locked yet - no fee',
         escrowWasLocked: false,
+        wasPriceRequestPending: false,
       );
       return;
     }
 
-    // --- Escrow IS locked, show normal money dialog ---
     late int platformFee, clientRefund, fundiGets;
     if (isClient) {
-      if (!arrived) {
-        // BEFORE TRAVEL - Client cancels
-        platformFee = (labour * feeRate).round(); // 250 / 300
-        clientRefund = labour + transport; // 5100 / 6100
+      if (!effectiveArrived) {
+        platformFee = (labourForCalc * feeRate).round();
+        clientRefund = labourForCalc + transport;
         fundiGets = 0;
       } else {
-        // AFTER SITE VISIT - Client cancels: 100 to fundi, never to client
-        platformFee = (labour * feeRate).round(); // 250 / 300
-        clientRefund = (labour * 0.95).round(); // 4750 / 5700
+        // AFTER TRAVEL OR AFTER PRICE REQUEST (pending, extra not locked) - same rule
+        platformFee = (labourForCalc * feeRate).round(); // 5000*0.05=250
+        clientRefund = (labourForCalc * 0.95).round(); // 5000*0.95=4750
         fundiGets = transport; // 100
       }
     } else {
-      // Fundi cancels BEFORE travel - Full refund
       platformFee = 0;
-      clientRefund = total; // FULL 5,350 / 6,400
+      clientRefund = totalLocked;
       fundiGets = 0;
+    }
+
+    // Safety: clientRefund can never be > totalLocked
+    if (clientRefund + fundiGets > totalLocked) {
+      clientRefund = totalLocked - fundiGets;
+      if (clientRefund < 0) clientRefund = 0;
     }
 
     await showDialog(
@@ -200,7 +256,7 @@ class JobCancelService {
         builder: (ctx, setSt) => AlertDialog(
           title: Text(
             isClient
-                ? (arrived
+                ? (effectiveArrived
                       ? 'Cancel after site visit?'
                       : 'Cancel before fundi travels?')
                 : 'Cancel this job?',
@@ -232,9 +288,22 @@ class JobCancelService {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      _row('Labour:', 'KES $labour'),
+                      _row('Labour (locked):', 'KES $labourForCalc'),
+                      if (priceRequestPending &&
+                          !extraLocked &&
+                          newLabour != oldLabour)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            'Fundi requested new labour KES $newLabour (not yet locked)',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              color: Colors.orange.shade800,
+                            ),
+                          ),
+                        ),
                       _row('Transport:', 'KES $transport'),
-                      _row('Total locked:', 'KES $total'),
+                      _row('Total locked:', 'KES $totalLocked', bold: true),
                       const Divider(),
                       Container(
                         padding: const EdgeInsets.all(8),
@@ -251,11 +320,7 @@ class JobCancelService {
                               bold: true,
                             ),
                             _row(
-                              isClient
-                                  ? (arrived
-                                        ? 'You get back:'
-                                        : 'You get back:')
-                                  : 'Client gets back:',
+                              isClient ? 'You get back:' : 'Client gets back:',
                               'KES $clientRefund',
                               color: Colors.green.shade700,
                               bold: true,
@@ -266,6 +331,17 @@ class JobCancelService {
                                 'KES $fundiGets',
                                 color: Colors.blue.shade700,
                                 bold: true,
+                              ),
+                            if (priceRequestPending && !extraLocked)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  'Note: New price KES ${newLabour + transport + (newLabour * 0.05).round()} not locked yet. Cancel uses old escrow KES $totalLocked.',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    color: Colors.black54,
+                                  ),
+                                ),
                               ),
                           ],
                         ),
@@ -338,16 +414,17 @@ class JobCancelService {
                   jobId: jobId,
                   job: job,
                   isClient: isClient,
-                  arrived: arrived,
-                  labour: labour,
+                  arrived: effectiveArrived,
+                  labour: labourForCalc,
                   transport: transport,
-                  total: total,
+                  total: totalLocked,
                   platformFee: platformFee,
                   clientRefund: clientRefund,
                   fundiGets: fundiGets,
                   reason: reason,
                   details: otherCtrl.text.trim(),
                   escrowWasLocked: true,
+                  wasPriceRequestPending: priceRequestPending,
                 );
               },
               child: Text(
@@ -420,6 +497,7 @@ class JobCancelService {
     required String reason,
     required String details,
     bool escrowWasLocked = true,
+    bool wasPriceRequestPending = false,
   }) async {
     try {
       final db = FirebaseFirestore.instance;
@@ -444,6 +522,7 @@ class JobCancelService {
         'fundiPayout': fundiGets,
         'transportFeeStatus': fundiGets > 0 ? 'released' : 'refunded',
         'escrowStatus': escrowWasLocked ? 'refunded' : 'pending',
+        'wasPriceRequestPending': wasPriceRequestPending,
         'cancelledAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -459,8 +538,11 @@ class JobCancelService {
           'fundiGets': fundiGets,
           'cancelledBy': isClient ? 'client' : 'fundi',
           'arrived': arrived,
+          'wasPriceRequestPending': wasPriceRequestPending,
           'refundReason': isClient
-              ? 'Client cancel - 5% on labour only'
+              ? (wasPriceRequestPending
+                    ? 'Client cancel after fundi price request pending - uses old escrow $total'
+                    : 'Client cancel - 5% on labour only')
               : 'Fundi cancel before travelling',
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
@@ -482,6 +564,7 @@ class JobCancelService {
         'clientId': clientId,
         'cancelledBy': isClient ? 'client' : 'fundi',
         'arrived': arrived,
+        'wasPriceRequestPending': wasPriceRequestPending,
         'labour': labour,
         'transport': transport,
         'platformFee': platformFee,
@@ -511,22 +594,18 @@ class JobCancelService {
             backgroundColor: Colors.green,
           ),
         );
-        // DO NOT POP HERE - let the StreamBuilder show the cancelled card
-        // User will press back arrow once to go to Cancelled tab
       }
     } catch (e) {
-      if (context.mounted) {
+      if (context.mounted)
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Cancel failed: $e'),
             backgroundColor: Colors.red,
           ),
         );
-      }
     }
   }
 
-  // AUTO-CANCEL AFTER 2h30m NO ARRIVAL
   static Future<void> checkAndAutoCancelIfExpired({
     required String jobId,
     required Map<String, dynamic> job,
@@ -536,26 +615,20 @@ class JobCancelService {
         job['travellingAt'] ??
         job['startedTravellingAt'];
     if (startedAt == null) return;
-
     DateTime startTime;
-    if (startedAt is Timestamp) {
+    if (startedAt is Timestamp)
       startTime = startedAt.toDate();
-    } else if (startedAt is DateTime)
-      // ignore: curly_braces_in_flow_control_structures
+    else if (startedAt is DateTime)
       startTime = startedAt;
     else
       return;
-
     final elapsed = DateTime.now().difference(startTime);
     bool siteDone =
         job['siteVisitDone'] == true ||
         job['siteVisited'] == true ||
         job['fundiArrivedAt'] != null;
-
     if (siteDone) return;
-    if (elapsed.inMinutes < 150) return; // 2h30m = 150min
-
-    // Expired - full refund to client
+    if (elapsed.inMinutes < 150) return;
     final db = FirebaseFirestore.instance;
     int total = _toInt(job['escrowAmount'] ?? 0);
     if (total == 0) {
@@ -563,7 +636,6 @@ class JobCancelService {
       int transport = _toInt(job['transportFee'] ?? 0);
       total = labour + transport + (labour * feeRate).round();
     }
-
     await db.collection('jobs').doc(jobId).update({
       'status': 'auto_cancelled_no_arrival',
       'cancelled': true,
@@ -576,7 +648,6 @@ class JobCancelService {
       'escrowStatus': 'refunded',
       'updatedAt': FieldValue.serverTimestamp(),
     });
-
     await db.collection('cancellationLogs').add({
       'jobId': jobId,
       'cancelledBy': 'system',
