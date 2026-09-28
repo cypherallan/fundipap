@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'fundi_home_header.dart';
-import 'profile_banners.dart';
 import 'fundi_earnings_card.dart';
 import '../fundi_profile.dart';
+import '../../../services/fundi_badge_service.dart';
+import '../home/fundi-profile_banners.dart';
 
 class FundiHomeHeaderSection extends StatelessWidget {
   final Map<String, dynamic>? me;
@@ -22,6 +23,14 @@ class FundiHomeHeaderSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // badge calculated live from me doc (which has rating, cancels, referrals, etc)
+    BadgeResult? badge;
+    if (me != null) {
+      try {
+        badge = FundiBadgeService.calculate(me!, me!);
+      } catch (_) {}
+    }
+
     return Column(
       children: [
         Padding(
@@ -46,6 +55,14 @@ class FundiHomeHeaderSection extends StatelessWidget {
               ? FundiProfileIncompleteBanner(profilePct: profilePct)
               : const FundiProfileCompleteBanner(),
         ),
+        // NEW BADGE BANNER - shows Gold/Silver/Bronze + how many pts to next level
+        if (badge != null) ...[
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: FundiBadgeProgressBanner(badge: badge),
+          ),
+        ],
         if (me?['bio'] != null) ...[
           const SizedBox(height: 16),
           Padding(

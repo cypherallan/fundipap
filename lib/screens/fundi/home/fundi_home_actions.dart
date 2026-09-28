@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../../services/location_service.dart';
 import 'logic.dart';
 import 'fundi_bid_dialog.dart';
+import '../../../services/fundi_penalty_service.dart';
 
 mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
   String get search;
@@ -100,6 +101,24 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
       ).showSnackBar(const SnackBar(content: Text('Job ID missing')));
       return;
     }
+
+    // CHECK SUSPENSION BEFORE BID
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    bool canBid = await FundiPenaltyService.canFundiBid(uid);
+    if (!canBid) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(
+              'You are suspended for cancelling jobs. You cannot bid now.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     await showDialog(
       context: context,
       builder: (_) => FundiBidDialog(jobId: jobId.toString(), jobData: job),

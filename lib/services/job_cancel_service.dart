@@ -3,7 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
-
+import 'fundi_penalty_service.dart';
+import 'fundi_badge_service.dart'; // for auto recalc
 /// FINAL CANCEL SERVICE - FIXED FOR PRICE REQUEST PENDING BUG
 /// Bug: labour 6000, transport 100, total locked 5350 -> showed refund 5700 (> locked)
 /// Fix: when renegotiation pending + extra NOT locked, use OLD labour for fee/refund
@@ -575,10 +576,14 @@ class JobCancelService {
       });
 
       if (!isClient && fundiId.isNotEmpty) {
-        await db.collection('users').doc(fundiId).set({
-          'cancellationCount': FieldValue.increment(1),
-          'lastCancellationAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        // new: flag + suspend + penaltyScore + admin log
+        await FundiPenaltyService.onFundiCancel(
+          fundiId: fundiId,
+          jobId: jobId,
+          reason: reason,
+        );
+        // recalc badge instantly (drops to none/bronze)
+        await FundiBadgeService.recalcAndUpdate(fundiId);
       }
 
       if (context.mounted) {

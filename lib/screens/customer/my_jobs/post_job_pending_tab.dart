@@ -1,10 +1,34 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/fundi_badge_chip.dart';
+import '../../../services/fundi_badge_service.dart';
 
-class ClientPendingTab extends StatelessWidget {
+enum FilterType { all, verified, topRated, highReferral, clean, badge }
+
+class _BidWithFundi {
+  final QueryDocumentSnapshot bidDoc;
+  final Map<String, dynamic> bid;
+  final BadgeLevel level;
+  final bool verified;
+  final int referrals;
+  final int jobsDone;
+  final double rating;
+  final int penalty;
+  _BidWithFundi({
+    required this.bidDoc,
+    required this.bid,
+    required this.level,
+    required this.verified,
+    required this.referrals,
+    required this.jobsDone,
+    required this.rating,
+    required this.penalty,
+  });
+}
+
+class ClientPendingTab extends StatefulWidget {
   final List<QueryDocumentSnapshot> jobs;
   final Future<void> Function(BuildContext, DocumentReference, String, double)
   onCounter;
@@ -26,169 +50,326 @@ class ClientPendingTab extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
   });
+
+  @override
+  State<ClientPendingTab> createState() => _ClientPendingTabState();
+}
+
+class _ClientPendingTabState extends State<ClientPendingTab> {
+  FilterType _filter = FilterType.all;
+
+  BadgeLevel _parse(String? s) {
+    switch ((s ?? '').toLowerCase()) {
+      case 'gold':
+        return BadgeLevel.gold;
+      case 'silver':
+        return BadgeLevel.silver;
+      case 'bronze':
+        return BadgeLevel.bronze;
+      default:
+        return BadgeLevel.none;
+    }
+  }
+
+  Future<List<_BidWithFundi>> _enrich(List<QueryDocumentSnapshot> bids) async {
+    return Future.wait(
+      bids.map((b) async {
+        var m = b.data() as Map<String, dynamic>;
+        var fid = (m['fundiId'] ?? m['uid'] ?? '').toString();
+        Map<String, dynamic>? f;
+        if (fid.isNotEmpty) {
+          var d = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(fid)
+              .get();
+          f = d.data();
+        }
+        return _BidWithFundi(
+          bidDoc: b,
+          bid: m,
+          level: _parse(f?['badgeLevel']),
+          verified: f?['isVerifiedFundi'] == true,
+          referrals: f?['referralCount'] ?? 0,
+          jobsDone: f?['completedJobs'] ?? 0,
+          rating: (f?['avgRating'] ?? 0).toDouble(),
+          penalty: f?['penaltyScore'] ?? 0,
+        );
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    var uid = FirebaseAuth.instance.currentUser!.uid;
-    if (jobs.isEmpty) {
+    if (widget.jobs.isEmpty) {
       return Center(child: Text('No pending jobs', style: GoogleFonts.inter()));
     }
-    return ListView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: jobs.length,
-      itemBuilder: (_, i) {
-        var jobDoc = jobs[i];
-        var job = jobDoc.data() as Map<String, dynamic>;
-        var jobId = jobDoc.id;
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    job['title'] ?? '',
-                    style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Text(
-                    'Budget KES ${job['budget']} • ${job['status']}',
-                  ),
-                ),
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('jobs')
-                      .doc(jobId)
-                      .collection('bids')
-                      .snapshots(),
-                  builder: (_, bidSnap) {
-                    if (!bidSnap.hasData) {
-                      return const LinearProgressIndicator();
-                    }
-                    var bids = bidSnap.data!.docs;
-                    if (bids.isEmpty) {
-                      return Text(
-                        'No bids yet',
-                        style: GoogleFonts.inter(fontSize: 11),
-                      );
-                    }
-                    return Column(
-                      children: bids.map((b) {
-                        var bid = b.data() as Map<String, dynamic>;
-                        if (bid['status'] == 'rejected') {
-                          return const SizedBox.shrink();
-                        }
-                        bool isMyCounter = bid['lastCounterBy'] == uid;
-                        bool isCounteredByMe =
-                            bid['status'] == 'countered' && isMyCounter;
-                        return Container(
-                          margin: const EdgeInsets.only(top: 8),
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF6F6F6),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${bid['fundiName'] ?? 'Fundi'} • KES ${bid['lastCounterPrice'] ?? bid['price']}',
-                                style: GoogleFonts.montserrat(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              if (bid['message'] != null)
-                                Text(
-                                  bid['message'],
-                                  style: GoogleFonts.inter(fontSize: 11),
-                                ),
-                              if (isCounteredByMe) ...[
-                                const SizedBox(height: 6),
-                                Text(
-                                  'You countered KES ${bid['lastCounterPrice']}. Waiting for fundi to accept...',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 10,
-                                    color: Colors.blue,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                const LinearProgressIndicator(),
-                              ] else ...[
-                                const SizedBox(height: 6),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: OutlinedButton(
-                                        onPressed: () => onCounter(
-                                          context,
-                                          b.reference,
-                                          jobId,
-                                          (bid['lastCounterPrice'] ??
-                                                  bid['price'])
-                                              .toDouble(),
-                                        ),
-                                        child: const Text('Counter'),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: ElevatedButton(
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor:
-                                              FundipapColors.greenSuccess,
-                                        ),
-                                        onPressed: () => onAccept(
-                                          context,
-                                          b.reference,
-                                          jobId,
-                                          bid,
-                                        ),
-                                        child: const Text(
-                                          'Accept',
-                                          style: TextStyle(color: Colors.white),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    );
-                  },
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => onEdit(context, jobId, job),
-                        icon: const Icon(Icons.edit, size: 16),
-                        label: const Text('Edit'),
+
+    return Column(
+      children: [
+        // ONE FILTER DROPDOWN - Badge is one option inside it
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.black12),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<FilterType>(
+                value: _filter,
+                isExpanded: true,
+                items: [
+                  DropdownMenuItem(
+                    value: FilterType.all,
+                    child: Text(
+                      'All Fundis',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: FundipapColors.redAlert,
-                          foregroundColor: Colors.white,
+                  ),
+                  DropdownMenuItem(
+                    value: FilterType.verified,
+                    child: Text(
+                      'Verified',
+                      style: GoogleFonts.montserrat(fontSize: 12),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: FilterType.topRated,
+                    child: Text(
+                      'Top Rated',
+                      style: GoogleFonts.montserrat(fontSize: 12),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: FilterType.highReferral,
+                    child: Text(
+                      'High Referral',
+                      style: GoogleFonts.montserrat(fontSize: 12),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: FilterType.clean,
+                    child: Text(
+                      'Clean Record',
+                      style: GoogleFonts.montserrat(fontSize: 12),
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: FilterType.badge,
+                    child: Row(
+                      children: [
+                        Text(
+                          'Badge',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                        onPressed: () => onDelete(context, jobId),
-                        icon: const Icon(Icons.delete, size: 16),
-                        label: const Text('Delete'),
-                      ),
+                        const SizedBox(width: 8),
+                        const FundiBadgeChip(
+                          level: BadgeLevel.gold,
+                        ), // generic, no fake numbers
+                      ],
+                    ),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _filter = v!),
+              ),
+            ),
+          ),
+        ),
+
+        Expanded(
+          child: ListView.builder(
+            itemCount: widget.jobs.length,
+            itemBuilder: (_, i) {
+              var jobDoc = widget.jobs[i];
+              var job = jobDoc.data() as Map<String, dynamic>;
+              var jobId = jobDoc.id;
+
+              // JOB AS DROPDOWN
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: ExpansionTile(
+                  title: Text(
+                    job['title'] ?? '',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'KES ${job['budget']} • ${job['status']}',
+                    style: GoogleFonts.inter(fontSize: 11),
+                  ),
+                  children: [
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('jobs')
+                          .doc(jobId)
+                          .collection('bids')
+                          .snapshots(),
+                      builder: (_, snap) {
+                        if (!snap.hasData) {
+                          return const LinearProgressIndicator();
+                        }
+                        var bids = snap.data!.docs;
+                        if (bids.isEmpty) {
+                          return const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Text('No bids yet'),
+                          );
+                        }
+
+                        return FutureBuilder<List<_BidWithFundi>>(
+                          future: _enrich(bids),
+                          builder: (_, s) {
+                            if (!s.hasData) {
+                              return const LinearProgressIndicator();
+                            }
+                            var list = s.data!;
+
+                            // If Badge filter is selected -> show fundis by badge, Gold first, Grey last, skip missing
+                            if (_filter == FilterType.badge) {
+                              final rank = {
+                                BadgeLevel.gold: 4,
+                                BadgeLevel.silver: 3,
+                                BadgeLevel.bronze: 2,
+                                BadgeLevel.none: 1,
+                              };
+                              list.sort(
+                                (a, b) =>
+                                    rank[b.level]!.compareTo(rank[a.level]!),
+                              );
+                              // list already skips missing because we only sort what exists
+                            }
+
+                            // Apply other filters
+                            var filtered = list.where((e) {
+                              switch (_filter) {
+                                case FilterType.verified:
+                                  return e.verified;
+                                case FilterType.topRated:
+                                  return e.rating >= 4.5;
+                                case FilterType.highReferral:
+                                  return e.referrals >= 10;
+                                case FilterType.clean:
+                                  return e.penalty < 20;
+                                case FilterType.badge:
+                                case FilterType.all:
+                                  return true;
+                              }
+                            }).toList();
+
+                            if (filtered.isEmpty) {
+                              return const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: Text('No fundis for this filter'),
+                              );
+                            }
+
+                            return Column(
+                              children: filtered
+                                  .map(
+                                    (e) => Container(
+                                      margin: const EdgeInsets.fromLTRB(
+                                        12,
+                                        0,
+                                        12,
+                                        8,
+                                      ),
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF6F6F6),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  '${e.bid['fundiName'] ?? 'Fundi'} • KES ${e.bid['price']}',
+                                                  style: GoogleFonts.montserrat(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ),
+                                              FundiBadgeChip(
+                                                level: e.level,
+                                                isVerified: e.verified,
+                                                referralCount: e.referrals,
+                                                jobsDone: e.jobsDone,
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: OutlinedButton(
+                                                  onPressed: () =>
+                                                      widget.onCounter(
+                                                        context,
+                                                        e.bidDoc.reference,
+                                                        jobId,
+                                                        (e.bid['price'])
+                                                            .toDouble(),
+                                                      ),
+                                                  child: const Text('Counter'),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: ElevatedButton(
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                        backgroundColor:
+                                                            FundipapColors
+                                                                .greenSuccess,
+                                                      ),
+                                                  onPressed: () =>
+                                                      widget.onAccept(
+                                                        context,
+                                                        e.bidDoc.reference,
+                                                        jobId,
+                                                        e.bid,
+                                                      ),
+                                                  child: const Text(
+                                                    'Accept',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                            );
+                          },
+                        );
+                      },
                     ),
                   ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }
