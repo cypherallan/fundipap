@@ -155,7 +155,7 @@ class _JobChatSectionState extends State<JobChatSection> {
               child: TextField(
                 controller: ctrl,
                 decoration: InputDecoration(
-                  hintText: 'Type message...',
+                  hintText: 'Type message... No phone numbers',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
