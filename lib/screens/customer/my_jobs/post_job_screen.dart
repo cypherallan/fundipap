@@ -7,11 +7,10 @@ import '../post_new_job_screen.dart';
 import 'post_job_crud_actions.dart';
 import 'post_job_bidding_actions.dart';
 import 'post_job_escrow_actions.dart';
-import 'post_job_pending_tab.dart';
 import 'post_job_confirmed_tab.dart';
 import 'post_job_rejected_tab.dart';
 import 'post_job_completed_tab.dart';
-import 'client_cancelled_tab.dart'; // <-- add this file
+import 'client_cancelled_tab.dart';
 
 class PostJobScreen extends StatefulWidget {
   final int initialTabIndex;
@@ -29,8 +28,8 @@ class _PostJobScreenState extends State<PostJobScreen>
   Widget build(BuildContext context) {
     var uid = FirebaseAuth.instance.currentUser!.uid;
     return DefaultTabController(
-      length: 5,
-      initialIndex: widget.initialTabIndex, // <-- ADD THIS
+      length: 4, // was 5, Pending removed
+      initialIndex: widget.initialTabIndex.clamp(0, 3), // adjust
       child: Column(
         children: [
           Container(
@@ -44,7 +43,6 @@ class _PostJobScreenState extends State<PostJobScreen>
                 fontSize: 11,
               ),
               tabs: const [
-                Tab(text: 'Pending'),
                 Tab(text: 'Confirmed'),
                 Tab(text: 'Rejected'),
                 Tab(text: 'Completed'),
@@ -97,21 +95,6 @@ class _PostJobScreenState extends State<PostJobScreen>
                 var allDocs = snap.data!.docs;
                 return TabBarView(
                   children: [
-                    ClientPendingTab(
-                      jobs: allDocs
-                          .where(
-                            (d) => [
-                              'open',
-                              'bidding',
-                              'negotiating',
-                            ].contains((d.data() as Map)['status']),
-                          )
-                          .toList(),
-                      onCounter: counterBid,
-                      onAccept: acceptBid,
-                      onEdit: editJob,
-                      onDelete: deleteJob,
-                    ),
                     ClientConfirmedTab(
                       docs: allDocs
                           .where(
@@ -138,7 +121,6 @@ class _PostJobScreenState extends State<PostJobScreen>
                       onRate: showClientRateFundiDialog,
                     ),
                     ClientCancelledTab(
-                      // <-- NEW
                       docs: allDocs
                           .where(
                             (d) => [
