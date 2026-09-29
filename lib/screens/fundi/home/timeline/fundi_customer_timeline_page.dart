@@ -33,7 +33,10 @@ class FundiCustomerTimelinePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('jobs').doc(jobId).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(jobId)
+          .snapshots(),
       builder: (context, snap) {
         if (!snap.hasData) {
           return const Scaffold(
@@ -41,7 +44,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
           );
         }
         final jobData = snap.data!.data() as Map<String, dynamic>?;
-        final job = jobData?? {};
+        final job = jobData ?? {};
 
         final c = FundiTimelineContext.fromSnapshot(
           context: context,
@@ -52,18 +55,34 @@ class FundiCustomerTimelinePage extends StatelessWidget {
         );
 
         return StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance.collection('jobs').doc(jobId).collection('bids').doc(uid).snapshots(),
+          stream: FirebaseFirestore.instance
+              .collection('jobs')
+              .doc(jobId)
+              .collection('bids')
+              .doc(uid)
+              .snapshots(),
           builder: (context, bidSnap) {
-            bool hasBid = bidSnap.hasData && (bidSnap.data?.exists?? false);
+            bool hasBid = bidSnap.hasData && (bidSnap.data?.exists ?? false);
             int bidAmount = 0;
             if (hasBid) {
               var b = bidSnap.data!.data() as Map<String, dynamic>?;
-              if (b!= null) {
-                bidAmount = int.tryParse((b['amount']?? b['bidAmount']?? 0).toString())?? 0;
+              if (b != null) {
+                bidAmount =
+                    int.tryParse(
+                      (b['amount'] ?? b['bidAmount'] ?? 0).toString(),
+                    ) ??
+                    0;
               }
             }
 
-            bool isBidSentState = hasBid &&!c.escrowDone && (c.status == 'open' || c.status == 'pending' || c.status == 'bidding' || c.status == 'bid_sent' || c.status == 'pending_client_response');
+            bool isBidSentState =
+                hasBid &&
+                !c.escrowDone &&
+                (c.status == 'open' ||
+                    c.status == 'pending' ||
+                    c.status == 'bidding' ||
+                    c.status == 'bid_sent' ||
+                    c.status == 'pending_client_response');
 
             if (isBidSentState || c.isBidSent) {
               return buildBidSentView(context, c, bidAmount: bidAmount);
@@ -99,7 +118,8 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               appBar: AppBar(
                 leading: IconButton(
                   icon: const Icon(Icons.arrow_back),
-                  onPressed: () => FundiTimelineActions.goBackToMyJobs(context, tab: 2),
+                  onPressed: () =>
+                      FundiTimelineActions.goBackToMyJobs(context, tab: 2),
                 ),
                 title: Text(
                   clientName,
@@ -115,7 +135,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
                 ],
               ),
               body: c.canFundiCancel
-                 ? Column(
+                  ? Column(
                       children: [
                         Expanded(child: list),
                         fixedCancelBtn(context, jobId, job),
