@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../fundi/home/fundi_customer_timeline_page.dart';
+import '../home/timeline/fundi_customer_timeline_page.dart';
 
 class FundiCancelledTab extends StatelessWidget {
   final Stream<QuerySnapshot> jobsStream;
@@ -23,8 +23,9 @@ class FundiCancelledTab extends StatelessWidget {
       stream: jobsStream,
       builder: (_, snap) {
         if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
         var docs = snap.data!.docs.where((d) {
           var status = ((d.data() as Map)['status'] ?? '')
