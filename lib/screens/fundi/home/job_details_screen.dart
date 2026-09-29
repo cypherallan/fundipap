@@ -3,10 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/animated_waiting_card.dart';
 import 'fundi_bid_dialog.dart';
-import '../client_profile_screen.dart';
 
-class JobDetailsScreen extends StatelessWidget {
+class JobDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> job;
   final double? distanceKm;
   final Map<String, dynamic>? me;
@@ -22,30 +22,198 @@ class JobDetailsScreen extends StatelessWidget {
     this.hasBid = false,
   });
 
-  int _labour(Map<String, dynamic> j) =>
-      (j['agreedPrice'] ??
-              j['laborCost'] ??
-              j['budget'] ??
-              j['offeredPrice'] ??
-              0 as num)
-          .toInt();
+  @override
+  State<JobDetailsScreen> createState() => _JobDetailsScreenState();
+}
+
+class _JobDetailsScreenState extends State<JobDetailsScreen> {
+  int _toInt(dynamic v, [int fb = 0]) {
+    if (v == null) return fb;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? fb;
+  }
+
+  int _labour(Map<String, dynamic> j) => _toInt(
+    j['laborCost'] ??
+        j['agreedPrice'] ??
+        j['acceptedBidAmount'] ??
+        j['budget'] ??
+        0,
+  );
   int _transport(Map<String, dynamic> j) =>
-      (j['transportFee'] ?? 0 as num).toInt();
+      _toInt(j['transportFee'] ?? 100); // FIX: default 100 not 0
   int _fundiFee(int labour) => (labour * 0.05).round();
-  int _clientFee(int labour) => (labour * 0.05).round();
+  int _bidPrice(Map<String, dynamic> b) =>
+      _toInt(b['price'] ?? b['amount'] ?? b['bidAmount'] ?? 0);
+
+  Future<void> _accept(
+    String jobId,
+    String bidId,
+    int clientAmt,
+    Map<String, dynamic> job,
+  ) async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final ref = FirebaseFirestore.instance.collection('jobs').doc(jobId);
+
+    // FIX: keep transport, recalc fees from final countered labour
+    final int transport = _transport(job); // 100 boda or real calc
+    final int clientAppFee = (clientAmt * 0.05).round(); // 250
+    final int fundiAppFee = (clientAmt * 0.05).round(); // 250
+    final int totalClientPays =
+        clientAmt + transport + clientAppFee; // 5000+100+250 = 5350
+    final int fundiReceives =
+        clientAmt - fundiAppFee + transport; // 5000-250+100 = 4850
+
+    await ref.collection('bids').doc(bidId).update({
+      'status': 'accepted',
+      'agreedPrice': clientAmt,
+      'price': clientAmt,
+      'lastCounterPrice': clientAmt,
+      'lastCounterAmount': clientAmt,
+      'acceptedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'clientCounterSeenByFundi': true,
+    });
+    await ref.update({
+      'status': 'assigned',
+      'assignedFundiId': uid,
+      'assignedFundi': uid,
+      'agreedPrice': clientAmt,
+      'laborCost': clientAmt,
+      'acceptedBidAmount': clientAmt,
+      'transportFee': transport,
+      'clientAppFee': clientAppFee,
+      'fundiAppFee': fundiAppFee,
+      'totalClientPays': totalClientPays,
+      'fundiReceives': fundiReceives,
+      'fundiPayoutAmount': fundiReceives,
+      'updatedAt': FieldValue.serverTimestamp(),
+      'clientHasUnread': true,
+    });
+
+    await FirebaseFirestore.instance.collection('notifications').add({
+      'toUserId': job['customerId'] ?? job['clientId'],
+      'type': 'bid_accepted',
+      'jobId': jobId,
+      'bidId': bidId,
+      'title': 'Fundi accepted your counter',
+      'body':
+          'Fundi accepted KES $clientAmt • Lock KES $totalClientPays to escrow (labour $clientAmt + transport $transport + fee $clientAppFee)',
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _reject(
+    String jobId,
+    String bidId,
+    Map<String, dynamic> job,
+    int clientAmt,
+  ) async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    await FirebaseFirestore.instance
+        .collection('jobs')
+        .doc(jobId)
+        .collection('bids')
+        .doc(bidId)
+        .update({
+          'status': 'rejected',
+          'rejectedBy': uid,
+          'rejectedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'clientCounterSeenByFundi': true,
+        });
+  }
+
+  Future<void> _counterDialog(
+    BuildContext context,
+    String jobId,
+    String bidId,
+    int clientAmt,
+    Map<String, dynamic> jobData,
+  ) async {
+    final ctrl = TextEditingController(text: clientAmt.toString());
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Counter Offer',
+          style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+        ),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Your counter (KES)',
+            prefixText: 'KES ',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newAmt = int.tryParse(ctrl.text.trim()) ?? 0;
+              if (newAmt <= 0) return;
+              Navigator.pop(ctx);
+              final int transport = _transport(jobData);
+              await FirebaseFirestore.instance
+                  .collection('jobs')
+                  .doc(jobId)
+                  .collection('bids')
+                  .doc(bidId)
+                  .update({
+                    'fundiCounterAmount': newAmt,
+                    'fundiCounterPrice': newAmt,
+                    'lastCounterAmount': newAmt,
+                    'lastCounterPrice': newAmt,
+                    'counterBy': 'fundi',
+                    'lastCounterBy': uid,
+                    'status': 'countered',
+                    'clientHasUnread': true,
+                    'fundiHasUnread': false,
+                    'counterAt': FieldValue.serverTimestamp(),
+                    'lastCounterAt': FieldValue.serverTimestamp(),
+                    'updatedAt': FieldValue.serverTimestamp(),
+                  });
+              await FirebaseFirestore.instance
+                  .collection('jobs')
+                  .doc(jobId)
+                  .update({
+                    'lastCounterAmount': newAmt,
+                    'lastCounterPrice': newAmt,
+                    'lastCounterBy': 'fundi',
+                    'counterBy': 'fundi',
+                    'status': 'countered',
+                    'updatedAt': FieldValue.serverTimestamp(),
+                    'clientHasUnread': true,
+                    'transportFee': transport,
+                  });
+            },
+            child: const Text('Send Counter'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final photos = (job['photos'] ?? job['images'] ?? []) as List;
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    final jobId = job['id'] ?? job['jobId'];
-    final labour = _labour(job);
-    final trans = _transport(job);
-    final fFee = _fundiFee(labour);
-    final cFee = _clientFee(labour);
-    final fundiReceives = labour - fFee + trans; // 4850
-    final clientLocks = labour + trans + cFee; // 5350
-    final fundiSeesWaiting = labour + trans; // 5100 - hide 5%+5%
+    final jobId = (widget.job['id'] ?? widget.job['jobId'] ?? '').toString();
+    final focusedBid = widget.job['focusedBid'] as Map<String, dynamic>?;
+    final focusedOriginal = focusedBid != null ? _bidPrice(focusedBid) : 0;
+    final focusedClientAmt = focusedBid != null
+        ? _toInt(
+            focusedBid['clientCounterAmount'] ??
+                focusedBid['lastCounterAmount'] ??
+                0,
+          )
+        : 0;
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -54,6 +222,130 @@ class JobDetailsScreen extends StatelessWidget {
           'Job Details',
           style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
         ),
+      ),
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('jobs')
+            .doc(jobId)
+            .snapshots(),
+        builder: (ctx, jobSnap) {
+          final Map<String, dynamic> jData =
+              (jobSnap.data?.data() as Map<String, dynamic>?) ?? widget.job;
+          final String realTitle =
+              (jData['title'] ?? jData['jobTitle'] ?? 'Job').toString();
+          final String realCategory =
+              (jData['category'] ?? jData['trade'] ?? '').toString();
+          final photos = (jData['photos'] ?? jData['images'] ?? []) as List;
+          final int labour = _labour(jData);
+          final int trans = _transport(jData);
+          final int rec = labour - _fundiFee(labour) + trans;
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  realTitle,
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 20,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (realCategory.isNotEmpty)
+                      Chip(
+                        label: Text(
+                          realCategory.toUpperCase(),
+                          style: GoogleFonts.montserrat(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    if (realCategory.isNotEmpty) const SizedBox(width: 8),
+                    if (widget.distanceKm != null)
+                      Chip(
+                        label: Text(
+                          '${widget.distanceKm!.toStringAsFixed(1)} km away',
+                          style: GoogleFonts.inter(fontSize: 10),
+                        ),
+                        backgroundColor: FundipapColors.primaryYellow,
+                      ),
+                    const Spacer(),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (focusedClientAmt > 0) ...[
+                          Text(
+                            'You bid: KES $focusedOriginal',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Text(
+                            'Client countered: KES $focusedClientAmt',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              color: Colors.orange.shade800,
+                            ),
+                          ),
+                        ] else ...[
+                          Text(
+                            'KES ${jData['budget'] ?? ''} OFFERED',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
+                          if (labour > 0)
+                            Text(
+                              'You receive: KES $rec',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                                color: Colors.green.shade700,
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (photos.isNotEmpty) ...[
+                  Text(
+                    'Photos from client',
+                    style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 100,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: photos.length,
+                      itemBuilder: (_, i) => Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        width: 100,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          image: DecorationImage(
+                            image: NetworkImage(photos[i]),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
       ),
       bottomNavigationBar: SafeArea(
         child: Container(
@@ -71,136 +363,147 @@ class JobDetailsScreen extends StatelessWidget {
                 .snapshots(),
             builder: (ctx, jobSnap) {
               var jData =
-                  (jobSnap.data?.data() as Map<String, dynamic>?) ?? job;
-              bool isAssignedToMe =
-                  jData['assignedFundi'] == uid ||
-                  jData['assignedFundiId'] == uid;
-              String status = jData['status'] ?? 'open';
-
-              // STATE 2: Assigned - waiting for client to lock
-              if (isAssignedToMe &&
-                  (status == 'assigned' ||
-                      jData['escrowStatus'] == 'pending')) {
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.amber.shade300),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            'Waiting for client to lock',
-                            style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'KES $fundiSeesWaiting',
-                            style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 18,
-                            ),
-                          ),
-                          Text(
-                            'Labour + Transport (App Maintenance Cost deducted on payout)',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              color: Colors.black54,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              }
-
-              // STATE 3: Completed - show what fundi actually receives
-              if (isAssignedToMe &&
-                  (status == 'completed' || status == 'site_visit')) {
-                return Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.black12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Payout Breakdown',
-                        style: GoogleFonts.montserrat(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      _row('Labour cost:', 'KES $labour'),
-                      _row('Transport:', '+ KES $trans'),
-                      _row('App maintenance cost:', '- KES $fFee'),
-                      Divider(),
-                      _row(
-                        'Total to receive:',
-                        'KES $fundiReceives',
-                        bold: true,
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              // STATE 1: Open - bidding
+                  (jobSnap.data?.data() as Map<String, dynamic>?) ?? widget.job;
               return StreamBuilder<DocumentSnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('jobs')
                     .doc(jobId)
                     .collection('bids')
-                    .doc(uid)
+                    .doc(FirebaseAuth.instance.currentUser!.uid)
                     .snapshots(),
                 builder: (ctx2, bidSnap) {
+                  var bidData = bidSnap.data?.data() as Map<String, dynamic>?;
                   bool alreadyBid =
-                      hasBid || (bidSnap.hasData && bidSnap.data!.exists);
+                      widget.hasBid ||
+                      (bidSnap.hasData && bidSnap.data!.exists);
+                  if (bidData != null) {
+                    String bStatus = (bidData['status'] ?? '').toString();
+                    String lastBy =
+                        (bidData['lastCounterBy'] ?? bidData['counterBy'] ?? '')
+                            .toString();
+                    int clientAmt = _toInt(
+                      bidData['clientCounterAmount'] ??
+                          bidData['lastCounterAmount'] ??
+                          0,
+                    );
+                    int originalPrice = _bidPrice(bidData);
+                    int myCounterAmt = _toInt(
+                      bidData['fundiCounterAmount'] ?? 0,
+                    );
+                    bool isClientCounter =
+                        (bStatus == 'countered' &&
+                            lastBy != FirebaseAuth.instance.currentUser!.uid) ||
+                        bStatus == 'client_counter';
+                    bool isMyCounter =
+                        bStatus == 'countered' &&
+                        lastBy == FirebaseAuth.instance.currentUser!.uid;
+                    if (isClientCounter) {
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.orange.shade300),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.compare_arrows,
+                                  color: Colors.orange.shade800,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Client countered your KES $originalPrice with KES $clientAmt',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () => _reject(
+                                    jobId,
+                                    bidSnap.data!.id,
+                                    jData,
+                                    clientAmt,
+                                  ),
+                                  child: const Text('Reject'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () => _counterDialog(
+                                    context,
+                                    jobId,
+                                    bidSnap.data!.id,
+                                    clientAmt,
+                                    jData,
+                                  ),
+                                  child: const Text('Counter'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor:
+                                        FundipapColors.greenSuccess,
+                                  ),
+                                  onPressed: () => _accept(
+                                    jobId,
+                                    bidSnap.data!.id,
+                                    clientAmt,
+                                    jData,
+                                  ),
+                                  child: const Text(
+                                    'Accept',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    }
+                    if (isMyCounter)
+                      return OrangeAnimatedWaitingCard(
+                        title: 'Counter sent • KES $myCounterAmt',
+                        message:
+                            'You countered KES $myCounterAmt. Waiting for client...',
+                      );
+                  }
                   if (alreadyBid) {
+                    final int labour = _labour(jData);
+                    final int trans = _transport(jData);
+                    final int rec = labour - _fundiFee(labour) + trans;
                     return Container(
-                      width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: FundipapColors.greenSuccess.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: FundipapColors.greenSuccess.withOpacity(0.4),
-                        ),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.check_circle,
-                            size: 18,
-                            color: FundipapColors.greenSuccess,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'You have placed a bid. Wait for client feedback - You will receive KES $fundiReceives if accepted',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.montserrat(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 11,
-                                color: FundipapColors.greenSuccess,
-                              ),
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        'You have placed a bid. Wait for client feedback - You will receive KES $rec if accepted',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                          color: FundipapColors.greenSuccess,
+                        ),
                       ),
                     );
                   }
@@ -212,26 +515,15 @@ class JobDetailsScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    onPressed: () {
-                      if (jobId.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Job ID missing')),
-                        );
-                        return;
-                      }
-                      showDialog(
-                        context: context,
-                        builder: (_) =>
-                            FundiBidDialog(jobId: jobId, jobData: job),
-                      );
-                    },
+                    onPressed: () => showDialog(
+                      context: context,
+                      builder: (_) =>
+                          FundiBidDialog(jobId: jobId, jobData: jData),
+                    ),
                     child: Text(
-                      job['marketAvg'] != null
-                          ? 'AVG KES ${job['marketAvg']}'
-                          : 'KES ${job['budget'] ?? job['offeredPrice'] ?? ''} OFFERED • You get $fundiReceives',
+                      'BID NOW',
                       style: GoogleFonts.montserrat(
                         fontWeight: FontWeight.w800,
-                        fontSize: 14,
                       ),
                     ),
                   );
@@ -240,247 +532,6 @@ class JobDetailsScreen extends StatelessWidget {
             },
           ),
         ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(job['customerId'] ?? job['clientId'])
-                  .get(),
-              builder: (_, snap) {
-                var client = snap.data?.data() as Map<String, dynamic>?;
-                var name =
-                    client?['username'] ??
-                    client?['name'] ??
-                    job['customerUsername'] ??
-                    'Client';
-                var rating = (client?['clientRating'] ?? 4.5).toDouble();
-                return Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: FundipapColors.blackGray,
-                        child: Text(
-                          name[0].toUpperCase(),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              name,
-                              style: GoogleFonts.montserrat(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.star,
-                                  size: 14,
-                                  color: Colors.amber,
-                                ),
-                                Text(
-                                  ' $rating • ${client?['jobsPosted'] ?? 0} jobs',
-                                  style: GoogleFonts.inter(fontSize: 11),
-                                ),
-                              ],
-                            ),
-                            Text(
-                              job['location'] ?? 'Kisumu',
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: Colors.black54,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ClientProfileScreen(
-                              clientId: job['customerId'] ?? job['clientId'],
-                            ),
-                          ),
-                        ),
-                        child: Text(
-                          'View Profile',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            Text(
-              job['title'] ?? 'Job',
-              style: GoogleFonts.montserrat(
-                fontWeight: FontWeight.w800,
-                fontSize: 20,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Chip(
-                  label: Text(
-                    (job['category'] ?? 'General').toString().toUpperCase(),
-                    style: GoogleFonts.montserrat(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (distanceKm != null)
-                  Chip(
-                    label: Text(
-                      '${distanceKm!.toStringAsFixed(1)} km away',
-                      style: GoogleFonts.inter(fontSize: 10),
-                    ),
-                    backgroundColor: FundipapColors.primaryYellow,
-                  ),
-                const Spacer(),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'KES ${job['budget'] ?? ''} OFFERED',
-                      style: GoogleFonts.montserrat(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                      ),
-                    ),
-                    if (labour > 0)
-                      Text(
-                        'You receive: KES $fundiReceives',
-                        style: GoogleFonts.montserrat(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 11,
-                          color: Colors.green.shade700,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // FUNDI RECEIPT PREVIEW
-            if (labour > 0)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.black12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Your payout preview',
-                      style: GoogleFonts.montserrat(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                    SizedBox(height: 6),
-                    _row('Labour:', 'KES $labour'),
-                    _row('Transport:', '+ KES $trans'),
-                    _row('App maintenance:', '- KES $fFee'),
-                    Divider(height: 12),
-                    _row('You will receive:', 'KES $fundiReceives', bold: true),
-                    Text(
-                      'Client pays KES $clientLocks total, you get KES $fundiReceives',
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        color: Colors.black54,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 16),
-            Text(
-              'Description',
-              style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              job['description'] ?? 'No description',
-              style: GoogleFonts.inter(fontSize: 13, color: Colors.black87),
-            ),
-            const SizedBox(height: 20),
-            if (photos.isNotEmpty) ...[
-              Text(
-                'Photos from client',
-                style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 100,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: photos.length,
-                  itemBuilder: (_, i) => Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    width: 100,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      image: DecorationImage(
-                        image: NetworkImage(photos[i]),
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _row(String l, String v, {bool bold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            l,
-            style: GoogleFonts.inter(fontSize: 11, color: Colors.black54),
-          ),
-          Text(
-            v,
-            style: GoogleFonts.montserrat(
-              fontSize: 12,
-              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -139,7 +139,7 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
       final uid = FirebaseAuth.instance.currentUser?.uid;
       final fundiId = widget.bidData['fundiId'];
 
-      // 1. Update bid as countered
+      // 1. Update BID - write ALL keys fundi side searches for
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
@@ -147,24 +147,37 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
           .doc(widget.bidId)
           .update({
             'clientCounterAmount': amount,
+            'clientCounterPrice': amount,
+            'lastCounterAmount': amount,
+            'lastCounterPrice': amount,
+            'counterPrice': amount,
+            'lastCounterBy': 'client',
             'counterBy': 'client',
             'counterById': uid,
             'counterAt': FieldValue.serverTimestamp(),
+            'lastCounterAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
             'status': 'countered',
             'clientCounterSeenByFundi': false,
+            'fundiHasUnread': true,
           });
 
+      // 2. Update JOB - so global search finds it
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
           .update({
             'lastCounterAmount': amount,
+            'lastCounterPrice': amount,
             'lastCounterBy': 'client',
+            'counterBy': 'client',
             'status': 'countered',
             'updatedAt': FieldValue.serverTimestamp(),
+            'fundiHasUnread': true,
+            'clientActionAt': FieldValue.serverTimestamp(),
           });
 
-      // 2. NOTIFY FUNDI
+      // 3. NOTIFY FUNDI - main notifications
       await FirebaseFirestore.instance.collection('notifications').add({
         'toUserId': fundiId,
         'toRole': 'fundi',
@@ -181,7 +194,7 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // also for fundi's in-app list
+      // 4. fundi in-app subcollection
       await FirebaseFirestore.instance
           .collection('fundis')
           .doc(fundiId)
@@ -212,9 +225,8 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
 
   @override
   Widget build(BuildContext context) {
-    if (loading) {
+    if (loading)
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
     var combined = {...?user, ...?fundi, ...widget.bidData};
     int effectiveTransport = transportFee < 100 ? 100 : transportFee;
     int totalToShow = totalClientPays > 0

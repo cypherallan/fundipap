@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../../theme/app_theme.dart';
 import '../../../../../widgets/fundi_badge_chip.dart';
+import '../../../../../widgets/animated_waiting_card.dart'; // same aline border
 import '../../models/customer_home_models.dart';
 import '../../../confirm/confirm_fundi_page.dart';
 import '../../timeline/customer_fundi_timeline_page.dart';
@@ -59,7 +60,6 @@ class PendingBidCard extends StatelessWidget {
         ? ' (${bid.distanceKm.toStringAsFixed(1)} km)'
         : '';
 
-    // COUNTER STATE
     final status = (bid.bid['status'] ?? '').toString();
     final counterBy = (bid.bid['counterBy'] ?? '').toString();
     final isCountered = status == 'countered';
@@ -81,12 +81,10 @@ class PendingBidCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isMyCounter
-              ? const Color(0xFFFFF8E1)
-              : const Color(0xFFF8F8F8),
+          color: isMyCounter ? Colors.transparent : const Color(0xFFF8F8F8),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isMyCounter ? Colors.amber.shade200 : Colors.black12,
+            color: isMyCounter ? Colors.transparent : Colors.black12,
           ),
         ),
         child: Column(
@@ -187,53 +185,12 @@ class PendingBidCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // CLIENT COUNTERED -> WAITING STATE
+            // CLIENT COUNTERED -> SAME EXACT WAITING BORDER AS TIMELINE
             if (isMyCounter)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.amber.shade300),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.hourglass_top_rounded,
-                      size: 18,
-                      color: Colors.black87,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Counter offer sent',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Waiting for fundi to respond to your countered offer KES $myCounterAmt',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              OrangeAnimatedWaitingCard(
+                title: 'Counter offer sent • KES $myCounterAmt',
+                message:
+                    'Waiting for fundi to respond to your countered offer KES $myCounterAmt',
               )
             else if (isFundiCounter)
               Column(

@@ -93,10 +93,15 @@ class TimelineContext {
     String phase = (reneg?['currentPhase'] ?? '').toString();
     bool needsExtraEscrow = renegStatus.contains('pending_extra_escrow');
 
+    // FIX: labour is final countered amount (5000), transport defaults 100 not 0
     int labour = toInt(
-      job['laborCost'] ?? job['agreedPrice'] ?? job['acceptedBidAmount'] ?? 0,
+      job['laborCost'] ??
+          job['agreedPrice'] ??
+          job['acceptedBidAmount'] ??
+          job['lastCounterAmount'] ??
+          0,
     );
-    int transport = toInt(job['transportFee'] ?? 0);
+    int transport = toInt(job['transportFee'] ?? 100); // FIX: was 0 -> now 100
     double km = toDouble(job['transportDistanceKm'] ?? 0);
     String mode = (job['transportMode'] ?? 'boda').toString();
     String transportLabel = km > 0
@@ -104,6 +109,7 @@ class TimelineContext {
         : 'Transport cost ($mode):';
     int clientAppFee = toInt(job['clientAppFee'] ?? (labour * 0.05).round());
     int fundiAppFee = toInt(job['fundiAppFee'] ?? (labour * 0.05).round());
+    // FIX: use saved totalClientPays if exists (5350), else calc with transport
     int totalToPay = toInt(
       job['totalClientPays'] ??
           job['totalCost'] ??

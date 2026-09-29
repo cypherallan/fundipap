@@ -25,7 +25,6 @@ class _FundiNotificationsBannerState extends State<FundiNotificationsBanner> {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
     // 1. CLIENT ACTIONS ON MY BIDS - counter, accept, decline
-    // Inverse of customer_unified_banner.dart which shows fundi -> client
     _bidsSub = FirebaseFirestore.instance
         .collectionGroup('bids')
         .where('fundiId', isEqualTo: uid)
@@ -34,12 +33,17 @@ class _FundiNotificationsBannerState extends State<FundiNotificationsBanner> {
           final List<Map<String, dynamic>> tmp = [];
           for (var bidDoc in snap.docs) {
             final bid = bidDoc.data();
-            final status = bid['status'] as String?;
-            // Only show client actions
-            if (status != 'countered' &&
-                status != 'client_counter' &&
-                status != 'accepted' &&
-                status != 'rejected')
+            final status = (bid['status'] ?? '').toString();
+            final counterBy = (bid['counterBy'] ?? '').toString();
+
+            // Only client actions
+            bool isClientCounter =
+                (status == 'countered' && counterBy == 'client') ||
+                status == 'client_counter' ||
+                (status == 'countered' && bid['clientCounterAmount'] != null);
+            if (!(isClientCounter ||
+                status == 'accepted' ||
+                status == 'rejected'))
               continue;
 
             final jobId = bidDoc.reference.parent.parent?.id;
@@ -50,7 +54,6 @@ class _FundiNotificationsBannerState extends State<FundiNotificationsBanner> {
                 .get();
             final jobData = jobDoc.data() ?? {};
 
-            // Skip if job assigned to another fundi
             if (jobData['assignedFundiId'] != null &&
                 jobData['assignedFundiId'] != uid) {
               if (status == 'accepted') continue;
@@ -61,10 +64,17 @@ class _FundiNotificationsBannerState extends State<FundiNotificationsBanner> {
             IconData icon;
             Color bg;
 
-            if (status == 'countered' || status == 'client_counter') {
+            if (isClientCounter) {
               title = 'Client countered your bid';
+              final amt =
+                  bid['clientCounterAmount'] ??
+                  bid['lastCounterAmount'] ??
+                  bid['counterPrice'] ??
+                  bid['clientCounterPrice'] ??
+                  bid['price'] ??
+                  '';
               body =
-                  'KES ${bid['counterPrice'] ?? bid['clientCounterPrice'] ?? bid['price'] ?? ''} • ${jobData['title'] ?? 'Job'}';
+                  'KES $amt • ${jobData['title'] ?? 'Job'} • Tap to Accept / Reject / Counter';
               icon = Icons.compare_arrows;
               bg = Colors.orange.shade50;
             } else if (status == 'accepted') {
@@ -82,18 +92,21 @@ class _FundiNotificationsBannerState extends State<FundiNotificationsBanner> {
             tmp.add({
               'jobId': jobId,
               'jobData': jobData,
+              'bidData': bid,
+              'bidId': bidDoc.id,
               'title': title,
               'body': body,
               'icon': icon,
               'bg': bg,
               'type': 'bid',
-              'createdAt': bid['updatedAt'] ?? bid['createdAt'],
+              'createdAt':
+                  bid['updatedAt'] ?? bid['counterAt'] ?? bid['createdAt'],
             });
           }
           _mergeAndSort(tmp, isBid: true);
         });
 
-    // 2. ACTIVE JOBS - client bought parts, released escrow
+    // 2. ACTIVE JOBS
     _activeJobsSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('assignedFundiId', isEqualTo: uid)
@@ -195,21 +208,17 @@ class _FundiNotificationsBannerState extends State<FundiNotificationsBanner> {
       final tb = b['createdAt'];
       DateTime da;
       DateTime db;
-      if (ta is Timestamp) {
+      if (ta is Timestamp)
         da = ta.toDate();
-      } else if (ta is DateTime)
-        // ignore: curly_braces_in_flow_control_structures
+      else if (ta is DateTime)
         da = ta;
       else
-        // ignore: curly_braces_in_flow_control_structures
         da = DateTime.now();
-      if (tb is Timestamp) {
+      if (tb is Timestamp)
         db = tb.toDate();
-      } else if (tb is DateTime)
-        // ignore: curly_braces_in_flow_control_structures
+      else if (tb is DateTime)
         db = tb;
       else
-        // ignore: curly_braces_in_flow_control_structures
         db = DateTime.now();
       return db.compareTo(da);
     });
@@ -261,8 +270,6 @@ class _FundiNotificationsBannerState extends State<FundiNotificationsBanner> {
                 final item = _clientActions[i];
                 return InkWell(
                   onTap: () {
-                    // Both types go to job details, which can then open my_jobs page
-                    // job_details_screen.dart is in same folder as this banner
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -272,13 +279,18 @@ class _FundiNotificationsBannerState extends State<FundiNotificationsBanner> {
                             'id': item['jobId'],
                             'jobId': item['jobId'],
                           };
+                          // pass bid too so job_details can open counter sheet
+                          if (item['bidData'] != null)
+                            jobMap['focusedBid'] = item['bidData'];
+                          if (item['bidId'] != null)
+                            jobMap['focusedBidId'] = item['bidId'];
                           return JobDetailsScreen(job: jobMap);
                         },
                       ),
                     );
                   },
                   child: Container(
-                    width: 260,
+                    width: 280,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: item['bg'] as Color,
