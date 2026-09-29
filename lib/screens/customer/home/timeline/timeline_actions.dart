@@ -16,26 +16,45 @@ class TimelineActions {
 
   static Future<void> payExtraEscrow(
     String jobId,
-    int extra,
-    int newTotal,
+    int extra, // extraToLock = 1050 (1000+50) not 6400
+    int newTotal, // newTotal = 6400 (5350+1050)
     String currentRenegStatus,
   ) async {
     String finalStatus = currentRenegStatus.replaceAll(
       '_pending_extra_escrow',
       '',
     );
-    bool clientBuys = finalStatus.contains('client_buys');
-    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+    // FIX: get real whoBuys, don't guess from status
+    final jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
+    final snap = await jobRef.get();
+    String whoBuys = 'client';
+    if (snap.exists) {
+      var data = snap.data() as Map<String, dynamic>;
+      var reneg = data['renegotiation'] as Map<String, dynamic>?;
+      whoBuys =
+          (reneg?['whoBuysParts'] ??
+                  (finalStatus.contains('client_buys') ? 'client' : 'client'))
+              .toString();
+    }
+    bool clientBuys = whoBuys == 'client';
+
+    await jobRef.update({
       'escrowStatus': 'held',
-      'escrowAmount': newTotal,
+      'escrowAmount': newTotal, // 6400
       'extraEscrowStatus': 'paid',
       'extraEscrowPaidAt': FieldValue.serverTimestamp(),
-      'status': 'site_visit',
-      'renegotiation.status': finalStatus,
+      'extraToLock': extra, // 1050
+      'renegotiation.extraToLock': extra,
+      // FIX: was 'site_visit' -> caused straight to START JOB
+      'status': clientBuys
+          ? 'waiting_for_client_to_buy_parts'
+          : 'fundi_buying_parts',
+      'renegotiation.status': finalStatus, // accepted_client_buys_parts
       'renegotiation.requested': false,
       'renegotiation.currentPhase': clientBuys
           ? 'waiting_for_client_to_buy_parts'
           : 'fundi_buying_parts',
+      'renegotiation.whoBuysParts': whoBuys,
       'fundiHasUnread': true,
       'customerHasUnread': false,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -43,17 +62,59 @@ class TimelineActions {
   }
 
   static Future<void> confirmPartsBought(String jobId) async {
-    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+    final jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
+    final snap = await jobRef.get();
+    String fundiId = '';
+    String clientName = 'Client';
+    if (snap.exists) {
+      var data = snap.data() as Map<String, dynamic>;
+      fundiId = (data['assignedFundiId'] ?? data['fundiId'] ?? '').toString();
+      clientName = (data['customerName'] ?? data['clientName'] ?? 'Client')
+          .toString();
+    }
+
+    await jobRef.update({
+      'status':
+          'client_claims_parts_bought', // FIX: was missing, fundi timeline needs this
       'renegotiation.currentPhase': 'client_claims_parts_bought',
       'renegotiation.clientPartsBought': true,
       'renegotiation.clientPartsBoughtAt': FieldValue.serverTimestamp(),
+      'renegotiation.status': 'client_claims_parts_bought',
       'fundiHasUnread': true,
       'customerHasUnread': false,
+      'customerUnreadType': 'parts_bought',
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    // FIX: send notification to fundi
+    if (fundiId.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'toUserId': fundiId,
+          'toRole': 'fundi',
+          'type': 'parts_bought',
+          'jobId': jobId,
+          'title': 'Client bought parts',
+          'body':
+              '$clientName marked materials as bought - confirm to start work',
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        await FirebaseFirestore.instance
+            .collection('fundis')
+            .doc(fundiId)
+            .collection('notifications')
+            .add({
+              'jobId': jobId,
+              'type': 'parts_bought',
+              'title': 'Client bought parts',
+              'isRead': false,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+      } catch (_) {}
+    }
   }
 
-  // FIX: NEW - client must explicitly proceed, prevents 10x escrow
   static Future<void> proceedWithFundi(
     String jobId,
     String fundiId,
@@ -64,7 +125,6 @@ class TimelineActions {
     if (!jobSnap.exists) throw 'Job not found';
     final job = jobSnap.data() as Map<String, dynamic>;
 
-    // find the bid this fundi accepted (counter_accepted_by_fundi)
     final q = await jobRef
         .collection('bids')
         .where('fundiId', isEqualTo: fundiId)
@@ -78,7 +138,6 @@ class TimelineActions {
         )
         .limit(1)
         .get();
-    // fallback: search by assigned field if fundiId stored differently
     final bidSnap = q.docs.isNotEmpty
         ? q.docs.first
         : (await jobRef
@@ -100,11 +159,11 @@ class TimelineActions {
     );
     int transport = toInt(
       job['transportFee'] ?? bidData['transportFee'] ?? 100,
-    ); // FIX: default 100 not 0
+    );
     int clientFee = (labour * 0.05).round();
     int fundiFee = (labour * 0.05).round();
-    int totalClient = labour + transport + clientFee; // 5000+100+250 = 5350
-    int fundiRec = labour - fundiFee + transport; // 4850
+    int totalClient = labour + transport + clientFee;
+    int fundiRec = labour - fundiFee + transport;
 
     final batch = FirebaseFirestore.instance.batch();
     batch.update(jobRef, {
@@ -131,7 +190,6 @@ class TimelineActions {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // reject other 9 who also accepted your counter
     final others = await jobRef
         .collection('bids')
         .where(
@@ -173,7 +231,7 @@ class TimelineActions {
       var reneg = j['renegotiation'] as Map<String, dynamic>?;
 
       int labour = toInt(j['laborCost'] ?? j['agreedPrice'] ?? 0);
-      int transport = toInt(j['transportFee'] ?? 100); // FIX: was 0
+      int transport = toInt(j['transportFee'] ?? 100);
       int clientAppFee = toInt(j['clientAppFee'] ?? (labour * 0.05).round());
       int fundiAppFee = toInt(j['fundiAppFee'] ?? (labour * 0.05).round());
       int totalClient = toInt(
@@ -236,8 +294,7 @@ class TimelineActions {
       }
 
       if (!context.mounted) return;
-      int displayRelease =
-          labour + transport; // 5000+100=5100 shown as locked, payout is 4850
+      int displayRelease = labour + transport;
       if (reneg != null && reneg['newLaborTotal'] != null) {
         displayRelease = toInt(reneg['newLaborTotal']) + transport;
       }

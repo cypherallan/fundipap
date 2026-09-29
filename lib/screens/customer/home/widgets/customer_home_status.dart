@@ -177,15 +177,27 @@ class HomeStatusWidget extends StatelessWidget {
     }
 
     if (needsExtraEscrow) {
-      int extraToLock = toInt(reneg?['extraToLock'] ?? 0);
+      int counterExtra = toInt(
+        reneg?['acceptedCounterExtraLabor'] ?? reneg?['counterExtraLabor'] ?? 0,
+      );
+      int extraToLock = toInt(
+        reneg?['acceptedCounterExtraToLock'] ??
+            reneg?['counterExtraToLock'] ??
+            reneg?['extraToLock'] ??
+            0,
+      );
       if (extraToLock == 0) {
         int newTotal = toInt(reneg?['newTotalClientPays'] ?? 0);
         if (newTotal > 0) extraToLock = newTotal - alreadyLocked;
       }
+      bool isCounterAccepted = counterExtra > 0;
       return OrangeAnimatedWaitingCard(
-        title: 'Lock extra KES $extraToLock in escrow',
-        message:
-            'You accepted new price. Lock extra KES $extraToLock before fundi continues.',
+        title: isCounterAccepted
+            ? 'Fundi accepted your counter KES $counterExtra - Lock extra KES $extraToLock'
+            : 'Lock extra KES $extraToLock in escrow',
+        message: isCounterAccepted
+            ? 'Fundi accepted your counter request of KES $counterExtra. Proceed to lock KES $extraToLock before fundi continues.'
+            : 'You accepted new price. Lock extra KES $extraToLock before fundi continues.',
       );
     }
 

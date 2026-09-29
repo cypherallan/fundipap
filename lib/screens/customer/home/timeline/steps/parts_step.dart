@@ -8,29 +8,51 @@ import '../timeline_context.dart';
 
 class PartsSteps {
   static bool handle(List<Widget> timeline, TimelineContext c) {
-    if (c.phase == 'waiting_for_client_to_buy_parts') {
+    final phase = (c.phase).toString();
+    final status = (c.status).toString();
+    final isWaitingBuy =
+        phase == 'waiting_for_client_to_buy_parts' ||
+        status == 'waiting_for_client_to_buy_parts';
+
+    if (isWaitingBuy) {
       final oldLabor = toInt(
         c.reneg?['oldLabor'] ?? c.job['laborCost'] ?? c.job['agreedPrice'] ?? 0,
       );
       final transportVal = toInt(c.job['transportFee'] ?? 0);
       final oldClientFee = (oldLabor * 0.05).round();
       final alreadyLockedBase = oldLabor + transportVal + oldClientFee;
-      final extraLaborVal = toInt(
+
+      final rawExtraLabor = toInt(
         c.job['extraLaborAmount'] ?? c.reneg?['extraLabor'] ?? 0,
       );
+      final counterExtraLabor = toInt(
+        c.reneg?['acceptedCounterExtraLabor'] ??
+            c.reneg?['counterExtraLabor'] ??
+            0,
+      );
+      final extraLaborVal = counterExtraLabor > 0
+          ? counterExtraLabor
+          : rawExtraLabor;
+
       final extraAppVal = toInt(
         c.job['extraClientAppFee'] ??
+            c.reneg?['acceptedCounterExtraAppFee'] ??
+            c.reneg?['counterExtraAppFee'] ??
             c.reneg?['extraApp'] ??
             (extraLaborVal * 0.05).round(),
       );
-      final extraToLockVal = extraLaborVal + extraAppVal;
+      final extraToLockVal =
+          extraLaborVal + extraAppVal; // 1000+50=1050 not 2100
       final newTotalVal = alreadyLockedBase + extraToLockVal;
       final totalLockedNow = toInt(c.job['escrowAmount'] ?? newTotalVal);
+      final isCounter = counterExtraLabor > 0;
+
       timeline.add(
         TimelineCard(
           title: 'You will buy parts - Confirm when bought',
-          body:
-              'Extra KES $extraToLockVal locked (Labour $extraLaborVal + App $extraAppVal). Total locked KES $totalLockedNow. Buy the listed parts then confirm.',
+          body: isCounter
+              ? 'Extra KES $extraToLockVal locked (Counter KES $extraLaborVal + App $extraAppVal, was KES $rawExtraLabor). Total locked KES $totalLockedNow. Buy the listed parts then confirm.'
+              : 'Extra KES $extraToLockVal locked (Labour $extraLaborVal + App $extraAppVal). Total locked KES $totalLockedNow. Buy the listed parts then confirm.',
           icon: Icons.shopping_cart,
           isDone: false,
           action: ElevatedButton(
@@ -49,7 +71,9 @@ class PartsSteps {
           ),
         ),
       );
+      return true; // FIX: stop here, don't go straight to START JOB
     }
+
     if (c.phase == 'client_claims_parts_bought' ||
         c.phase == 'parts_confirmed_by_fundi' ||
         c.phase == 'fundi_working' ||

@@ -80,13 +80,42 @@ class FundiCustomerTimelinePage extends StatelessWidget {
   }
 
   Future<void> _confirmPartsAvailable() async {
+    final jobSnap = await FirebaseFirestore.instance
+        .collection('jobs')
+        .doc(jobId)
+        .get();
+    String clientId = '';
+    if (jobSnap.exists) {
+      var d = jobSnap.data() as Map<String, dynamic>;
+      clientId = (d['customerId'] ?? d['clientId'] ?? '').toString();
+    }
+
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'status':
+          'parts_confirmed_by_fundi', // FIX: so client sees START WORK next
       'renegotiation.currentPhase': 'parts_confirmed_by_fundi',
       'renegotiation.partsConfirmedByFundi': true,
       'renegotiation.partsConfirmedAt': FieldValue.serverTimestamp(),
+      'renegotiation.status': 'parts_confirmed_by_fundi',
       'customerHasUnread': true,
+      'fundiHasUnread': false,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    if (clientId.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'toUserId': clientId,
+          'toRole': 'client',
+          'type': 'parts_confirmed',
+          'jobId': jobId,
+          'title': 'Fundi confirmed parts',
+          'body': 'Fundi confirmed materials available - waiting to start job',
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+    }
   }
 
   Future<void> _startJob() async {
@@ -178,15 +207,28 @@ class FundiCustomerTimelinePage extends StatelessWidget {
         var reneg = job['renegotiation'] as Map<String, dynamic>?;
         String phase = (reneg?['currentPhase'] ?? '').toString();
         String rs = (reneg?['status'] ?? '').toString();
-        int newLabour = _toInt(reneg?['newLaborTotal'] ?? labour);
+
+        int oldLabour = _toInt(reneg?['oldLabor'] ?? labour);
+        int counterExtra = _toInt(
+          reneg?['acceptedCounterExtraLabor'] ??
+              reneg?['counterExtraLabor'] ??
+              0,
+        );
+        int rawExtra = _toInt(
+          reneg?['extraLabor'] ?? job['extraLaborAmount'] ?? 0,
+        );
+        int extraLabour = counterExtra > 0
+            ? counterExtra
+            : rawExtra; // fundi sees 1000
+        int newLabour = _toInt(
+          reneg?['newLaborTotal'] ?? (oldLabour + extraLabour),
+        );
         int newFundiFee = _toInt(
           reneg?['newFundiAppFee'] ?? (newLabour * 0.05).round(),
         );
-        int extraLabour = _toInt(
-          reneg?['extraLabor'] ?? job['extraLaborAmount'] ?? 0,
-        );
-        int newTotalFundiLocked = newLabour + transport;
-        int newFundiReceivesVal = newLabour - newFundiFee + transport;
+        int newTotalFundiLocked = _toInt(newLabour + transport);
+        int newFundiReceivesVal = _toInt(newLabour - newFundiFee + transport);
+        bool isCounterAccepted = counterExtra > 0;
         int releasedAmount = _toInt(
           job['fundiPayoutAmount'] ??
               job['totalReleasedAmount'] ??
@@ -798,12 +840,13 @@ class FundiCustomerTimelinePage extends StatelessWidget {
         }
 
         //... rest of your timeline logic stays same, just fix back button at the end
-        if (phase == 'waiting_for_client_to_buy_parts') {
+        if (phase == 'waiting_for_client_to_buy_parts' ||
+            status == 'waiting_for_client_to_buy_parts') {
           timeline.add(
             OrangeAnimatedWaitingCard(
               title: 'Waiting for client to buy materials',
               message:
-                  'Client locked extra labour KES $extraLabour. Total locked KES $newTotalFundiLocked. Waiting for materials.',
+                  'Client locked extra labour KES $extraLabour (counter $counterExtra accepted). Total locked KES $newTotalFundiLocked. Waiting for materials.',
             ),
           );
         } else if (phase == 'client_claims_parts_bought') {
@@ -830,12 +873,116 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               ),
             ),
           );
+        } else if (rs == 'countered_by_client') {
+          // FIX: Client countered your 2000 -> 1000 - fundi must see Accept/Counter
+          int originalExtra = rawExtra;
+          int counterExtraClient = _toInt(reneg?['counterExtraLabor'] ?? 0);
+          int counterToLockClient = _toInt(
+            reneg?['counterExtraToLock'] ??
+                counterExtraClient + (counterExtraClient * 0.05).round(),
+          );
+          timeline.add(
+            _card(
+              color: Colors.orange.shade50,
+              border: Colors.orange,
+              icon: Icons.compare_arrows,
+              iconColor: Colors.orange.shade800,
+              title:
+                  'Client countered extra KES $originalExtra with KES $counterExtraClient',
+              message:
+                  'You requested KES $originalExtra. Client countered with KES $counterExtraClient (KES $counterToLockClient to lock for client). Accept to proceed with KES $counterExtraClient.',
+              time: 'Now',
+              isCurrent: true,
+              action: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 48),
+                      ),
+                      onPressed: () async {
+                        int oldLab = _toInt(reneg?['oldLabor'] ?? labour);
+                        int oldTrans = _toInt(
+                          reneg?['oldTransportFee'] ?? transport,
+                        );
+                        int alreadyLocked =
+                            oldLab + oldTrans + (oldLab * 0.05).round();
+                        int newLabTotal =
+                            oldLab + counterExtraClient; // 5000+1000=6000
+                        int newTotalClient =
+                            alreadyLocked +
+                            counterToLockClient; // 5350+1050=6400
+                        await FirebaseFirestore.instance
+                            .collection('jobs')
+                            .doc(jobId)
+                            .update({
+                              'renegotiation.acceptedCounterExtraLabor':
+                                  counterExtraClient, // 1000 FUNDI SEES 1000
+                              'renegotiation.acceptedCounterExtraToLock':
+                                  counterToLockClient, // 1050 CLIENT SEES 1050
+                              'renegotiation.acceptedCounterExtraAppFee':
+                                  (counterExtraClient * 0.05).round(),
+                              'renegotiation.newLaborTotal': newLabTotal,
+                              'renegotiation.newTotalClientPays':
+                                  newTotalClient,
+                              'renegotiation.extraToLock': counterToLockClient,
+                              'renegotiation.extraLabor': counterExtraClient,
+                              'renegotiation.newClientAppFee':
+                                  (newLabTotal * 0.05).round(),
+                              'renegotiation.newFundiAppFee':
+                                  (newLabTotal * 0.05).round(),
+                              'renegotiation.status':
+                                  'accepted_counter_pending_extra_escrow',
+                              'renegotiation.currentPhase':
+                                  'waiting_for_extra_escrow',
+                              'renegotiation.acceptedCounterAt':
+                                  FieldValue.serverTimestamp(),
+                              'status': 'awaiting_extra_escrow',
+                              'agreedPrice': newLabTotal,
+                              'laborCost': newLabTotal,
+                              'totalClientPays': newTotalClient,
+                              'extraLaborAmount': counterExtraClient,
+                              'extraToLock': counterToLockClient,
+                              'fundiHasUnread': false,
+                              'customerHasUnread': true,
+                              'updatedAt': FieldValue.serverTimestamp(),
+                            });
+                      },
+                      child: Text('ACCEPT KES $counterExtraClient'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => FundiRequestNewPriceScreen(
+                            jobId: jobId,
+                            job: job,
+                          ),
+                        ),
+                      ),
+                      child: const Text('COUNTER AGAIN'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         } else if (rs.contains('pending_extra_escrow')) {
           timeline.add(
             OrangeAnimatedWaitingCard(
-              title: 'Waiting for client to lock extra KES $extraLabour',
-              message:
-                  'You requested extra labour KES $extraLabour. New total KES $newTotalFundiLocked = Labour $newLabour + Transport $transport.',
+              title: isCounterAccepted
+                  ? 'You accepted counter KES $extraLabour - Waiting for client to lock extra KES $extraLabour'
+                  : 'Waiting for client to lock extra KES $extraLabour',
+              message: isCounterAccepted
+                  ? 'You accepted client counter of KES $extraLabour. New total KES $newTotalFundiLocked = Labour $newLabour + Transport $transport. Waiting for client to lock.'
+                  : 'You requested extra labour KES $extraLabour. New total KES $newTotalFundiLocked = Labour $newLabour + Transport $transport.',
             ),
           );
         } else if (rs == 'pending' || rs == 'countered_by_fundi') {

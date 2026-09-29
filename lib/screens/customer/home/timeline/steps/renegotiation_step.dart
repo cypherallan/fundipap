@@ -8,7 +8,6 @@ import '../timeline_context.dart';
 
 class RenegotiationSteps {
   static bool handle(List<Widget> timeline, TimelineContext c) {
-    // === FIX: you countered extra labour - show waiting for fundi to confirm, not start job ===
     if (c.reneg != null &&
         ((c.renegStatus == 'countered_by_client') ||
             (c.job['status'] ?? '').toString() ==
@@ -32,7 +31,6 @@ class RenegotiationSteps {
           isDone: false,
         ),
       );
-      // also show orange waiting animation
       timeline.add(
         OrangeAnimatedWaitingCard(
           title: 'Waiting for fundi to confirm extra labour counter',
@@ -44,21 +42,47 @@ class RenegotiationSteps {
     }
 
     if (c.needsExtraEscrow) {
+      int rawExtraLabor = toInt(
+        c.reneg?['extraLabor'] ?? c.job['extraLaborAmount'] ?? 0,
+      );
+      int counterExtraLabor = toInt(
+        c.reneg?['acceptedCounterExtraLabor'] ??
+            c.reneg?['counterExtraLabor'] ??
+            0,
+      );
+      int extraLaborToShow = counterExtraLabor > 0
+          ? counterExtraLabor
+          : rawExtraLabor;
+
       int extraToLock = toInt(
-        c.reneg?['extraToLock'] ?? toInt(c.job['extraToLock'] ?? 0),
+        c.reneg?['acceptedCounterExtraToLock'] ??
+            c.reneg?['counterExtraToLock'] ??
+            c.reneg?['extraToLock'] ??
+            c.job['extraToLock'] ??
+            0,
       );
       if (extraToLock == 0) {
         int newTotalClient = toInt(c.reneg?['newTotalClientPays'] ?? 0);
         if (newTotalClient > 0) extraToLock = newTotalClient - c.alreadyLocked;
       }
+      // ENSURE 1000 -> 1050 not 2100
+      if (extraToLock == 0)
+        extraToLock = extraLaborToShow + (extraLaborToShow * 0.05).round();
+
       int newTotalClient = toInt(
         c.reneg?['newTotalClientPays'] ?? c.alreadyLocked + extraToLock,
       );
+      bool isCounterAccepted = counterExtraLabor > 0;
+      String whoBuys = (c.reneg?['whoBuysParts'] ?? 'client').toString();
+
       timeline.add(
         TimelineCard(
-          title: 'Lock extra KES $extraToLock in escrow',
-          body:
-              'You accepted new price KES $newTotalClient. Already locked KES ${c.alreadyLocked}. Lock extra KES $extraToLock before fundi continues.',
+          title: isCounterAccepted
+              ? 'Fundi accepted your counter KES $extraLaborToShow - Lock extra KES $extraToLock'
+              : 'Lock extra KES $extraToLock in escrow',
+          body: isCounterAccepted
+              ? 'Fundi accepted your counter KES $extraLaborToShow (was KES $rawExtraLabor). Already locked KES ${c.alreadyLocked}. Lock extra KES $extraToLock before fundi continues. Total KES $newTotalClient.'
+              : 'You accepted new price KES $newTotalClient. Already locked KES ${c.alreadyLocked}. Lock extra KES $extraToLock before fundi continues.',
           icon: Icons.lock_open,
           isDone: false,
           action: ElevatedButton(
@@ -68,9 +92,9 @@ class RenegotiationSteps {
             ),
             onPressed: () => TimelineActions.payExtraEscrow(
               c.jobId,
-              extraToLock,
-              newTotalClient,
-              c.renegStatus,
+              c.alreadyLocked, // FIX: 5350 not 1050
+              extraToLock, // FIX: 1050 not 6400
+              whoBuys, // FIX: 'client' not status string
             ),
             child: Text('LOCK EXTRA KES $extraToLock NOW'),
           ),

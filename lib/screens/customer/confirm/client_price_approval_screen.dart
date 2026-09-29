@@ -48,10 +48,9 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
       int oldClientFee = (oldLabor * 0.05).round();
       int newClientFee = (newLabor * 0.05).round();
       int newFundiFee = (newLabor * 0.05).round();
-      int extraAppFee = newClientFee - oldClientFee; // 50
-      int extraToLock = extraLabor + extraAppFee; // 1050 CLIENT
-      int newTotal =
-          alreadyLockedCorrect + extraToLock; // 5350+1050=6400 CLIENT
+      int extraAppFee = newClientFee - oldClientFee;
+      int extraToLock = extraLabor + extraAppFee;
+      int newTotal = alreadyLockedCorrect + extraToLock;
       int newFundiReceives = newLabor - newFundiFee + oldTransport;
 
       await FirebaseFirestore.instance
@@ -61,8 +60,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
             'agreedPrice': newLabor,
             'laborCost': newLabor,
             'laborPrice': newLabor,
-            'transportFee':
-                oldTransport, // FIX: keep old transport, don't inject 100
+            'transportFee': oldTransport,
             'clientAppFee': newClientFee,
             'fundiAppFee': newFundiFee,
             'totalClientPays': newTotal,
@@ -73,7 +71,6 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
             'extraEscrowAmount': extraToLock,
             'extraToLock': extraToLock,
             'extraEscrowStatus': 'pending',
-            // FIX: Do NOT keep old status = in_progress. Stay in renegotiation
             'status': 'awaiting_extra_escrow',
             'renegotiation.status':
                 'accepted_client_buys_parts_pending_extra_escrow',
@@ -163,7 +160,6 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
             'escrowAmount': newTotal,
             'extraEscrowStatus': 'paid',
             'escrowStatus': 'held',
-            // FIX: THIS WAS THE LEAK - was in_progress. Now wait for parts
             'status': whoBuysVal == 'client'
                 ? 'waiting_for_client_to_buy_parts'
                 : 'fundi_buying_parts',
@@ -173,6 +169,8 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
             'renegotiation.currentPhase': whoBuysVal == 'client'
                 ? 'waiting_for_client_to_buy_parts'
                 : 'fundi_buying_parts',
+            'renegotiation.whoBuysParts': whoBuysVal, // FIX: keep who buys
+            'renegotiation.extraToLock': extraToLock,
             'renegotiation.extraEscrowPaidAt': FieldValue.serverTimestamp(),
             'fundiHasUnread': true,
             'customerHasUnread': false,
@@ -201,18 +199,13 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
     if (counterPriceCtrl.text.isEmpty) return;
     setState(() => loading = true);
     try {
-      // FIX: user counters ONLY the extra labour, not total labour
       int counterExtraLabor = int.tryParse(counterPriceCtrl.text.trim()) ?? 0;
       if (counterExtraLabor <= 0) return;
 
-      int counterExtraFee = (counterExtraLabor * 0.05)
-          .round(); // 5% of extra only
-      int counterExtraToLock =
-          counterExtraLabor + counterExtraFee; // 1000+50=1050 NOT 1150
-      int counterNewLaborTotal = oldLabor + counterExtraLabor; // 5000+1000=6000
-      (counterNewLaborTotal * 0.05).round();
-      int counterNewTotalClientPays =
-          alreadyLockedCorrect + counterExtraToLock; // 5350+1050=6400
+      int counterExtraFee = (counterExtraLabor * 0.05).round();
+      int counterExtraToLock = counterExtraLabor + counterExtraFee;
+      int counterNewLaborTotal = oldLabor + counterExtraLabor;
+      int counterNewTotalClientPays = alreadyLockedCorrect + counterExtraToLock;
       int counterNewFundiFee = (counterNewLaborTotal * 0.05).round();
       int counterFundiReceives =
           counterNewLaborTotal - counterNewFundiFee + oldTransport;
@@ -225,30 +218,31 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
               .toString();
       final uid = FirebaseAuth.instance.currentUser?.uid;
 
-      await FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).update({
-        'status':
-            'renegotiation_countered_by_client', // FIX: so home + timeline know it's countered
-        'renegotiation.status': 'countered_by_client',
-        'renegotiation.counterExtraLabor': counterExtraLabor,
-        'renegotiation.counterLabor': counterNewLaborTotal,
-        'renegotiation.counterPrice': counterNewLaborTotal,
-        'renegotiation.counterClientAppFee': counterExtraFee,
-        'renegotiation.counterExtraToLock': counterExtraToLock, // 1050
-        'renegotiation.counterFundiAppFee': counterExtraFee,
-        'renegotiation.counterTotalClientPays': counterNewTotalClientPays,
-        'renegotiation.counterTotalCost': counterNewTotalClientPays,
-        'renegotiation.counterFundiReceives': counterFundiReceives,
-        'renegotiation.counterTransportFee': oldTransport,
-        'renegotiation.counterReason': counterReasonCtrl.text,
-        'renegotiation.counteredAt': FieldValue.serverTimestamp(),
-        'renegotiation.counteredExtraRequested': extraRequested,
-        'fundiHasUnread': true,
-        'customerHasUnread': true, // FIX: show in notifications
-        'customerUnreadType': 'renegotiation_countered',
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      await FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(widget.jobId)
+          .update({
+            'status': 'renegotiation_countered_by_client',
+            'renegotiation.status': 'countered_by_client',
+            'renegotiation.counterExtraLabor': counterExtraLabor,
+            'renegotiation.counterLabor': counterNewLaborTotal,
+            'renegotiation.counterPrice': counterNewLaborTotal,
+            'renegotiation.counterClientAppFee': counterExtraFee,
+            'renegotiation.counterExtraToLock': counterExtraToLock,
+            'renegotiation.counterFundiAppFee': counterExtraFee,
+            'renegotiation.counterTotalClientPays': counterNewTotalClientPays,
+            'renegotiation.counterTotalCost': counterNewTotalClientPays,
+            'renegotiation.counterFundiReceives': counterFundiReceives,
+            'renegotiation.counterTransportFee': oldTransport,
+            'renegotiation.counterReason': counterReasonCtrl.text,
+            'renegotiation.counteredAt': FieldValue.serverTimestamp(),
+            'renegotiation.counteredExtraRequested': extraRequested,
+            'fundiHasUnread': true,
+            'customerHasUnread': true,
+            'customerUnreadType': 'renegotiation_countered',
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
 
-      // FIX: notify fundi about new counter on extra
       if (fundiId.isNotEmpty) {
         await FirebaseFirestore.instance.collection('notifications').add({
           'toUserId': fundiId,
@@ -280,8 +274,8 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
       }
 
       if (!mounted) return;
-      Navigator.pop(context); // close dialog
-      Navigator.pop(context); // close screen
+      Navigator.pop(context);
+      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -321,13 +315,28 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                 job['laborCost'] ??
                 0,
           );
-          int newLabor = _toInt(
+          int newLaborRaw = _toInt(
             reneg['newLaborTotal'] ?? reneg['newLaborPrice'] ?? 0,
           );
-          if (newLabor == 0)
-            newLabor = oldLabor + _toInt(reneg['extraLabor'] ?? 0);
-          int extraLabor = (newLabor - oldLabor).clamp(0, 9999999);
-          // FIX: oldTransport is immutable from initial bid
+          if (newLaborRaw == 0)
+            newLaborRaw = oldLabor + _toInt(reneg['extraLabor'] ?? 0);
+
+          int acceptedCounterLabour = _toInt(
+            reneg['acceptedCounterExtraLabor'] ??
+                reneg['counterExtraLabor'] ??
+                0,
+          );
+          bool isCounterAccepted =
+              acceptedCounterLabour > 0 &&
+              _toInt(reneg['acceptedCounterExtraToLock'] ?? 0) > 0;
+
+          int newLabor = isCounterAccepted
+              ? oldLabor + acceptedCounterLabour
+              : newLaborRaw;
+          int extraLabor = isCounterAccepted
+              ? acceptedCounterLabour
+              : (newLabor - oldLabor).clamp(0, 9999999);
+
           int oldTransport = _toInt(
             reneg['oldTransportFee'] ??
                 widget.job['transportFee'] ??
@@ -339,11 +348,15 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
             reneg['newClientAppFee'] ?? (newLabor * 0.05).round(),
           );
           int extraAppFee = (newClientFee - oldClientFee).clamp(0, 999999);
-          int alreadyLockedCorrect =
-              oldLabor +
-              oldTransport +
-              oldClientFee; // 5000+100+250=5350 or 5000+0+250=5250 - stays consistent
-          int extraToLock = extraLabor + extraAppFee; // 1050
+          if (isCounterAccepted) {
+            extraAppFee = _toInt(
+              reneg['acceptedCounterExtraAppFee'] ??
+                  reneg['counterExtraAppFee'] ??
+                  extraAppFee,
+            );
+          }
+          int alreadyLockedCorrect = oldLabor + oldTransport + oldClientFee;
+          int extraToLock = extraLabor + extraAppFee;
           int newTotal = alreadyLockedCorrect + extraToLock;
 
           String renegStatus = (reneg['status'] ?? 'pending').toString();
@@ -608,7 +621,9 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                         Icon(Icons.lock, color: Colors.red.shade700, size: 32),
                         const SizedBox(height: 8),
                         Text(
-                          'Lock Extra KES $extraToLock in Escrow',
+                          isCounterAccepted
+                              ? 'Fundi accepted your counter KES $acceptedCounterLabour - Lock Extra KES $extraToLock'
+                              : 'Lock Extra KES $extraToLock in Escrow',
                           style: GoogleFonts.montserrat(
                             fontWeight: FontWeight.w800,
                             fontSize: 14,
@@ -618,7 +633,9 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'You already locked KES $alreadyLockedCorrect. Lock extra KES $extraToLock to reach KES $newTotal before fundi starts.',
+                          isCounterAccepted
+                              ? 'Fundi accepted your counter of KES $acceptedCounterLabour (was KES ${_toInt(reneg['extraLabor'] ?? extraLabor)}). You already locked KES $alreadyLockedCorrect. Lock extra KES $extraToLock to reach KES $newTotal before fundi starts.'
+                              : 'You already locked KES $alreadyLockedCorrect. Lock extra KES $extraToLock to reach KES $newTotal before fundi starts.',
                           style: GoogleFonts.inter(fontSize: 11),
                           textAlign: TextAlign.center,
                         ),
@@ -764,7 +781,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                                       keyboardType: TextInputType.number,
                                       decoration: InputDecoration(
                                         labelText:
-                                            'Your extra labour offer (e.g. 1000)', // FIX: extra only
+                                            'Your extra labour offer (e.g. 1000)',
                                         helperText:
                                             'Extra + 5% = total extra to lock. Transport already locked',
                                       ),
@@ -774,7 +791,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                                       Padding(
                                         padding: const EdgeInsets.only(top: 8),
                                         child: Text(
-                                          'Extra to lock: KES ${_toInt(counterPriceCtrl.text) + (_toInt(counterPriceCtrl.text) * 0.05).round()} (was showing 1150, now 1050)',
+                                          'Extra to lock: KES ${_toInt(counterPriceCtrl.text) + (_toInt(counterPriceCtrl.text) * 0.05).round()}',
                                           style: GoogleFonts.inter(
                                             fontSize: 10,
                                             color: Colors.green,

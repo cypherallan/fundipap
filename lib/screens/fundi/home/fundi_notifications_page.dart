@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import 'fundi_customer_timeline_page.dart';
-import 'job_details_screen.dart'; // for countered bids
+import 'job_details_screen.dart';
 
 class FundiNotificationsPage extends StatefulWidget {
   const FundiNotificationsPage({super.key});
@@ -19,7 +19,9 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
   StreamSubscription? _bidsSub;
   List<DocumentSnapshot> _assignedJobs = [];
   StreamSubscription? _jobsSub;
+  StreamSubscription? _jobsSub2; // FIX: second query for fundiId
   Set<String> _excludedJobIds = {};
+  final Map<String, DocumentSnapshot> _jobsMap = {};
 
   @override
   void initState() {
@@ -27,12 +29,29 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     _initListeners();
   }
 
+  void _mergeIntoMap(List<DocumentSnapshot> docs) {
+    for (var doc in docs) {
+      var job = doc.data() as Map<String, dynamic>;
+      var status = (job['status'] ?? '').toString().toLowerCase();
+      if (status.contains('cancel') || job['reposted'] == true) {
+        _excludedJobIds.add(doc.id);
+        _jobsMap.remove(doc.id);
+        continue;
+      }
+      _excludedJobIds.remove(doc.id);
+      _jobsMap[doc.id] = doc;
+    }
+    _assignedJobs = _jobsMap.values.toList();
+    if (mounted) setState(() {});
+  }
+
   void _initListeners() {
     _bidsSub?.cancel();
     _jobsSub?.cancel();
+    _jobsSub2?.cancel();
+    _jobsMap.clear();
     var uid = FirebaseAuth.instance.currentUser!.uid;
 
-    // FIX: listen to ALL bids for this fundi, not just accepted
     _bidsSub = FirebaseFirestore.instance
         .collectionGroup('bids')
         .where('fundiId', isEqualTo: uid)
@@ -69,19 +88,13 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                         .toString(),
                 'clientId': (bid['customerId'] ?? '').toString(),
                 'price': bid['price'] ?? 0,
-                'totalCost': bid['totalCost'] ?? 0,
-                'transportFee': bid['transportFee'] ?? 0,
                 'createdAt': bid['updatedAt'] ?? bid['createdAt'],
                 'isRead': bid['isReadByFundi'] == true,
                 'type': 'accepted',
               });
             } else if (isClientCounter) {
               int amt =
-                  ((bid['clientCounterAmount'] ??
-                              bid['lastCounterAmount'] ??
-                              bid['lastCounterPrice'] ??
-                              bid['counterPrice'] ??
-                              0)
+                  ((bid['clientCounterAmount'] ?? bid['lastCounterAmount'] ?? 0)
                           as num)
                       .toInt();
               _clientCounters.add({
@@ -94,7 +107,6 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                         .toString(),
                 'clientId': (bid['customerId'] ?? '').toString(),
                 'price': amt,
-                'originalPrice': bid['price'] ?? 0,
                 'createdAt':
                     bid['counterAt'] ?? bid['updatedAt'] ?? bid['createdAt'],
                 'isRead':
@@ -108,25 +120,20 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
           if (mounted) setState(() {});
         });
 
+    // FIX: listen to BOTH assignedFundiId and fundiId
     _jobsSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('assignedFundiId', isEqualTo: uid)
         .snapshots()
         .listen((snap) {
-          List<DocumentSnapshot> mine = [];
-          Set<String> excluded = {};
-          for (var doc in snap.docs) {
-            var job = doc.data();
-            var status = (job['status'] ?? '').toString().toLowerCase();
-            if (status.contains('cancel') || job['reposted'] == true) {
-              excluded.add(doc.id);
-              continue;
-            }
-            mine.add(doc);
-          }
-          _excludedJobIds = excluded;
-          _assignedJobs = mine;
-          if (mounted) setState(() {});
+          _mergeIntoMap(snap.docs);
+        });
+    _jobsSub2 = FirebaseFirestore.instance
+        .collection('jobs')
+        .where('fundiId', isEqualTo: uid)
+        .snapshots()
+        .listen((snap) {
+          _mergeIntoMap(snap.docs);
         });
   }
 
@@ -180,6 +187,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
   void dispose() {
     _bidsSub?.cancel();
     _jobsSub?.cancel();
+    _jobsSub2?.cancel();
     super.dispose();
   }
 
@@ -188,7 +196,6 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     final assignedIds = _assignedJobs.map((d) => d.id).toSet();
     Map<String, Map<String, dynamic>> grouped = {};
 
-    // accepted bids that are not yet assigned
     for (var b in _acceptedBids) {
       if (assignedIds.contains(b['jobId'])) continue;
       if (_excludedJobIds.contains(b['jobId'])) continue;
@@ -211,10 +218,8 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       };
     }
 
-    // client countered bids - PRIORITY, show even if not assigned
     for (var b in _clientCounters) {
-      if (assignedIds.contains(b['jobId']))
-        continue; // if already assigned, handled by job stream
+      if (assignedIds.contains(b['jobId'])) continue;
       if (_excludedJobIds.contains(b['jobId'])) continue;
       String key = "${b['jobId']}_${b['clientId']}_counter";
       grouped[key] = {
@@ -232,10 +237,9 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         },
         'latestAt': (b['createdAt'] is Timestamp)
             ? (b['createdAt'] as Timestamp).toDate()
-            : (b['createdAt'] is DateTime ? b['createdAt'] : DateTime.now()),
+            : DateTime.now(),
         'isRead': b['isRead'] == true,
         'type': 'counter',
-        'amount': b['price'],
       };
     }
 
@@ -244,17 +248,43 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       var title = (job['title'] ?? 'Job').toString();
       var cName = (job['customerName'] ?? job['clientName'] ?? 'Client')
           .toString();
+      var reneg = job['renegotiation'] as Map<String, dynamic>?;
+      var renegStatus = (reneg?['status'] ?? '').toString();
+      bool isRenegCounter = renegStatus == 'countered_by_client';
+      bool isRenegPendingExtra =
+          renegStatus.contains('pending_extra_escrow') ||
+          job['status'] == 'renegotiation_countered_by_client';
+
+      int counterExtra = 0;
+      if (isRenegCounter || isRenegPendingExtra) {
+        counterExtra =
+            int.tryParse(
+              (reneg?['counterExtraLabor'] ?? reneg?['counterLabor'] ?? 0)
+                  .toString(),
+            ) ??
+            0;
+      }
+
+      String category = title;
+      String type = 'assigned';
+      if (isRenegCounter) {
+        category = '$title • Client countered extra KES $counterExtra';
+        type = 'counter';
+      }
+
       grouped[doc.id] = {
         'jobId': doc.id,
         'clientName': cName,
         'clientId': (job['customerId'] ?? cName).toString(),
-        'category': title,
+        'category': category,
         'jobData': job,
         'latestAt': (job['updatedAt'] is Timestamp)
             ? (job['updatedAt'] as Timestamp).toDate()
             : DateTime.now(),
-        'isRead': job['fundiHasUnread'] != true,
-        'type': 'assigned',
+        'isRead':
+            job['fundiHasUnread'] !=
+            true, // FIX: true unread = fundiHasUnread == true
+        'type': type,
       };
     }
 
@@ -365,8 +395,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                               g['jobId'],
                             );
                             if (!context.mounted) return;
-                            if (isCounter) {
-                              // go to job details where fundi can Accept/Counter/Reject
+                            if (isCounter && g['bidId'] != null) {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
