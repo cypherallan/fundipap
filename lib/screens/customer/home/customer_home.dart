@@ -279,33 +279,54 @@ class _CustomerHomeState extends State<CustomerHome> {
 
     final activeJobIds = _activeJobs.map((d) => d.id).toSet();
     Map<String, Map<String, dynamic>> grouped = {};
+    // GROUP BIDS BY JOB ID - 1 notification per job
+    Map<String, List<Map<String, dynamic>>> bidsByJob = {};
     for (var b in _bids) {
       if (activeJobIds.contains(b['jobId'])) continue;
-      String key = "${b['jobId']}_${b['fundiId']}";
       var jobDataRaw = b['jobData'] as Map;
       var jobDataSafe = Map<String, dynamic>.from(jobDataRaw);
-      // If job already completed, don't show bid notification at all
       if ((jobDataSafe['status'] ?? '').toString() == 'completed') continue;
-      var bidDataSafe = Map<String, dynamic>.from(b['bidData'] as Map);
-      grouped[key] = {
-        'jobId': b['jobId'].toString(),
-        'fundiName': (b['fundiName'] ?? 'Fundi').toString(),
-        'fundiId': (b['fundiId'] ?? '').toString(),
+      bidsByJob.putIfAbsent(b['jobId'].toString(), () => []).add(b);
+    }
+
+    for (var entry in bidsByJob.entries) {
+      entry.value.sort((a, b) {
+        var aT = a['createdAt'] is Timestamp
+            ? (a['createdAt'] as Timestamp).toDate()
+            : DateTime.now();
+        var bT = b['createdAt'] is Timestamp
+            ? (b['createdAt'] as Timestamp).toDate()
+            : DateTime.now();
+        return bT.compareTo(aT);
+      });
+      var latest = entry.value.first;
+      var jobDataRaw = latest['jobData'] as Map;
+      var jobDataSafe = Map<String, dynamic>.from(jobDataRaw);
+      var bidDataSafe = Map<String, dynamic>.from(latest['bidData'] as Map);
+      var unread = entry.value.where((x) => x['isRead'] != true).length;
+
+      grouped[entry.key] = {
+        'jobId': entry.key,
+        'fundiName': entry.value.length == 1
+            ? (latest['fundiName'] ?? 'Fundi').toString()
+            : '${entry.value.length} fundis',
+        'fundiId': entry.key, // jobId so markRead clears all bids for this job
         'category':
             (jobDataSafe['title'] ??
-                    b['jobTitle'] ??
+                    latest['jobTitle'] ??
                     jobDataSafe['category'] ??
                     'Job')
                 .toString(),
-        'jobData': {...jobDataSafe, 'jobId': b['jobId'].toString()},
+        'jobData': {...jobDataSafe, 'jobId': entry.key},
         'bidData': bidDataSafe,
-        'bidId': b['bidId'].toString(),
-        'latestAt': (b['createdAt'] is Timestamp)
-            ? (b['createdAt'] as Timestamp).toDate()
+        'bidId': (latest['bidId'] ?? '').toString(),
+        'bidCount': entry.value.length,
+        'latestAt': (latest['createdAt'] is Timestamp)
+            ? (latest['createdAt'] as Timestamp).toDate()
             : DateTime.now(),
         'type': 'bid',
-        'isPendingBid': b['status'] == 'pending',
-        'isRead': b['isRead'] == true,
+        'isPendingBid': true,
+        'isRead': unread == 0,
       };
     }
     for (var doc in _activeJobs) {

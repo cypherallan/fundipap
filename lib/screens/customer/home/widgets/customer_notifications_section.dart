@@ -98,11 +98,129 @@ class CustomerNotificationsSection extends StatelessWidget {
           ...groupedList.take(5).map((g) {
             String fundiKey = (g['fundiId'] ?? '').toString();
             int badgeCount = fundiUnreadCounts[fundiKey] ?? 0;
-            // SAFE CAST - fixes _Map<dynamic,dynamic> error
             final job = Map<String, dynamic>.from(g['jobData'] as Map);
             final bidData = g['bidData'] != null
                 ? Map<String, dynamic>.from(g['bidData'] as Map)
                 : <String, dynamic>{};
+            final type = (g['type'] ?? '').toString();
+            final isBid = type == 'bid';
+
+            // === FIX: BIDS DON'T SHOW WAITING TIMELINE ===
+            if (isBid) {
+              final bidCount = (g['bidCount'] ?? 1) as int;
+              return Container(
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBE6),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: FundipapColors.primaryYellow,
+                    width: 1.5,
+                  ),
+                ),
+                child: ListTile(
+                  leading: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: FundipapColors.blackGray,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.gavel,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      if (badgeCount > 0)
+                        Positioned(
+                          right: -6,
+                          top: -6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Text(
+                              '$badgeCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  title: Text(
+                    bidCount == 1
+                        ? 'You have a new bid for ${g['category']}'
+                        : 'You have $bidCount new bids for ${g['category']}',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    bidCount == 1
+                        ? '${g['fundiName']} bid • Tap to review'
+                        : '${g['fundiName']} • Check Pending Jobs below',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right, size: 18),
+                  onTap: () async {
+                    await onMarkRead(fundiKey);
+                    if (!context.mounted) return;
+                    // single bid -> open confirm, multiple -> just mark read, user sees pending banner
+                    if (bidCount == 1) {
+                      final confirmed = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ConfirmFundiPage(
+                            jobId: g['jobId'].toString(),
+                            jobData: job,
+                            bidId: g['bidId'].toString(),
+                            bidData: bidData,
+                          ),
+                        ),
+                      );
+                      if (confirmed == true && context.mounted) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CustomerFundiTimelinePage(
+                              jobId: g['jobId'].toString(),
+                              fundiName: g['fundiName'].toString(),
+                              trade: g['category'].toString(),
+                              jobData: job,
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
+              );
+            }
+
+            // ACTIVE JOBS - keep orange waiting timeline here
             var status = (job['status'] ?? '').toString();
             bool isCompleted = status == 'completed';
             Color borderCol = isCompleted
@@ -175,44 +293,17 @@ class CustomerNotificationsSection extends StatelessWidget {
                     onTap: () async {
                       await onMarkRead(fundiKey);
                       if (!context.mounted) return;
-                      if (g['type'] == 'bid' && g['isPendingBid'] == true) {
-                        final confirmed = await Navigator.push<bool>(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ConfirmFundiPage(
-                              jobId: g['jobId'].toString(),
-                              jobData: job,
-                              bidId: g['bidId'].toString(),
-                              bidData: bidData,
-                            ),
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CustomerFundiTimelinePage(
+                            jobId: g['jobId'].toString(),
+                            fundiName: g['fundiName'].toString(),
+                            trade: g['category'].toString(),
+                            jobData: job,
                           ),
-                        );
-                        if (confirmed == true && context.mounted) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => CustomerFundiTimelinePage(
-                                jobId: g['jobId'].toString(),
-                                fundiName: g['fundiName'].toString(),
-                                trade: g['category'].toString(),
-                                jobData: job,
-                              ),
-                            ),
-                          );
-                        }
-                      } else {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => CustomerFundiTimelinePage(
-                              jobId: g['jobId'].toString(),
-                              fundiName: g['fundiName'].toString(),
-                              trade: g['category'].toString(),
-                              jobData: job,
-                            ),
-                          ),
-                        );
-                      }
+                        ),
+                      );
                     },
                   ),
                   Padding(
