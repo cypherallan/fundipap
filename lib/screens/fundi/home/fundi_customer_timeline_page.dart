@@ -851,16 +851,10 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             status == 'pending_completion') {
           //... keep your existing completed_by_fundi UI (omitted for brevity, paste your old code here)
           timeline.add(
-            _card(
-              color: Colors.green.shade50,
-              border: Colors.green,
-              icon: Icons.check_circle,
-              iconColor: Colors.green,
-              title: 'Job Completed - Waiting for confirmation',
+            OrangeAnimatedWaitingCard(
+              title: 'Job Completed - Waiting for $clientName to confirm',
               message:
-                  'You marked $jobTitle as completed. Waiting for $clientName to confirm.',
-              time: 'Now',
-              isDone: false,
+                  'You marked $jobTitle as completed. Waiting for $clientName to confirm and release payment.',
             ),
           );
         } else if (phase == 'parts_confirmed_by_fundi') {

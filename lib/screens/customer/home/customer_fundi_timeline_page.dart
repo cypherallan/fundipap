@@ -257,7 +257,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 builder: (_) => HomeNavigator(
                   role: 'client',
                   email: FirebaseAuth.instance.currentUser?.email ?? '',
-                  initialIndex: 2,
+                  initialIndex: 0,
                   initialJobStatusTab: 4,
                 ),
               ),

@@ -668,11 +668,50 @@ class _CustomerHomeState extends State<CustomerHome> {
       );
       int newClientFee = (newLabour * 0.05).round();
       int newTotal = newLabour + transport + newClientFee;
-      return _timelineCard(
-        title: 'Job Completed - Confirm & Release KES $newTotal',
-        body: 'Fundi marked job as complete. Confirm to release KES $newTotal',
-        icon: Icons.verified,
-        isDone: false,
+      int totalToRelease = _toInt(reneg?['newTotalClientPays'] ?? newTotal);
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          OrangeAnimatedWaitingCard(
+            title:
+                'Job Completed - Waiting for you to confirm & release KES $totalToRelease',
+            message:
+                'Fundi marked job as complete. Waiting for you to confirm and release KES $totalToRelease.',
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: FundipapColors.greenSuccess,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CustomerFundiTimelinePage(
+                    jobId: jobId,
+                    fundiName: job['assignedFundiName'] ?? 'Fundi',
+                    trade: job['category'] ?? '',
+                    jobData: job,
+                  ),
+                ),
+              ),
+              child: Text(
+                'CONFIRM & RELEASE KES $totalToRelease',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ),
+        ],
       );
     }
 
