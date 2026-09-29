@@ -109,7 +109,7 @@ class _FundiBidDialogState extends State<FundiBidDialog> {
             'createdAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
 
-      // 2. Record for dynamic average (market learning)
+      // 2. Record for dynamic average
       await DynamicPricingService.recordBid(
         categoryId: categoryId,
         subcategoryId: subcategoryId,
@@ -118,6 +118,24 @@ class _FundiBidDialogState extends State<FundiBidDialog> {
         fundiId: uid,
         jobId: widget.jobId,
       );
+
+      // 3. NEW - Create fundi notification "bid sent"
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'toUserId': uid,
+        'toRole': 'fundi',
+        'type': 'bid_sent',
+        'jobId': widget.jobId,
+        'title': 'Bid sent - KES $amount',
+        'body':
+            'You sent a bid for job ${widget.jobData['title'] ?? 'Job'} - KES $amount waiting for client to respond',
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+        'jobTitle': widget.jobData['title'] ?? 'Job',
+        'clientName':
+            widget.jobData['customerName'] ??
+            widget.jobData['clientName'] ??
+            'Client',
+      });
 
       if (mounted) {
         Navigator.pop(context);

@@ -40,6 +40,7 @@ class FundiTimelineContext {
   final bool fundiConfirmedPayment;
   final bool fundiRatedClient;
   final String clientId;
+  final bool isBidSent; // NEW
 
   FundiTimelineContext({
     required this.context,
@@ -77,6 +78,7 @@ class FundiTimelineContext {
     required this.fundiConfirmedPayment,
     required this.fundiRatedClient,
     required this.clientId,
+    required this.isBidSent,
   });
 
   factory FundiTimelineContext.fromSnapshot({
@@ -124,13 +126,10 @@ class FundiTimelineContext {
     bool isCounterAccepted = counterExtra > 0;
     int releasedAmount = fundiReceives;
 
-    // override with stored correct values if they exist and match counter logic
-    // to avoid stale 6750
     int storedPayout = toInt(
       job['fundiPayoutAmount'] ?? job['fundiReceives'] ?? 0,
     );
     if (storedPayout > 0 && (storedPayout - fundiReceives).abs() > 500) {
-      // stale DB value, keep computed
       releasedAmount = fundiReceives;
     } else if (storedPayout > 0) {
       releasedAmount = storedPayout;
@@ -156,6 +155,8 @@ class FundiTimelineContext {
     bool fundiConfirmedPayment = toBool(job['fundiConfirmedPayment']);
     bool fundiRatedClient = toBool(job['fundiRated']);
     String clientId = (job['clientId'] ?? job['customerId'] ?? '').toString();
+    bool isBidSent =
+        status == 'bid_sent' || status == 'pending_client_response';
 
     return FundiTimelineContext(
       context: context,
@@ -193,6 +194,7 @@ class FundiTimelineContext {
       fundiConfirmedPayment: fundiConfirmedPayment,
       fundiRatedClient: fundiRatedClient,
       clientId: clientId,
+      isBidSent: isBidSent,
     );
   }
 }

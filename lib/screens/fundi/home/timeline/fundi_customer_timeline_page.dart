@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
@@ -15,6 +16,7 @@ import 'steps/extra_escrow_step.dart';
 import 'steps/site_visit_steps.dart';
 import 'steps/work_steps.dart';
 import 'steps/history_steps.dart';
+import 'steps/bid_sent_view.dart';
 
 class FundiCustomerTimelinePage extends StatelessWidget {
   final String jobId;
@@ -29,17 +31,17 @@ class FundiCustomerTimelinePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('jobs')
-          .doc(jobId)
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection('jobs').doc(jobId).snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
-        var job = snap.data!.data() as Map<String, dynamic>;
+        }
+        final jobData = snap.data!.data() as Map<String, dynamic>?;
+        final job = jobData?? {};
 
         final c = FundiTimelineContext.fromSnapshot(
           context: context,
@@ -49,61 +51,79 @@ class FundiCustomerTimelinePage extends StatelessWidget {
           job: job,
         );
 
-        if (c.isCancelled) return buildCancelledView(context, c);
-        if (c.status == 'completed' && c.escrowReleased)
-          return buildCompletedReleasedView(context, c);
+        return StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance.collection('jobs').doc(jobId).collection('bids').doc(uid).snapshots(),
+          builder: (context, bidSnap) {
+            bool hasBid = bidSnap.hasData && (bidSnap.data?.exists?? false);
+            int bidAmount = 0;
+            if (hasBid) {
+              var b = bidSnap.data!.data() as Map<String, dynamic>?;
+              if (b!= null) {
+                bidAmount = int.tryParse((b['amount']?? b['bidAmount']?? 0).toString())?? 0;
+              }
+            }
 
-        List<Widget> timeline = [];
+            bool isBidSentState = hasBid &&!c.escrowDone && (c.status == 'open' || c.status == 'pending' || c.status == 'bidding' || c.status == 'bid_sent' || c.status == 'pending_client_response');
 
-        // escrow not done
-        if (!c.escrowDone) return buildEscrowWaitingView(context, c, timeline);
+            if (isBidSentState || c.isBidSent) {
+              return buildBidSentView(context, c, bidAmount: bidAmount);
+            }
 
-        // main flow
-        if (handlePartsSteps(timeline, c)) {
-        } else if (handleCounterStep(timeline, c)) {
-        } else if (handleExtraEscrowStep(timeline, c)) {
-        } else {
-          handleWorkSteps(timeline, c);
-          handleSiteVisitSteps(timeline, c);
-        }
+            if (c.isCancelled) return buildCancelledView(context, c);
+            if (c.status == 'completed' && c.escrowReleased) {
+              return buildCompletedReleasedView(context, c);
+            }
 
-        addHistoryCards(timeline, c);
+            List<Widget> timeline = [];
+            if (!c.escrowDone) {
+              return buildEscrowWaitingView(context, c, timeline);
+            }
 
-        Widget list = ListView.separated(
-          padding: const EdgeInsets.all(12),
-          itemCount: timeline.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (_, i) => timeline[i],
-        );
+            if (handleCounterStep(timeline, c)) {
+            } else if (handleExtraEscrowStep(timeline, c)) {
+            } else if (handlePartsSteps(timeline, c)) {
+            } else {
+              handleWorkSteps(timeline, c);
+              handleSiteVisitSteps(timeline, c);
+            }
+            addHistoryCards(timeline, c);
 
-        return Scaffold(
-          appBar: AppBar(
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () =>
-                  FundiTimelineActions.goBackToMyJobs(context, tab: 2),
-            ),
-            title: Text(
-              clientName,
-              style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
-            ),
-            backgroundColor: FundipapColors.blackGray,
-            foregroundColor: Colors.white,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.chat_bubble_outline),
-                onPressed: () => openChatSheet(context, jobId, clientName),
+            Widget list = ListView.separated(
+              padding: const EdgeInsets.all(12),
+              itemCount: timeline.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (_, i) => timeline[i],
+            );
+
+            return Scaffold(
+              appBar: AppBar(
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => FundiTimelineActions.goBackToMyJobs(context, tab: 2),
+                ),
+                title: Text(
+                  clientName,
+                  style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+                ),
+                backgroundColor: FundipapColors.blackGray,
+                foregroundColor: Colors.white,
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    onPressed: () => openChatSheet(context, jobId, clientName),
+                  ),
+                ],
               ),
-            ],
-          ),
-          body: c.canFundiCancel
-              ? Column(
-                  children: [
-                    Expanded(child: list),
-                    fixedCancelBtn(context, jobId, job),
-                  ],
-                )
-              : list,
+              body: c.canFundiCancel
+                 ? Column(
+                      children: [
+                        Expanded(child: list),
+                        fixedCancelBtn(context, jobId, job),
+                      ],
+                    )
+                  : list,
+            );
+          },
         );
       },
     );

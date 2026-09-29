@@ -16,10 +16,11 @@ class FundiNotificationsPage extends StatefulWidget {
 class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
   final List<Map<String, dynamic>> _acceptedBids = [];
   final List<Map<String, dynamic>> _clientCounters = [];
+  final List<Map<String, dynamic>> _sentBids = []; // NEW
   StreamSubscription? _bidsSub;
   List<DocumentSnapshot> _assignedJobs = [];
   StreamSubscription? _jobsSub;
-  StreamSubscription? _jobsSub2; // FIX: second query for fundiId
+  StreamSubscription? _jobsSub2;
   Set<String> _excludedJobIds = {};
   final Map<String, DocumentSnapshot> _jobsMap = {};
 
@@ -59,6 +60,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         .listen((snap) {
           _acceptedBids.clear();
           _clientCounters.clear();
+          _sentBids.clear();
           for (var b in snap.docs) {
             var bid = b.data();
             var status = (bid['status'] ?? '').toString();
@@ -115,12 +117,27 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                 'type': 'counter',
                 'bidData': bid,
               });
+            } else if (status == 'pending') {
+              // THIS IS YOUR BID SENT
+              _sentBids.add({
+                'jobId': jId,
+                'bidId': b.id,
+                'jobTitle': (bid['jobTitle'] ?? bid['title'] ?? 'Job')
+                    .toString(),
+                'clientName':
+                    (bid['customerName'] ?? bid['clientName'] ?? 'Client')
+                        .toString(),
+                'clientId': (bid['customerId'] ?? '').toString(),
+                'price': bid['amount'] ?? bid['bidAmount'] ?? 0,
+                'createdAt': bid['createdAt'] ?? bid['updatedAt'],
+                'isRead': false,
+                'type': 'bid_sent',
+              });
             }
           }
           if (mounted) setState(() {});
         });
 
-    // FIX: listen to BOTH assignedFundiId and fundiId
     _jobsSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('assignedFundiId', isEqualTo: uid)
@@ -173,6 +190,18 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
           {'fundiHasUnread': false},
         );
       }
+      for (var b in _sentBids.where(
+        (e) => e['clientId'] == clientKey && e['jobId'] == jobId,
+      )) {
+        batch.update(
+          FirebaseFirestore.instance
+              .collection('jobs')
+              .doc(b['jobId'])
+              .collection('bids')
+              .doc(b['bidId']),
+          {'isReadByFundi': true},
+        );
+      }
       for (var d in _assignedJobs.where((d) => d.id == jobId)) {
         batch.update(d.reference, {
           'fundiHasUnread': false,
@@ -195,6 +224,29 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
   Widget build(BuildContext context) {
     final assignedIds = _assignedJobs.map((d) => d.id).toSet();
     Map<String, Map<String, dynamic>> grouped = {};
+
+    for (var b in _sentBids) {
+      if (assignedIds.contains(b['jobId'])) continue;
+      if (_excludedJobIds.contains(b['jobId'])) continue;
+      String key = "${b['jobId']}_${b['clientId']}_sent";
+      grouped[key] = {
+        'jobId': b['jobId'],
+        'bidId': b['bidId'],
+        'clientName': b['clientName'],
+        'clientId': b['clientId'],
+        'category': 'Bid sent - KES ${b['price']} • ${b['jobTitle']}',
+        'jobData': {
+          'title': b['jobTitle'],
+          'status': 'bid_sent',
+          'customerName': b['clientName'],
+        },
+        'latestAt': (b['createdAt'] is Timestamp)
+            ? (b['createdAt'] as Timestamp).toDate()
+            : DateTime.now(),
+        'isRead': b['isRead'] == true,
+        'type': 'bid_sent',
+      };
+    }
 
     for (var b in _acceptedBids) {
       if (assignedIds.contains(b['jobId'])) continue;
@@ -254,7 +306,6 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       bool isRenegPendingExtra =
           renegStatus.contains('pending_extra_escrow') ||
           job['status'] == 'renegotiation_countered_by_client';
-
       int counterExtra = 0;
       if (isRenegCounter || isRenegPendingExtra) {
         counterExtra =
@@ -264,14 +315,12 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
             ) ??
             0;
       }
-
       String category = title;
       String type = 'assigned';
       if (isRenegCounter) {
         category = '$title • Client countered extra KES $counterExtra';
         type = 'counter';
       }
-
       grouped[doc.id] = {
         'jobId': doc.id,
         'clientName': cName,
@@ -281,9 +330,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         'latestAt': (job['updatedAt'] is Timestamp)
             ? (job['updatedAt'] as Timestamp).toDate()
             : DateTime.now(),
-        'isRead':
-            job['fundiHasUnread'] !=
-            true, // FIX: true unread = fundiHasUnread == true
+        'isRead': job['fundiHasUnread'] != true,
         'type': type,
       };
     }
@@ -348,14 +395,21 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                     itemBuilder: (_, i) {
                       var g = list[i];
                       bool isCounter = g['type'] == 'counter';
+                      bool isSent = g['type'] == 'bid_sent';
                       return Card(
-                        color: isCounter ? Colors.orange.shade50 : null,
+                        color: isCounter
+                            ? Colors.orange.shade50
+                            : isSent
+                            ? Colors.blue.shade50
+                            : null,
                         shape: RoundedRectangleBorder(
                           side: BorderSide(
                             color: isCounter
                                 ? Colors.orange.shade300
+                                : isSent
+                                ? Colors.blue.shade300
                                 : Colors.transparent,
-                            width: isCounter ? 1.2 : 0,
+                            width: isCounter || isSent ? 1.2 : 0,
                           ),
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -364,9 +418,15 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                             radius: 22,
                             backgroundColor: isCounter
                                 ? Colors.orange.shade700
+                                : isSent
+                                ? Colors.blue.shade700
                                 : FundipapColors.blackGray,
                             child: Icon(
-                              isCounter ? Icons.compare_arrows : Icons.person,
+                              isCounter
+                                  ? Icons.compare_arrows
+                                  : isSent
+                                  ? Icons.send
+                                  : Icons.person,
                               color: Colors.white,
                               size: 18,
                             ),
@@ -379,7 +439,11 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                             ),
                           ),
                           subtitle: Text(
-                            '${g['clientName']}${isCounter ? ' • Tap to Accept / Counter / Reject' : ''}',
+                            '${g['clientName']}${isCounter
+                                ? ' • Tap to Accept / Counter / Reject'
+                                : isSent
+                                ? ' • Waiting for client'
+                                : ''}',
                             style: GoogleFonts.inter(fontSize: 11),
                           ),
                           trailing: g['isRead'] == false
