@@ -6,7 +6,6 @@ import 'theme/app_theme.dart';
 import 'screens/auth/role_select_screen.dart';
 import 'screens/auth/auth_gate.dart';
 import 'screens/customer/home/customer_home.dart';
-import 'screens/customer/home/customer_notifications_page.dart';
 import 'screens/customer/my_jobs/post_job_screen.dart';
 import 'screens/customer/disputes_screen.dart';
 import 'screens/fundi/home/fundi_home.dart';
@@ -16,7 +15,7 @@ import 'services/auth_service.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/fundi/fundi_profile.dart';
 import 'screens/fundi/my_jobs/my_jobs_page.dart';
-import 'screens/admin/admin_screen.dart'; // <-- ADDED
+import 'screens/admin/admin_screen.dart';
 
 class FundiPapApp extends StatelessWidget {
   const FundiPapApp({super.key});
@@ -35,7 +34,7 @@ class HomeNavigator extends StatefulWidget {
   final String role;
   final String email;
   final int initialIndex;
-  final int initialJobStatusTab; // <-- ADD
+  final int initialJobStatusTab;
   const HomeNavigator({
     super.key,
     this.role = 'client',
@@ -54,7 +53,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   @override
   void initState() {
     super.initState();
-    _index = widget.initialIndex; // <-- paste here
+    _index = widget.initialIndex;
   }
 
   Future<void> _handleRefresh() async {
@@ -64,14 +63,14 @@ class _HomeNavigatorState extends State<HomeNavigator> {
 
   AppBar _buildAppBar() {
     bool isFundi = widget.role == 'fundi';
-    bool showBackOnNotifications = _index == 1; // 1 = Notifications tab
+    bool showBackOnNotifications = isFundi && _index == 1; // only for fundi now
     return AppBar(
       backgroundColor: isFundi ? FundipapColors.blackGray : Colors.white,
       foregroundColor: isFundi ? Colors.white : Colors.black,
       leading: showBackOnNotifications
           ? IconButton(
               icon: const Icon(Icons.arrow_back),
-              onPressed: () => setState(() => _index = 0), // back to Home
+              onPressed: () => setState(() => _index = 0),
             )
           : null,
       title: Text('FUNDI PAP - ${widget.role.toUpperCase()}'),
@@ -86,12 +85,11 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                       ProfileScreen(email: widget.email, role: widget.role),
                 ),
               );
-            } else if (value == 'settings')
-              // ignore: curly_braces_in_flow_control_structures
+            } else if (value == 'settings') {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('${widget.role} Settings coming soon')),
               );
-            else if (value == 'logout') {
+            } else if (value == 'logout') {
               await AuthService().logout();
               if (!mounted) return;
               Navigator.pushAndRemoveUntil(
@@ -191,18 +189,16 @@ class _HomeNavigatorState extends State<HomeNavigator> {
       );
     }
     if (widget.role == 'admin') {
-      return Scaffold(
-        appBar: _buildAppBar(), // now admin gets 3 dots too
-        body: const AdminScreen(),
-      );
+      return Scaffold(appBar: _buildAppBar(), body: const AdminScreen());
     }
+
+    // CLIENT NOW HAS 4 TABS ONLY - Notifications removed (now on Home)
     final pages = [
       CustomerHome(key: ValueKey('ch_$_refreshId')),
-      CustomerNotificationsPage(key: ValueKey('cn_$_refreshId')),
       PostJobScreen(
         key: ValueKey('cp_$_refreshId'),
         initialTabIndex: widget.initialJobStatusTab,
-      ), // <-- CHANGE
+      ),
       DisputesScreen(key: ValueKey('cd_$_refreshId')),
       ProfileScreen(
         email: widget.email,
@@ -215,34 +211,30 @@ class _HomeNavigatorState extends State<HomeNavigator> {
       body: RefreshIndicator(
         onRefresh: _handleRefresh,
         color: FundipapColors.primaryYellow,
-        child: pages[_index.clamp(0, 4)],
+        child: pages[_index.clamp(0, 3)],
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _index.clamp(0, 4),
+        selectedIndex: _index.clamp(0, 3),
         backgroundColor: Colors.white,
         indicatorColor: FundipapColors.primaryYellow,
         onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: [
-          const NavigationDestination(
+        destinations: const [
+          NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home),
             label: 'Home',
           ),
           NavigationDestination(
-            icon: ClientNotifBadgeIcon(isSelected: _index == 1),
-            label: 'Notifications',
-          ),
-          const NavigationDestination(
             icon: Icon(Icons.add_box_outlined),
             selectedIcon: Icon(Icons.add_box),
             label: 'Job Status',
           ),
-          const NavigationDestination(
+          NavigationDestination(
             icon: Icon(Icons.report_problem_outlined),
             selectedIcon: Icon(Icons.report_problem),
             label: 'Disputes',
           ),
-          const NavigationDestination(
+          NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: 'Profile',
@@ -253,121 +245,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   }
 }
 
-// CLIENT BADGE
-class ClientNotifBadgeIcon extends StatefulWidget {
-  final bool isSelected;
-  const ClientNotifBadgeIcon({super.key, required this.isSelected});
-  @override
-  State<ClientNotifBadgeIcon> createState() => _ClientNotifBadgeIconState();
-}
-
-class _ClientNotifBadgeIconState extends State<ClientNotifBadgeIcon> {
-  int _count = 0;
-  StreamSubscription? _jobsSub;
-  StreamSubscription? _activeSub;
-  final Map<String, StreamSubscription> _bidsSubs = {};
-  final Map<String, int> _bidsPerJob = {};
-  int _activeCount = 0;
-  @override
-  void initState() {
-    super.initState();
-    var uid = FirebaseAuth.instance.currentUser!.uid;
-    _jobsSub = FirebaseFirestore.instance
-        .collection('jobs')
-        .where('customerId', isEqualTo: uid)
-        .where('status', whereIn: ['open', 'bidding'])
-        .snapshots()
-        .listen((jobsSnap) {
-          for (var jobDoc in jobsSnap.docs) {
-            var jobId = jobDoc.id;
-            if (_bidsSubs.containsKey(jobId)) continue;
-            _bidsSubs[jobId] = FirebaseFirestore.instance
-                .collection('jobs')
-                .doc(jobId)
-                .collection('bids')
-                .snapshots()
-                .listen((bidsSnap) {
-                  int c = 0;
-                  for (var b in bidsSnap.docs) {
-                    var d = b.data();
-                    if (d['status'] == 'rejected' ||
-                        d['status'] == 'accepted' ||
-                        d['deletedForFundi'] == true)
-                      continue;
-                    if (d['isReadByCustomer'] == true) continue;
-                    c++;
-                  }
-                  _bidsPerJob[jobId] = c;
-                  _recalc();
-                });
-          }
-          var currentJobIds = jobsSnap.docs.map((d) => d.id).toSet();
-          _bidsSubs.keys
-              .where((k) => !currentJobIds.contains(k))
-              .toList()
-              .forEach((k) {
-                _bidsSubs[k]?.cancel();
-                _bidsSubs.remove(k);
-                _bidsPerJob.remove(k);
-              });
-        });
-    _activeSub = FirebaseFirestore.instance
-        .collection('jobs')
-        .where('customerId', isEqualTo: uid)
-        .where(
-          'status',
-          whereIn: [
-            'assigned',
-            'confirmed',
-            'travelling',
-            'site_visit',
-            'in_progress',
-            'pending_completion',
-            'job_completed',
-            'completed',
-          ],
-        )
-        .snapshots()
-        .listen((snap) {
-          int c = 0;
-          for (var doc in snap.docs) {
-            var j = doc.data();
-            var reneg = j['renegotiation'] as Map<String, dynamic>?;
-            bool isNewPrice =
-                reneg != null &&
-                reneg['requested'] == true &&
-                reneg['status'] == 'pending';
-            if (j['customerHasUnread'] == true || isNewPrice) c++;
-          }
-          _activeCount = c;
-          _recalc();
-        });
-  }
-
-  void _recalc() {
-    int bidsTotal = _bidsPerJob.values.fold(0, (a, b) => a + b);
-    if (mounted) setState(() => _count = bidsTotal + _activeCount);
-  }
-
-  @override
-  void dispose() {
-    _jobsSub?.cancel();
-    _activeSub?.cancel();
-    for (var s in _bidsSubs.values) s.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    IconData ic = widget.isSelected
-        ? Icons.notifications
-        : Icons.notifications_outlined;
-    if (_count <= 0) return Icon(ic);
-    return Badge(label: Text('$_count'), child: Icon(ic));
-  }
-}
-
-// FUNDI BADGE - NOW EXACT COPY OF CLIENT LOGIC
+// FUNDI BADGE ONLY - client badge deleted because no tab
 class FundiNotifBadgeIcon extends StatefulWidget {
   final bool isSelected;
   const FundiNotifBadgeIcon({super.key, required this.isSelected});
