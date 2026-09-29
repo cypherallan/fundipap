@@ -116,6 +116,12 @@ class _CustomerHomeState extends State<CustomerHome> {
             'pending_completion',
             'job_completed',
             'completed',
+            'awaiting_extra_escrow',
+            'renegotiation_countered_by_client',
+            'countered_by_client',
+            'waiting_for_client_to_buy_parts',
+            'fundi_buying_parts',
+            'renegotiation_countered',
           ],
         )
         .snapshots()

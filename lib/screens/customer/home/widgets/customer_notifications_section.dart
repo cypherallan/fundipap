@@ -20,6 +20,14 @@ class CustomerNotificationsSection extends StatelessWidget {
     required this.onMarkRead,
   });
 
+  int _toInt(dynamic v, [int fb = 0]) {
+    if (v == null) return fb;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? fb;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -104,7 +112,6 @@ class CustomerNotificationsSection extends StatelessWidget {
             final type = (g['type'] ?? '').toString();
             final isBid = type == 'bid';
 
-            // FIX: detect counter accepted
             final bidStatus = (g['bidStatus'] ?? job['bidStatus'] ?? '')
                 .toString();
             final isCounterAccepted =
@@ -115,7 +122,15 @@ class CustomerNotificationsSection extends StatelessWidget {
                     (job['counterAcceptedBy'] as List).isNotEmpty &&
                     isBid);
 
-            // === COUNTER ACCEPTED - YOUR REQUEST ===
+            // === NEW: detect extra counter ===
+            final reneg = (job['renegotiation'] as Map<String, dynamic>?) ?? {};
+            final renegStatus = (reneg['status'] ?? '').toString();
+            final jobStatus = (job['status'] ?? '').toString();
+            final isRenegCountered =
+                renegStatus == 'countered_by_client' ||
+                jobStatus == 'renegotiation_countered_by_client';
+
+            // === COUNTER ACCEPTED ===
             if (isCounterAccepted) {
               final acceptedAmt =
                   (g['agreedPrice'] ??
@@ -247,6 +262,76 @@ class CustomerNotificationsSection extends StatelessWidget {
                               ),
                             ),
                           ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            }
+
+            // === NEW: YOU COUNTERED EXTRA LABOUR ===
+            if (isRenegCountered) {
+              int extraLabor = _toInt(reneg['counterExtraLabor'] ?? 0);
+              int extraToLock = _toInt(
+                reneg['counterExtraToLock'] ??
+                    extraLabor + (extraLabor * 0.05).round(),
+              );
+              return Container(
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade400, width: 1.5),
+                ),
+                child: ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade700,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.sync_alt,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    'You countered extra KES $extraLabor - waiting for fundi to confirm',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      color: Colors.orange.shade900,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    'Extra to lock KES $extraToLock • ${g['fundiName']}',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: Colors.orange,
+                  ),
+                  onTap: () async {
+                    await onMarkRead(fundiKey);
+                    if (!context.mounted) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CustomerFundiTimelinePage(
+                          jobId: g['jobId'].toString(),
+                          fundiName: g['fundiName'].toString(),
+                          trade: g['category'].toString(),
+                          jobData: job,
                         ),
                       ),
                     );
@@ -419,7 +504,7 @@ class CustomerNotificationsSection extends StatelessWidget {
               );
             }
 
-            // === ACTIVE JOBS ===
+            // === ACTIVE JOBS (normal) ===
             var status = (job['status'] ?? '').toString();
             bool isCompleted = status == 'completed';
             Color borderCol = isCompleted

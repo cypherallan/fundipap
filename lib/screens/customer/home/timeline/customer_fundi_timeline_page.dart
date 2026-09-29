@@ -28,6 +28,14 @@ class CustomerFundiTimelinePage extends StatefulWidget {
 class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
   bool _releasing = false;
 
+  int _toInt(dynamic v, [int fb = 0]) {
+    if (v == null) return fb;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? fb;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -89,6 +97,12 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           bool isCancelled = status.toLowerCase().contains('cancel');
           bool canClientCancel = !isStarted && !isCancelled;
 
+          // FIX: detect extra counter
+          String renegStatus = (reneg?['status'] ?? '').toString();
+          bool isRenegCountered =
+              renegStatus == 'countered_by_client' ||
+              status == 'renegotiation_countered_by_client';
+
           List<Widget> timeline = TimelineStepsBuilder.build(
             context: context,
             job: job,
@@ -98,6 +112,80 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             releasing: _releasing,
             onReleasing: (v) => setState(() => _releasing = v),
           );
+
+          // FIX: inject waiting-for-fundi-to-confirm-extra at TOP instead of waiting-for-start
+          if (isRenegCountered) {
+            int extraLabor = _toInt(reneg?['counterExtraLabor']);
+            int extraToLock = _toInt(
+              reneg?['counterExtraToLock'] ??
+                  extraLabor + (extraLabor * 0.05).round(),
+            );
+            Widget waitingCounter = Container(
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade400, width: 1.5),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.hourglass_top,
+                    color: Colors.orange.shade800,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Waiting for fundi to confirm extra labour counter',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: Colors.orange.shade900,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'You countered extra KES $extraLabor (KES $extraToLock with 5% fee) • Waiting for ${widget.fundiName} to accept',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange.shade200),
+                          ),
+                          child: Text(
+                            'Extra to lock: KES $extraToLock (not 1150)',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              color: Colors.green.shade800,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+            // put waitingCounter at top, keep rest of timeline below
+            timeline = [waitingCounter, ...timeline];
+          }
 
           Widget list = ReversedTimelineList.buildList(timeline);
           return TimelineCancelWrapper(

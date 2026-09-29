@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ClientPriceApprovalScreen extends StatefulWidget {
   final String jobId;
@@ -191,40 +192,102 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
     }
   }
 
-  Future<void> _counter(int newLabor) async {
+  Future<void> _counter(
+    int oldLabor,
+    int alreadyLockedCorrect,
+    int oldTransport,
+    int extraRequested,
+  ) async {
     if (counterPriceCtrl.text.isEmpty) return;
     setState(() => loading = true);
     try {
-      int counterLabor = int.tryParse(counterPriceCtrl.text) ?? newLabor;
-      int transport = _toInt(widget.job['transportFee'] ?? 0);
-      int counterClientFee = (counterLabor * 0.05).round();
-      int counterFundiFee = (counterLabor * 0.05).round();
-      int counterTotal = counterLabor + transport + counterClientFee;
-      int counterFundiReceives = counterLabor - counterFundiFee + transport;
+      // FIX: user counters ONLY the extra labour, not total labour
+      int counterExtraLabor = int.tryParse(counterPriceCtrl.text.trim()) ?? 0;
+      if (counterExtraLabor <= 0) return;
 
-      await FirebaseFirestore.instance
-          .collection('jobs')
-          .doc(widget.jobId)
-          .update({
-            'renegotiation.status': 'countered_by_client',
-            'renegotiation.counterLabor': counterLabor,
-            'renegotiation.counterPrice': counterLabor,
-            'renegotiation.counterClientAppFee': counterClientFee,
-            'renegotiation.counterFundiAppFee': counterFundiFee,
-            'renegotiation.counterTotalClientPays': counterTotal,
-            'renegotiation.counterTotalCost': counterTotal,
-            'renegotiation.counterFundiReceives': counterFundiReceives,
-            'renegotiation.counterTransportFee': transport,
-            'renegotiation.counterReason': counterReasonCtrl.text,
-            'renegotiation.counteredAt': FieldValue.serverTimestamp(),
-            'fundiHasUnread': true,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+      int counterExtraFee = (counterExtraLabor * 0.05)
+          .round(); // 5% of extra only
+      int counterExtraToLock =
+          counterExtraLabor + counterExtraFee; // 1000+50=1050 NOT 1150
+      int counterNewLaborTotal = oldLabor + counterExtraLabor; // 5000+1000=6000
+      (counterNewLaborTotal * 0.05).round();
+      int counterNewTotalClientPays =
+          alreadyLockedCorrect + counterExtraToLock; // 5350+1050=6400
+      int counterNewFundiFee = (counterNewLaborTotal * 0.05).round();
+      int counterFundiReceives =
+          counterNewLaborTotal - counterNewFundiFee + oldTransport;
+
+      String fundiId =
+          (widget.job['assignedFundiId'] ??
+                  widget.job['fundiId'] ??
+                  widget.job['assignedFundi'] ??
+                  '')
+              .toString();
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+
+      await FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).update({
+        'status':
+            'renegotiation_countered_by_client', // FIX: so home + timeline know it's countered
+        'renegotiation.status': 'countered_by_client',
+        'renegotiation.counterExtraLabor': counterExtraLabor,
+        'renegotiation.counterLabor': counterNewLaborTotal,
+        'renegotiation.counterPrice': counterNewLaborTotal,
+        'renegotiation.counterClientAppFee': counterExtraFee,
+        'renegotiation.counterExtraToLock': counterExtraToLock, // 1050
+        'renegotiation.counterFundiAppFee': counterExtraFee,
+        'renegotiation.counterTotalClientPays': counterNewTotalClientPays,
+        'renegotiation.counterTotalCost': counterNewTotalClientPays,
+        'renegotiation.counterFundiReceives': counterFundiReceives,
+        'renegotiation.counterTransportFee': oldTransport,
+        'renegotiation.counterReason': counterReasonCtrl.text,
+        'renegotiation.counteredAt': FieldValue.serverTimestamp(),
+        'renegotiation.counteredExtraRequested': extraRequested,
+        'fundiHasUnread': true,
+        'customerHasUnread': true, // FIX: show in notifications
+        'customerUnreadType': 'renegotiation_countered',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // FIX: notify fundi about new counter on extra
+      if (fundiId.isNotEmpty) {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'toUserId': fundiId,
+          'toRole': 'fundi',
+          'fromUserId': uid,
+          'fromRole': 'client',
+          'type': 'renegotiation_counter',
+          'jobId': widget.jobId,
+          'amount': counterExtraToLock,
+          'extraLabor': counterExtraLabor,
+          'title': 'Client countered extra work',
+          'body':
+              'Client countered your extra KES $extraRequested with KES $counterExtraLabor (KES $counterExtraToLock with fee)',
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        await FirebaseFirestore.instance
+            .collection('fundis')
+            .doc(fundiId)
+            .collection('notifications')
+            .add({
+              'jobId': widget.jobId,
+              'type': 'renegotiation_counter',
+              'amount': counterExtraToLock,
+              'extraLabor': counterExtraLabor,
+              'createdAt': FieldValue.serverTimestamp(),
+              'isRead': false,
+            });
+      }
+
       if (!mounted) return;
-      Navigator.pop(context);
-      Navigator.pop(context);
+      Navigator.pop(context); // close dialog
+      Navigator.pop(context); // close screen
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Counter sent: KES $counterTotal')),
+        SnackBar(
+          content: Text(
+            'Counter sent: KES $counterExtraToLock (labour $counterExtraLabor + fee $counterExtraFee)',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => loading = false);
@@ -701,9 +764,9 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                                       keyboardType: TextInputType.number,
                                       decoration: InputDecoration(
                                         labelText:
-                                            'Your labour offer (e.g. 5500)',
+                                            'Your extra labour offer (e.g. 1000)', // FIX: extra only
                                         helperText:
-                                            'We auto add transport $oldTransport + 5%',
+                                            'Extra + 5% = total extra to lock. Transport already locked',
                                       ),
                                       onChanged: (_) => setState(() {}),
                                     ),
@@ -711,10 +774,11 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                                       Padding(
                                         padding: const EdgeInsets.only(top: 8),
                                         child: Text(
-                                          'Total will be: KES ${(_toInt(counterPriceCtrl.text) + oldTransport + (_toInt(counterPriceCtrl.text) * 0.05).round())}',
+                                          'Extra to lock: KES ${_toInt(counterPriceCtrl.text) + (_toInt(counterPriceCtrl.text) * 0.05).round()} (was showing 1150, now 1050)',
                                           style: GoogleFonts.inter(
                                             fontSize: 10,
                                             color: Colors.green,
+                                            fontWeight: FontWeight.w700,
                                           ),
                                         ),
                                       ),
@@ -732,7 +796,12 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                                     child: const Text('Cancel'),
                                   ),
                                   ElevatedButton(
-                                    onPressed: () => _counter(newLabor),
+                                    onPressed: () => _counter(
+                                      oldLabor,
+                                      alreadyLockedCorrect,
+                                      oldTransport,
+                                      extraLabor,
+                                    ),
                                     child: const Text('Send Counter'),
                                   ),
                                 ],
