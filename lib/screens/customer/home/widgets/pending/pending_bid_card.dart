@@ -59,16 +59,35 @@ class PendingBidCard extends StatelessWidget {
         ? ' (${bid.distanceKm.toStringAsFixed(1)} km)'
         : '';
 
+    // COUNTER STATE
+    final status = (bid.bid['status'] ?? '').toString();
+    final counterBy = (bid.bid['counterBy'] ?? '').toString();
+    final isCountered = status == 'countered';
+    final isMyCounter = isCountered && counterBy == 'client';
+    final isFundiCounter = isCountered && counterBy == 'fundi';
+    final myCounterAmt =
+        ((bid.bid['clientCounterAmount'] ?? bid.bid['lastCounterAmount'] ?? 0)
+                as num)
+            .toInt();
+    final fundiCounterAmt =
+        ((bid.bid['fundiCounterAmount'] ?? bid.bid['lastCounterAmount'] ?? 0)
+                as num)
+            .toInt();
+
     return InkWell(
-      onTap: openConfirm,
+      onTap: isMyCounter ? null : openConfirm,
       borderRadius: BorderRadius.circular(14),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8F8F8),
+          color: isMyCounter
+              ? const Color(0xFFFFF8E1)
+              : const Color(0xFFF8F8F8),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.black12),
+          border: Border.all(
+            color: isMyCounter ? Colors.amber.shade200 : Colors.black12,
+          ),
         ),
         child: Column(
           children: [
@@ -167,29 +186,136 @@ class PendingBidCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            // SINGLE BUTTON NOW
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: FundipapColors.blackGray,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+
+            // CLIENT COUNTERED -> WAITING STATE
+            if (isMyCounter)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
                 ),
-                onPressed: openConfirm,
-                child: Text(
-                  'View fundi & React to bid',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.hourglass_top_rounded,
+                      size: 18,
+                      color: Colors.black87,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Counter offer sent',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Waiting for fundi to respond to your countered offer KES $myCounterAmt',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (isFundiCounter)
+              Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.blue.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.sync_alt,
+                          size: 18,
+                          color: Colors.blue,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Fundi countered: KES $fundiCounterAmt - Tap to respond',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: FundipapColors.blackGray,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: openConfirm,
+                      child: Text(
+                        'View counter & React',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: FundipapColors.blackGray,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: openConfirm,
+                  child: Text(
+                    'View fundi & React to bid',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),

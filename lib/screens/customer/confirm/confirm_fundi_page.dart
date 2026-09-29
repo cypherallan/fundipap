@@ -137,6 +137,9 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
     setState(() => counterLoading = true);
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
+      final fundiId = widget.bidData['fundiId'];
+
+      // 1. Update bid as countered
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
@@ -150,25 +153,58 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
             'status': 'countered',
             'clientCounterSeenByFundi': false,
           });
+
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
           .update({
             'lastCounterAmount': amount,
             'lastCounterBy': 'client',
+            'status': 'countered',
             'updatedAt': FieldValue.serverTimestamp(),
           });
+
+      // 2. NOTIFY FUNDI
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'toUserId': fundiId,
+        'toRole': 'fundi',
+        'fromUserId': uid,
+        'fromRole': 'client',
+        'type': 'counter_offer',
+        'jobId': widget.jobId,
+        'bidId': widget.bidId,
+        'amount': amount,
+        'title': 'Counter offer received',
+        'body':
+            'Client countered your KES ${widget.bidData['price']} bid with KES $amount',
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // also for fundi's in-app list
+      await FirebaseFirestore.instance
+          .collection('fundis')
+          .doc(fundiId)
+          .collection('notifications')
+          .add({
+            'jobId': widget.jobId,
+            'bidId': widget.bidId,
+            'type': 'counter',
+            'amount': amount,
+            'createdAt': FieldValue.serverTimestamp(),
+            'isRead': false,
+          });
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Counter KES $amount sent to fundi')),
       );
       Navigator.pop(context, false);
     } catch (e) {
-      if (mounted) {
+      if (mounted)
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed: $e')));
-      }
     } finally {
       if (mounted) setState(() => counterLoading = false);
     }

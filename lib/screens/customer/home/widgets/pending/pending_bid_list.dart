@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/customer_home_models.dart';
 import '../../helpers/customer_home_utils.dart';
 import '../../../../../services/fundi_badge_service.dart';
+import '../../../../../widgets/animated_waiting_card.dart'; // exact same waiting card
 import 'pending_bid_card.dart';
 
 class PendingBidList extends StatelessWidget {
@@ -93,18 +94,40 @@ class PendingBidList extends StatelessWidget {
                 ),
               );
             }
+
+            final myCounters = list
+                .where(
+                  (e) =>
+                      (e.bid['status'] ?? '') == 'countered' &&
+                      (e.bid['counterBy'] ?? '') == 'client',
+                )
+                .toList();
+
             return Column(
-              children: filtered
-                  .map(
-                    (e) => PendingBidCard(
-                      bid: e,
-                      jobId: jobId,
-                      jobData: job,
-                      parentContextForNav: parentContextForNav,
-                      sheetContextForClose: sheetContextForClose,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (myCounters.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: OrangeAnimatedWaitingCard(
+                      title: myCounters.length == 1
+                          ? 'Counter offer pending'
+                          : '${myCounters.length} counter offers pending',
+                      message: myCounters.length == 1
+                          ? 'Waiting for fundi to respond to your countered offer KES ${(myCounters.first.bid['clientCounterAmount'] ?? myCounters.first.bid['lastCounterAmount'] ?? 0)}'
+                          : 'Waiting for fundis to respond to your countered offers',
                     ),
-                  )
-                  .toList(),
+                  ),
+                ...filtered.map(
+                  (e) => PendingBidCard(
+                    bid: e,
+                    jobId: jobId,
+                    jobData: job,
+                    parentContextForNav: parentContextForNav,
+                    sheetContextForClose: sheetContextForClose,
+                  ),
+                ),
+              ],
             );
           },
         );
