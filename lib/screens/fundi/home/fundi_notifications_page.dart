@@ -118,7 +118,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                 'bidData': bid,
               });
             } else if (status == 'pending') {
-              // THIS IS YOUR BID SENT
+              // BID SENT - counter increases, only clears when opened
               _sentBids.add({
                 'jobId': jId,
                 'bidId': b.id,
@@ -130,7 +130,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                 'clientId': (bid['customerId'] ?? '').toString(),
                 'price': bid['amount'] ?? bid['bidAmount'] ?? 0,
                 'createdAt': bid['createdAt'] ?? bid['updatedAt'],
-                'isRead': false,
+                'isRead': bid['isReadByFundi'] == true, // FIX: was false always
                 'type': 'bid_sent',
               });
             }

@@ -245,7 +245,6 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   }
 }
 
-// FUNDI BADGE ONLY - client badge deleted because no tab
 class FundiNotifBadgeIcon extends StatefulWidget {
   final bool isSelected;
   const FundiNotifBadgeIcon({super.key, required this.isSelected});
@@ -258,6 +257,8 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
   StreamSubscription? _bidsSub;
   StreamSubscription? _jobsSub;
   int _bidsAccepted = 0;
+  int _bidsSent = 0;
+  int _clientCounters = 0;
   int _activeCount = 0;
 
   @override
@@ -269,27 +270,48 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
         .where('fundiId', isEqualTo: uid)
         .snapshots()
         .listen((snap) {
-          int c = 0;
+          int accepted = 0;
+          int sent = 0;
+          int counters = 0;
           for (var doc in snap.docs) {
             var b = doc.data();
-            if (b['status'] == 'accepted' && b['isReadByFundi'] != true) c++;
+            var status = (b['status'] ?? '').toString();
+            var lastCounterBy = (b['lastCounterBy'] ?? b['counterBy'] ?? '')
+                .toString();
+
+            if (status == 'accepted' && b['isReadByFundi'] != true) accepted++;
+            if (status == 'pending' && b['isReadByFundi'] != true)
+              sent++; // YOUR NEW ONE
+
+            bool isClientCounter =
+                (status == 'countered' &&
+                    lastCounterBy != uid &&
+                    lastCounterBy != '') ||
+                status == 'client_counter' ||
+                (status == 'countered' && b['clientCounterAmount'] != null);
+            if (isClientCounter && b['clientCounterSeenByFundi'] != true)
+              counters++;
           }
-          _bidsAccepted = c;
+          _bidsAccepted = accepted;
+          _bidsSent = sent;
+          _clientCounters = counters;
           _recalc();
         });
+
     _jobsSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('fundiHasUnread', isEqualTo: true)
         .snapshots()
         .listen((snap) {
           int c = 0;
+          var uid2 = FirebaseAuth.instance.currentUser!.uid;
           for (var doc in snap.docs) {
             var job = doc.data();
             bool isMine =
-                job['assignedFundiId'] == uid ||
-                job['assignedFundi'] == uid ||
-                job['fundiId'] == uid ||
-                job['acceptedFundiId'] == uid;
+                job['assignedFundiId'] == uid2 ||
+                job['assignedFundi'] == uid2 ||
+                job['fundiId'] == uid2 ||
+                job['acceptedFundiId'] == uid2;
             if (!isMine) continue;
             c++;
           }
@@ -299,7 +321,11 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
   }
 
   void _recalc() {
-    if (mounted) setState(() => _count = _bidsAccepted + _activeCount);
+    if (mounted)
+      setState(
+        () =>
+            _count = _bidsAccepted + _bidsSent + _clientCounters + _activeCount,
+      );
   }
 
   @override
