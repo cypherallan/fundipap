@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../../theme/app_theme.dart';
@@ -6,7 +7,6 @@ import '../../../../../widgets/animated_waiting_card.dart';
 import '../../models/customer_home_models.dart';
 import '../../../confirm/confirm_fundi_page.dart';
 import '../../timeline/customer_fundi_timeline_page.dart';
-import '../../timeline/timeline_actions.dart';
 
 class PendingBidCard extends StatelessWidget {
   final BidWithFundi bid;
@@ -57,46 +57,76 @@ class PendingBidCard extends StatelessWidget {
       }
     }
 
-    Future<void> proceedWithFundi() async {
+    Future<void> cancelAccepted() async {
       final navContext = parentContextForNav ?? context;
-      final int labour =
-          ((bid.bid['agreedPrice'] ??
-                      bid.bid['clientCounterAmount'] ??
-                      bid.bid['lastCounterAmount'] ??
-                      bid.bid['price'] ??
-                      0)
-                  as num)
-              .toInt();
-      final int transport = ((jobData['transportFee'] ?? 100) as num).toInt();
-      final int total = labour + transport + (labour * 0.05).round(); // 5350
-      try {
-        if (sheetContextForClose != null && sheetContextForClose!.mounted)
-          Navigator.pop(sheetContextForClose!);
-        // show loading
-        showDialog(
-          context: navContext,
-          barrierDismissible: false,
-          builder: (_) => const Center(child: CircularProgressIndicator()),
-        );
-        await TimelineActions.proceedWithFundi(
-          jobId,
-          (bid.bid['fundiId'] ?? bid.bidDoc.id).toString(),
-          total,
-        );
-        if (navContext.mounted) Navigator.pop(navContext); // close loading
-        if (navContext.mounted) {
-          Navigator.pushReplacement(
-            navContext,
-            MaterialPageRoute(
-              builder: (_) => CustomerFundiTimelinePage(
-                jobId: jobId,
-                fundiName: bid.bid['fundiName'] ?? 'Fundi',
-                trade: (jobData['category'] ?? '').toString(),
-                jobData: jobData,
+      final bool? ok = await showDialog<bool>(
+        context: navContext,
+        builder: (ctx) => AlertDialog(
+          title: Text(
+            'Cancel counter?',
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+          content: Text(
+            '${bid.bid['fundiName'] ?? 'Fundi'} accepted your KES ${((bid.bid['agreedPrice'] ?? bid.bid['clientCounterAmount'] ?? 0) as num).toInt()} counter. Do you want to cancel and keep the job pending for other fundis?',
+            style: GoogleFonts.inter(fontSize: 12),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keep'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.montserrat(
+                  color: Colors.red,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+
+      try {
+        if (navContext.mounted) {
+          showDialog(
+            context: navContext,
+            barrierDismissible: false,
+            builder: (_) => const Center(child: CircularProgressIndicator()),
           );
         }
+        final bidId = bid.bidDoc.id;
+        final fundiId = (bid.bid['fundiId'] ?? bidId).toString();
+
+        // remove accepted state
+        await FirebaseFirestore.instance
+            .collection('jobs')
+            .doc(jobId)
+            .collection('bids')
+            .doc(bidId)
+            .update({
+              'status': 'cancelled_by_client',
+              'clientCancelledAt': FieldValue.serverTimestamp(),
+            });
+        await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+          'counterAcceptedBy': FieldValue.arrayRemove([fundiId]),
+          'counterAcceptedBids': FieldValue.arrayRemove([bidId]),
+          'lastCounterAcceptedBy': FieldValue.delete(),
+        });
+
+        if (navContext.mounted) Navigator.pop(navContext);
+        if (navContext.mounted)
+          ScaffoldMessenger.of(navContext).showSnackBar(
+            const SnackBar(
+              content: Text('Cancelled. Job stays pending for other fundis.'),
+            ),
+          );
       } catch (e) {
         if (navContext.mounted) Navigator.pop(navContext);
         if (navContext.mounted)
@@ -137,7 +167,6 @@ class PendingBidCard extends StatelessWidget {
             .toInt();
     final fundiName = (bid.bid['fundiName'] ?? 'Fundi').toString();
 
-    // Colors: accepted counter = GREEN distinct from rest
     Color bg = const Color(0xFFF8F8F8);
     Color border = Colors.black12;
     if (isAcceptedCounter) {
@@ -312,26 +341,51 @@ class PendingBidCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: FundipapColors.greenSuccess,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: FundipapColors.greenSuccess,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          onPressed:
+                              openConfirm, // FIX: goes to ConfirmFundiPage to see 5350 breakdown
+                          child: Text(
+                            'PROCEED WITH ${fundiName.toUpperCase()}',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
-                      onPressed: proceedWithFundi,
-                      child: Text(
-                        'PROCEED WITH ${fundiName.toUpperCase()} • PAY KES ${acceptedAmt + ((jobData['transportFee'] ?? 100) as num).toInt() + (acceptedAmt * 0.05).round()}',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            side: const BorderSide(color: Colors.red),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          onPressed: cancelAccepted,
+                          child: Text(
+                            'CANCEL',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ],
               )

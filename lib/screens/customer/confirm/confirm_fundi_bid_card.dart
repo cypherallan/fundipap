@@ -18,25 +18,42 @@ class ConfirmFundiBidCard extends StatelessWidget {
     return int.tryParse(v.toString()) ?? fb;
   }
 
-  // YOUR RULE: min 100 if <=1km
   int _calcTransport(Map<String, dynamic> job, Map<String, dynamic> bid) {
-    double dist = 0.5; // default <=1km
+    double dist = 0.5;
     if (job['distanceKm'] != null) dist = (job['distanceKm'] as num).toDouble();
     if (bid['distanceKm'] != null) dist = (bid['distanceKm'] as num).toDouble();
-    // if you already saved transport at bid time, use it
     if (bid['transportFee'] != null) return _toInt(bid['transportFee']);
-    if (job['transportFee'] != null && _toInt(job['transportFee']) > 0) {
+    if (job['transportFee'] != null && _toInt(job['transportFee']) > 0)
       return _toInt(job['transportFee']);
-    }
     if (dist <= 1.0) return 100;
-    return (dist * 80).round().clamp(100, 2000); // your per km maths
+    return (dist * 80).round().clamp(100, 2000);
   }
 
   @override
   Widget build(BuildContext context) {
-    int fundiAsk = _toInt(
-      bidData['amount'] ?? bidData['bidAmount'] ?? bidData['price'] ?? 0,
+    final status = (bidData['status'] ?? '').toString();
+    final isAcceptedCounter =
+        status.contains('counter_accepted_by_fundi') ||
+        status == 'counter_accepted';
+    final isMyCounter =
+        status == 'countered' &&
+        (bidData['counterBy'] ?? bidData['lastCounterBy'] ?? '') == 'client';
+
+    // FIX: new countered offer calculations - use agreedPrice / clientCounter first
+    int effectiveLabor = _toInt(
+      bidData['agreedPrice'] ??
+          bidData['effectiveLabor'] ??
+          bidData['clientCounterAmount'] ??
+          bidData['lastCounterAmount'] ??
+          bidData['amount'] ??
+          bidData['bidAmount'] ??
+          bidData['price'] ??
+          0,
     );
+    int originalFundiAsk = _toInt(
+      bidData['price'] ?? bidData['bidAmount'] ?? bidData['amount'] ?? 0,
+    );
+
     int clientOffer = _toInt(
       jobData['systemPriceAvg'] ??
           jobData['budget'] ??
@@ -46,26 +63,59 @@ class ConfirmFundiBidCard extends StatelessWidget {
     );
     String note = (bidData['note'] ?? '').toString();
 
-    int transport = _calcTransport(jobData, bidData); // FIX: min 100 now, not 0
-    int clientAppFee = (fundiAsk * 0.05).round();
-    int totalToLock = fundiAsk + transport + clientAppFee;
+    int transport = _calcTransport(jobData, bidData);
+    int clientAppFee = (effectiveLabor * 0.05).round();
+    int totalToLock =
+        effectiveLabor + transport + clientAppFee; // 5000+100+250=5350
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: FundipapColors.primaryYellow.withOpacity(0.25),
+        color: isAcceptedCounter
+            ? Colors.green.shade50
+            : FundipapColors.primaryYellow.withOpacity(0.25),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: FundipapColors.primaryYellow),
+        border: Border.all(
+          color: isAcceptedCounter
+              ? Colors.green.shade400
+              : FundipapColors.primaryYellow,
+          width: isAcceptedCounter ? 1.5 : 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Bid for: ${jobData['title'] ?? jobData['subcategoryName'] ?? 'Job'}',
-            style: GoogleFonts.montserrat(
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Bid for: ${jobData['title'] ?? jobData['subcategoryName'] ?? 'Job'}',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              if (isAcceptedCounter)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    'ACCEPTED COUNTER',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 10),
           Row(
@@ -94,20 +144,35 @@ class ConfirmFundiBidCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    'Fundi asks (Labour):',
+                    isAcceptedCounter
+                        ? 'Your counter (Labour):'
+                        : isMyCounter
+                        ? 'Your counter:'
+                        : 'Fundi asks (Labour):',
                     style: GoogleFonts.inter(
                       fontSize: 10,
                       color: Colors.black54,
                     ),
                   ),
                   Text(
-                    'KES $fundiAsk',
+                    'KES $effectiveLabor',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w800,
                       fontSize: 14,
-                      color: Colors.green.shade800,
+                      color: isAcceptedCounter
+                          ? Colors.green.shade800
+                          : Colors.black,
                     ),
                   ),
+                  if (isAcceptedCounter && originalFundiAsk != effectiveLabor)
+                    Text(
+                      'was KES $originalFundiAsk',
+                      style: GoogleFonts.inter(
+                        fontSize: 9,
+                        color: Colors.black45,
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
                 ],
               ),
             ],
@@ -121,12 +186,27 @@ class ConfirmFundiBidCard extends StatelessWidget {
             ),
             child: Column(
               children: [
-                _row('Labour:', 'KES $fundiAsk'),
+                _row('Labour:', 'KES $effectiveLabor'),
                 _row('Transport (min 100):', 'KES $transport', highlight: true),
-                _row('App Maintenance Cost (5%):', 'KES $clientAppFee'),
+                _row(
+                  'App Maintenance (5% of $effectiveLabor):',
+                  'KES $clientAppFee',
+                ),
                 const Divider(height: 12),
                 _row('TOTAL TO LOCK:', 'KES $totalToLock', bold: true),
                 const SizedBox(height: 4),
+                if (isAcceptedCounter)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'You countered KES $effectiveLabor, fundi accepted. You pay labour + transport + 5% fee = KES $totalToLock to escrow.',
+                      style: GoogleFonts.inter(
+                        fontSize: 9,
+                        color: Colors.green.shade800,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

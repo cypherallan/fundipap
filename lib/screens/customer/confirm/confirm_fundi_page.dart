@@ -46,6 +46,11 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
   bool transportLoading = true;
   bool counterLoading = false;
 
+  bool get isAcceptedCounter {
+    final s = (widget.bidData['status'] ?? '').toString();
+    return s.contains('counter_accepted_by_fundi') || s == 'counter_accepted';
+  }
+
   @override
   String get jobId => widget.jobId;
   @override
@@ -61,6 +66,21 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
     loadFundi().then((_) => _loadTransport());
   }
 
+  int _getEffectiveLabor() {
+    // FIX: new countered offer calculations - use agreedPrice / client counter first
+    final b = widget.bidData;
+    return ((b['agreedPrice'] ??
+                b['clientCounterAmount'] ??
+                b['lastCounterAmount'] ??
+                b['clientCounterPrice'] ??
+                b['amount'] ??
+                b['bidAmount'] ??
+                b['price'] ??
+                0)
+            as num)
+        .toInt();
+  }
+
   Future<void> _loadTransport() async {
     try {
       var t = await TransportCalculator.calc(
@@ -68,13 +88,7 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         fundiId: widget.bidData['fundiId'],
       );
       if (!mounted) return;
-      int lab =
-          ((widget.bidData['amount'] ??
-                      widget.bidData['bidAmount'] ??
-                      widget.bidData['price'] ??
-                      0)
-                  as num)
-              .toInt();
+      int lab = _getEffectiveLabor();
       int trans = t['fee'] as int;
       double km = t['km'] as double;
       if (trans < 100) trans = 100;
@@ -88,12 +102,22 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         labor = lab;
         clientAppFee = cFee;
         fundiAppFee = fFee;
-        totalClientPays = lab + trans + cFee;
+        totalClientPays = lab + trans + cFee; // 5000 + 100 + 250 = 5350
         fundiReceives = lab - fFee + trans;
         transportLoading = false;
       });
     } catch (_) {
-      if (mounted) setState(() => transportLoading = false);
+      if (mounted) {
+        int lab = _getEffectiveLabor();
+        setState(() {
+          labor = lab;
+          clientAppFee = (lab * 0.05).round();
+          fundiAppFee = (lab * 0.05).round();
+          totalClientPays = lab + transportFee + clientAppFee;
+          fundiReceives = lab - fundiAppFee + transportFee;
+          transportLoading = false;
+        });
+      }
     }
   }
 
@@ -138,8 +162,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       final fundiId = widget.bidData['fundiId'];
-
-      // 1. Update BID - write ALL keys fundi side searches for
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
@@ -161,8 +183,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
             'clientCounterSeenByFundi': false,
             'fundiHasUnread': true,
           });
-
-      // 2. Update JOB - so global search finds it
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
@@ -176,8 +196,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
             'fundiHasUnread': true,
             'clientActionAt': FieldValue.serverTimestamp(),
           });
-
-      // 3. NOTIFY FUNDI - main notifications
       await FirebaseFirestore.instance.collection('notifications').add({
         'toUserId': fundiId,
         'toRole': 'fundi',
@@ -193,8 +211,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         'isRead': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
-
-      // 4. fundi in-app subcollection
       await FirebaseFirestore.instance
           .collection('fundis')
           .doc(fundiId)
@@ -207,7 +223,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
             'createdAt': FieldValue.serverTimestamp(),
             'isRead': false,
           });
-
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Counter KES $amount sent to fundi')),
@@ -258,22 +273,119 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               if (!transportLoading)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Column(
                   children: [
-                    Text(
-                      'Labor + Transport + App Maintenance Cost',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        color: Colors.black54,
+                    if (isAcceptedCounter)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.check_circle,
+                              size: 14,
+                              color: Colors.green,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Fundi accepted your counter KES $labor',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.green.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Labor',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        Text(
+                          'KES $labor',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      'KES $totalToShow',
-                      style: GoogleFonts.montserrat(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Transport ($transportMode ${distanceKm.toStringAsFixed(1)}km)',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        Text(
+                          'KES $effectiveTransport',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'App Maintenance (5%)',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        Text(
+                          'KES $clientAppFee',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          isAcceptedCounter
+                              ? 'You pay (accepted counter)'
+                              : 'Total you pay',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'KES $totalToShow',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -298,30 +410,33 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: counterLoading ? null : _showCounterDialog,
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                  if (!isAcceptedCounter)
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: counterLoading ? null : _showCounterDialog,
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
-                      ),
-                      child: counterLoading
-                          ? const SizedBox(
-                              height: 16,
-                              width: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(
-                              'Counter',
-                              style: GoogleFonts.montserrat(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
+                        child: counterLoading
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(
+                                'Counter',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
-                            ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
+                  if (!isAcceptedCounter) const SizedBox(width: 8),
                   Expanded(
                     flex: 2,
                     child: ElevatedButton(
@@ -371,6 +486,9 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                 ...widget.bidData,
                 'transportFee': effectiveTransport,
                 'distanceKm': distanceKm,
+                'agreedPrice': labor,
+                'clientCounterAmount': labor,
+                'effectiveLabor': labor,
               },
             ),
             const SizedBox(height: 16),

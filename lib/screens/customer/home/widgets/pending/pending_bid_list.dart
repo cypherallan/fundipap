@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/customer_home_models.dart';
 import '../../helpers/customer_home_utils.dart';
 import '../../../../../services/fundi_badge_service.dart';
-import '../../../../../widgets/animated_waiting_card.dart'; // exact same waiting card
+import '../../../../../widgets/animated_waiting_card.dart';
 import 'pending_bid_card.dart';
 
 class PendingBidList extends StatelessWidget {
@@ -85,6 +85,19 @@ class PendingBidList extends StatelessWidget {
               }
             }).toList();
 
+            // FIX: keep accepted counters on top with different color
+            filtered.sort((a, b) {
+              bool aAcc = (a.bid['status'] ?? '').toString().contains(
+                'counter_accepted_by_fundi',
+              );
+              bool bAcc = (b.bid['status'] ?? '').toString().contains(
+                'counter_accepted_by_fundi',
+              );
+              if (aAcc && !bAcc) return -1;
+              if (!aAcc && bAcc) return 1;
+              return 0;
+            });
+
             if (filtered.isEmpty) {
               return Padding(
                 padding: const EdgeInsets.all(16),
@@ -102,10 +115,41 @@ class PendingBidList extends StatelessWidget {
                       (e.bid['counterBy'] ?? '') == 'client',
                 )
                 .toList();
+            final acceptedCounters = list
+                .where(
+                  (e) => (e.bid['status'] ?? '').toString().contains(
+                    'counter_accepted_by_fundi',
+                  ),
+                )
+                .toList();
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (acceptedCounters.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.green.shade300,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Text(
+                        '${acceptedCounters.length} ${acceptedCounters.length == 1 ? 'fundi has' : 'fundis have'} accepted your counter offer of KES ${acceptedCounters.first.bid['agreedPrice'] ?? acceptedCounters.first.bid['clientCounterAmount'] ?? ''} • Tap PROCEED below',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.green.shade900,
+                        ),
+                      ),
+                    ),
+                  ),
                 if (myCounters.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),

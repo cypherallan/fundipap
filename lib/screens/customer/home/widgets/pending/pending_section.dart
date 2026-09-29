@@ -25,18 +25,27 @@ class CustomerPendingSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // FIX: keep counter_accepted inside pending until client confirms
+    const pendingStatuses = [
+      'open',
+      'pending',
+      'bidding',
+      'counter_accepted',
+      'counter_accepted_by_fundi',
+    ];
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('jobs')
           .where('customerId', isEqualTo: uid)
-          .where('status', whereIn: ['open', 'pending'])
+          .where('status', whereIn: pendingStatuses)
           .snapshots(),
       builder: (context, snap1) {
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('jobs')
               .where('clientId', isEqualTo: uid)
-              .where('status', whereIn: ['open', 'pending'])
+              .where('status', whereIn: pendingStatuses)
               .snapshots(),
           builder: (context, snap2) {
             if (snap1.connectionState == ConnectionState.waiting ||
@@ -55,6 +64,23 @@ class CustomerPendingSection extends StatelessWidget {
             if (snap1.hasData) for (var d in snap1.data!.docs) map[d.id] = d;
             if (snap2.hasData) for (var d in snap2.data!.docs) map[d.id] = d;
             var jobs = map.values.toList();
+
+            // FIX: sort accepted counters to top
+            jobs.sort((a, b) {
+              var ad = a.data() as Map<String, dynamic>;
+              var bd = b.data() as Map<String, dynamic>;
+              bool aAcc =
+                  (ad['counterAcceptedBy'] != null &&
+                      (ad['counterAcceptedBy'] as List).isNotEmpty) ||
+                  (ad['status'] ?? '').toString().contains('counter_accepted');
+              bool bAcc =
+                  (bd['counterAcceptedBy'] != null &&
+                      (bd['counterAcceptedBy'] as List).isNotEmpty) ||
+                  (bd['status'] ?? '').toString().contains('counter_accepted');
+              if (aAcc && !bAcc) return -1;
+              if (!aAcc && bAcc) return 1;
+              return 0;
+            });
 
             return Container(
               margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),

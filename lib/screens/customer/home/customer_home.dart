@@ -51,10 +51,21 @@ class _CustomerHomeState extends State<CustomerHome> {
     for (var s in _bidsSubs.values) s.cancel();
     _bidsSubs.clear();
 
+    // FIX: include counter_accepted so notification stays after restart
     _jobsSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('customerId', isEqualTo: uid)
-        .where('status', whereIn: ['open', 'bidding', 'assigned', 'confirmed'])
+        .where(
+          'status',
+          whereIn: [
+            'open',
+            'bidding',
+            'assigned',
+            'confirmed',
+            'counter_accepted',
+            'counter_accepted_by_fundi',
+          ],
+        )
         .snapshots()
         .listen((jobsSnap) {
           for (var jobDoc in jobsSnap.docs) {
@@ -116,14 +127,20 @@ class _CustomerHomeState extends State<CustomerHome> {
   Future<void> _markThisFundiAsRead(String fundiKey) async {
     setState(() {
       for (var b in _bids) {
-        if (b['fundiId'] == fundiKey || b['fundiName'] == fundiKey)
+        // FIX: also check jobId == fundiKey because grouped uses jobId as key
+        if (b['fundiId'] == fundiKey ||
+            b['fundiName'] == fundiKey ||
+            b['jobId'] == fundiKey)
           b['isRead'] = true;
       }
     });
     try {
       var batch = FirebaseFirestore.instance.batch();
       for (var b in _bids.where(
-        (e) => e['fundiId'] == fundiKey || e['fundiName'] == fundiKey,
+        (e) =>
+            e['fundiId'] == fundiKey ||
+            e['fundiName'] == fundiKey ||
+            e['jobId'] == fundiKey,
       )) {
         batch.update(
           FirebaseFirestore.instance
@@ -157,12 +174,11 @@ class _CustomerHomeState extends State<CustomerHome> {
         .collection('users')
         .doc(uid)
         .get();
-    if (doc.exists && mounted) {
+    if (doc.exists && mounted)
       setState(() {
         _me = doc.data();
         _profilePct = calcProfilePct(_me);
       });
-    }
   }
 
   Future<void> _loadCompletedCount() async {
@@ -185,9 +201,8 @@ class _CustomerHomeState extends State<CustomerHome> {
         return;
       }
       LocationPermission perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) {
+      if (perm == LocationPermission.denied)
         perm = await Geolocator.requestPermission();
-      }
       if (perm == LocationPermission.deniedForever ||
           perm == LocationPermission.denied) {
         if (mounted) setState(() => _loadingLoc = false);
@@ -196,12 +211,11 @@ class _CustomerHomeState extends State<CustomerHome> {
       Position pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-      if (mounted) {
+      if (mounted)
         setState(() {
           _userPos = pos;
           _loadingLoc = false;
         });
-      }
     } catch (_) {
       if (mounted) setState(() => _loadingLoc = false);
     }
@@ -279,10 +293,8 @@ class _CustomerHomeState extends State<CustomerHome> {
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-
     final activeJobIds = _activeJobs.map((d) => d.id).toSet();
     Map<String, Map<String, dynamic>> grouped = {};
-    // GROUP BIDS BY JOB ID - 1 notification per job
     Map<String, List<Map<String, dynamic>>> bidsByJob = {};
     for (var b in _bids) {
       if (activeJobIds.contains(b['jobId'])) continue;
@@ -302,18 +314,36 @@ class _CustomerHomeState extends State<CustomerHome> {
             : DateTime.now();
         return bT.compareTo(aT);
       });
-      var latest = entry.value.first;
+
+      // FIX: if any bid is accepted counter, prioritize it
+      var acceptedBids = entry.value
+          .where(
+            (x) => (x['status'] ?? '').toString().contains(
+              'counter_accepted_by_fundi',
+            ),
+          )
+          .toList();
+      var latest = acceptedBids.isNotEmpty
+          ? acceptedBids.first
+          : entry.value.first;
+
       var jobDataRaw = latest['jobData'] as Map;
       var jobDataSafe = Map<String, dynamic>.from(jobDataRaw);
       var bidDataSafe = Map<String, dynamic>.from(latest['bidData'] as Map);
       var unread = entry.value.where((x) => x['isRead'] != true).length;
 
+      bool isAccepted = (latest['status'] ?? '').toString().contains(
+        'counter_accepted_by_fundi',
+      );
+
       grouped[entry.key] = {
         'jobId': entry.key,
-        'fundiName': entry.value.length == 1
+        'fundiName': isAccepted
+            ? (latest['fundiName'] ?? 'Fundi').toString()
+            : entry.value.length == 1
             ? (latest['fundiName'] ?? 'Fundi').toString()
             : '${entry.value.length} fundis',
-        'fundiId': entry.key, // jobId so markRead clears all bids for this job
+        'fundiId': entry.key,
         'category':
             (jobDataSafe['title'] ??
                     latest['jobTitle'] ??
@@ -324,17 +354,24 @@ class _CustomerHomeState extends State<CustomerHome> {
         'bidData': bidDataSafe,
         'bidId': (latest['bidId'] ?? '').toString(),
         'bidCount': entry.value.length,
+        'bidStatus': (latest['status'] ?? '').toString(), // FIX: send status
+        'agreedPrice':
+            bidDataSafe['agreedPrice'] ??
+            bidDataSafe['clientCounterAmount'] ??
+            0,
+        'clientCounterAmount': bidDataSafe['clientCounterAmount'] ?? 0,
         'latestAt': (latest['createdAt'] is Timestamp)
             ? (latest['createdAt'] as Timestamp).toDate()
             : DateTime.now(),
-        'type': 'bid',
+        'type': isAccepted ? 'counter_accepted_by_fundi' : 'bid',
         'isPendingBid': true,
-        'isRead': unread == 0,
+        'isRead': isAccepted
+            ? false
+            : unread == 0, // FIX: accepted always shows as new until proceed
       };
     }
     for (var doc in _activeJobs) {
       var job = Map<String, dynamic>.from(doc.data() as Map);
-      // === FIX: REMOVE COMPLETELY WHEN CLIENT MARKS COMPLETED ===
       if ((job['status'] ?? '').toString() == 'completed') continue;
       var fundiId =
           (job['assignedFundiId'] ?? job['assignedFundiName'] ?? 'Fundi')
@@ -357,6 +394,24 @@ class _CustomerHomeState extends State<CustomerHome> {
         (a, b) =>
             (b['latestAt'] as DateTime).compareTo((a['latestAt'] as DateTime)),
       );
+
+    // FIX: sort accepted counters to top
+    list.sort((a, b) {
+      bool aAcc =
+          (a['bidStatus'] ?? '').toString().contains(
+            'counter_accepted_by_fundi',
+          ) ||
+          a['type'] == 'counter_accepted_by_fundi';
+      bool bAcc =
+          (b['bidStatus'] ?? '').toString().contains(
+            'counter_accepted_by_fundi',
+          ) ||
+          b['type'] == 'counter_accepted_by_fundi';
+      if (aAcc && !bAcc) return -1;
+      if (!aAcc && bAcc) return 1;
+      return (b['latestAt'] as DateTime).compareTo((a['latestAt'] as DateTime));
+    });
+
     Map<String, int> fundiUnreadCounts = {};
     for (var g in list) {
       if (g['isRead'] == false) {

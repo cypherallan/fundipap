@@ -121,65 +121,32 @@ class CustomerNotificationsSection extends StatelessWidget {
                   (g['agreedPrice'] ??
                           g['clientCounterAmount'] ??
                           job['agreedPrice'] ??
+                          job['clientCounterAmount'] ??
                           0)
                       .toString();
               return Container(
                 margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 decoration: BoxDecoration(
-                  color: const Color(
-                    0xFFE8F5E9,
-                  ), // green tint different from rest
+                  color: const Color(0xFFE8F5E9),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.green.shade400, width: 1.5),
                 ),
                 child: ListTile(
-                  leading: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.green,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.check_circle,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                      if (badgeCount > 0)
-                        Positioned(
-                          right: -6,
-                          top: -6,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: Colors.white,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Text(
-                              '$badgeCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.green,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.check_circle,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                   title: Text(
-                    '${g['fundiName']} accepted your counter offer',
+                    'Your counter offer of KES $acceptedAmt has been accepted',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w800,
                       fontSize: 12,
@@ -189,7 +156,7 @@ class CustomerNotificationsSection extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Text(
-                    'KES $acceptedAmt • Your counter offer has been accepted. Tap to view',
+                    '${g['fundiName']} • Tap to view & proceed',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       color: Colors.black87,
@@ -236,7 +203,7 @@ class CustomerNotificationsSection extends StatelessWidget {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      'Accepted counters for ${g['category']}',
+                                      'Your counter accepted',
                                       style: GoogleFonts.montserrat(
                                         fontWeight: FontWeight.w800,
                                         fontSize: 14,
@@ -253,7 +220,7 @@ class CustomerNotificationsSection extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: Text(
-                                      'ACCEPTED',
+                                      'KES $acceptedAmt',
                                       style: GoogleFonts.montserrat(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w800,
