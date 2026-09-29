@@ -48,11 +48,7 @@ class ConfirmFundiBidCard extends StatelessWidget {
 
     int transport = _calcTransport(jobData, bidData); // FIX: min 100 now, not 0
     int clientAppFee = (fundiAsk * 0.05).round();
-    int totalToLock = fundiAsk + transport + clientAppFee; // 5000+100+250=5350
-    int fundiGets =
-        fundiAsk -
-        clientAppFee +
-        transport; // 5000-250+100=4850? Wait your logic: labour - fee + transport
+    int totalToLock = fundiAsk + transport + clientAppFee;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -127,14 +123,10 @@ class ConfirmFundiBidCard extends StatelessWidget {
               children: [
                 _row('Labour:', 'KES $fundiAsk'),
                 _row('Transport (min 100):', 'KES $transport', highlight: true),
-                _row('App fee (5%):', 'KES $clientAppFee'),
+                _row('App Maintenance Cost (5%):', 'KES $clientAppFee'),
                 const Divider(height: 12),
                 _row('TOTAL TO LOCK:', 'KES $totalToLock', bold: true),
                 const SizedBox(height: 4),
-                Text(
-                  'Fundi will receive KES $fundiGets after fee',
-                  style: GoogleFonts.inter(fontSize: 9, color: Colors.black54),
-                ),
               ],
             ),
           ),

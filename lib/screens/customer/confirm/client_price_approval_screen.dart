@@ -406,7 +406,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'New App fee (5%):',
+                            'New App Maintenance Cost (5%):',
                             style: GoogleFonts.inter(fontSize: 10),
                           ),
                           Text(

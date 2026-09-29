@@ -25,14 +25,10 @@ class PendingBidCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Future<void> openConfirm() async {
-      // 1. If opened from Notifications bottom sheet, close sheet first
       if (sheetContextForClose != null && sheetContextForClose!.mounted) {
         Navigator.pop(sheetContextForClose!);
       }
-
       final navContext = parentContextForNav ?? context;
-
-      // 2. Open Confirm from HOME context, not sheet context
       final confirmed = await Navigator.push<bool>(
         navContext,
         MaterialPageRoute(
@@ -44,8 +40,6 @@ class PendingBidCard extends StatelessWidget {
           ),
         ),
       );
-
-      // 3. After confirm, replace Confirm with Timeline -> back = Home
       if (confirmed == true && navContext.mounted) {
         Navigator.pushReplacement(
           navContext,
@@ -53,8 +47,7 @@ class PendingBidCard extends StatelessWidget {
             builder: (_) => CustomerFundiTimelinePage(
               jobId: jobId,
               fundiName: bid.bid['fundiName'] ?? 'Fundi',
-              trade: (jobData['category'] ?? jobData['title'] ?? 'Job')
-                  .toString(),
+              trade: (jobData['category'] ?? '').toString(),
               jobData: jobData,
             ),
           ),
@@ -173,50 +166,29 @@ class PendingBidCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      side: const BorderSide(color: Colors.black12),
-                    ),
-                    onPressed: openConfirm,
-                    child: Text(
-                      'Counter',
-                      style: GoogleFonts.montserrat(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black,
-                      ),
-                    ),
+            const SizedBox(height: 12),
+            // SINGLE BUTTON NOW
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: FundipapColors.blackGray,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: openConfirm,
+                child: Text(
+                  'View fundi & React to bid',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: FundipapColors.blackGray,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      elevation: 0,
-                    ),
-                    onPressed: openConfirm,
-                    child: Text(
-                      'View Fundi & Accept',
-                      style: GoogleFonts.montserrat(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
