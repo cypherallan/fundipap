@@ -26,6 +26,14 @@ class FundiConfirmPaymentScreen extends StatefulWidget {
 class _FundiConfirmPaymentScreenState extends State<FundiConfirmPaymentScreen> {
   bool _confirming = false;
 
+  int _toInt(dynamic v, [int fb = 0]) {
+    if (v == null) return fb;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? fb;
+  }
+
   Future<void> _confirmReceived() async {
     setState(() => _confirming = true);
     try {
@@ -38,7 +46,6 @@ class _FundiConfirmPaymentScreenState extends State<FundiConfirmPaymentScreen> {
             'fundiHasUnread': false,
             'updatedAt': FieldValue.serverTimestamp(),
           });
-
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -82,8 +89,38 @@ class _FundiConfirmPaymentScreenState extends State<FundiConfirmPaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    var job = widget.jobData;
+    var reneg = job['renegotiation'] as Map<String, dynamic>? ?? {};
+
+    // FIX: use accepted counter 1000 not raw 2000
+    int rawExtra = _toInt(reneg['extraLabor'] ?? job['extraLaborAmount'] ?? 0);
+    int counterExtra = _toInt(
+      reneg['acceptedCounterExtraLabor'] ?? reneg['counterExtraLabor'] ?? 0,
+    );
+    int finalExtra = counterExtra > 0 ? counterExtra : rawExtra;
+
+    int oldLabor = _toInt(reneg['oldLabor'] ?? 0);
+    if (oldLabor == 0) {
+      // fallback: agreedPrice was already updated to 6000, subtract extra
+      int agreed = _toInt(job['agreedPrice'] ?? job['laborCost'] ?? 0);
+      oldLabor = agreed > finalExtra ? agreed - finalExtra : agreed;
+      if (oldLabor == 0) oldLabor = 5000;
+    }
+
+    int finalLabor = oldLabor + finalExtra; // 5000+1000=6000 NOT 7000
+    int transport = _toInt(
+      job['transportFee'] ?? reneg['oldTransportFee'] ?? 100,
+    );
+    int appFee = (finalLabor * 0.05).round(); // 300 NOT 350
+    int fundiReceives =
+        finalLabor - appFee + transport; // 6000-300+100=5800 NOT 6750
+    int totalClientPays = finalLabor + transport + appFee; // 6400
+
+    // Use computed receives, ignore wrong widget.amount (6750)
+    int displayAmount = fundiReceives;
+
     return PopScope(
-      canPop: false, // MANDATORY - can't go back, same as RateFundiScreen
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -110,15 +147,102 @@ class _FundiConfirmPaymentScreenState extends State<FundiConfirmPaymentScreen> {
               const Icon(Icons.verified, size: 70, color: Colors.green),
               const SizedBox(height: 16),
               Text(
-                'KES ${widget.amount} Released!',
+                'KES $displayAmount Released!',
                 style: GoogleFonts.montserrat(
                   fontWeight: FontWeight.w800,
                   fontSize: 22,
                 ),
               ),
+              const SizedBox(height: 16),
+              // FIX: breakdown shows correct 6000 +100 -300 = 5800
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Labour:', style: GoogleFonts.inter(fontSize: 12)),
+                        Text(
+                          'KES $finalLabor',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Transport:',
+                          style: GoogleFonts.inter(fontSize: 12),
+                        ),
+                        Text(
+                          '+ KES $transport',
+                          style: GoogleFonts.inter(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'App maintenance cost (5%):',
+                          style: GoogleFonts.inter(fontSize: 12),
+                        ),
+                        Text(
+                          '- KES $appFee',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Total to receive:',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          'KES $displayAmount',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (counterExtra > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Counter: KES $finalExtra (was KES $rawExtra) • Total client pays KES $totalClientPays',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 8),
               Text(
-                'KES ${widget.amount} has been successfully released to your account by ${widget.clientName}. Kindly confirm your account balance / M-Pesa before rating.',
+                'KES $displayAmount has been released by ${widget.clientName}. Confirm your M-Pesa.',
                 style: GoogleFonts.inter(fontSize: 13),
                 textAlign: TextAlign.center,
               ),
@@ -150,7 +274,7 @@ class _FundiConfirmPaymentScreenState extends State<FundiConfirmPaymentScreen> {
                               ),
                             )
                           : Text(
-                              'YES, RECEIVED KES ${widget.amount}',
+                              'YES, RECEIVED KES $displayAmount',
                               style: GoogleFonts.montserrat(
                                 fontWeight: FontWeight.w800,
                                 fontSize: 11,

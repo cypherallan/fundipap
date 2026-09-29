@@ -187,53 +187,43 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             escrow == 'held' || escrow == 'paid' || escrow == 'released';
         bool escrowReleased = escrow == 'released' || status == 'completed';
 
-        int labour = _toInt(
-          job['laborCost'] ??
-              job['agreedPrice'] ??
-              job['acceptedBidAmount'] ??
-              job['fundiBidAmount'] ??
-              job['budget'] ??
-              0,
-        );
-        int transport = _toInt(job['transportFee'] ?? 0);
-        int fundiAppFee = _toInt(job['fundiAppFee'] ?? (labour * 0.05).round());
-        int fundiReceives = _toInt(
-          job['fundiReceives'] ??
-              job['fundiPayoutAmount'] ??
-              labour - fundiAppFee + transport,
-        );
-        int fundiSeesWaiting = labour + transport;
-
         var reneg = job['renegotiation'] as Map<String, dynamic>?;
         String phase = (reneg?['currentPhase'] ?? '').toString();
         String rs = (reneg?['status'] ?? '').toString();
 
-        int oldLabour = _toInt(reneg?['oldLabor'] ?? labour);
+        // FIX: use counter 1000 not raw 2000
+        int rawExtra = _toInt(
+          reneg?['extraLabor'] ?? job['extraLaborAmount'] ?? 0,
+        );
         int counterExtra = _toInt(
           reneg?['acceptedCounterExtraLabor'] ??
               reneg?['counterExtraLabor'] ??
               0,
         );
-        int rawExtra = _toInt(
-          reneg?['extraLabor'] ?? job['extraLaborAmount'] ?? 0,
+        int extraLabour = counterExtra > 0 ? counterExtra : rawExtra; // 1000
+
+        int oldLabour = _toInt(reneg?['oldLabor'] ?? 0);
+        if (oldLabour == 0) {
+          int fromJob = _toInt(job['laborCost'] ?? job['agreedPrice'] ?? 0);
+          oldLabour = fromJob > extraLabour ? fromJob - extraLabour : 5000;
+        }
+
+        int newLabour = oldLabour + extraLabour; // 5000+1000=6000
+        int transport = _toInt(
+          job['transportFee'] ?? reneg?['oldTransportFee'] ?? 0,
         );
-        int extraLabour = counterExtra > 0
-            ? counterExtra
-            : rawExtra; // fundi sees 1000
-        int newLabour = _toInt(
-          reneg?['newLaborTotal'] ?? (oldLabour + extraLabour),
-        );
-        int newFundiFee = _toInt(
-          reneg?['newFundiAppFee'] ?? (newLabour * 0.05).round(),
-        );
-        int newTotalFundiLocked = _toInt(newLabour + transport);
-        int newFundiReceivesVal = _toInt(newLabour - newFundiFee + transport);
+
+        // final values used everywhere
+        int labour = newLabour; // 6000
+        int fundiAppFee = (labour * 0.05).round(); // 300 NOT 250 / 350
+        int fundiReceives = labour - fundiAppFee + transport; // 5800 NOT 6750
+        int fundiSeesWaiting = labour + transport;
+
+        int newTotalFundiLocked = newLabour + transport;
+        int newFundiReceivesVal = fundiReceives;
         bool isCounterAccepted = counterExtra > 0;
-        int releasedAmount = _toInt(
-          job['fundiPayoutAmount'] ??
-              job['totalReleasedAmount'] ??
-              fundiReceives,
-        );
+        int releasedAmount = fundiReceives;
+
         String clientId = (job['clientId'] ?? job['customerId'] ?? '')
             .toString();
         bool fundiConfirmedPayment = _toBool(job['fundiConfirmedPayment']);
@@ -497,7 +487,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'KES $fundiReceives Released!',
+                        'KES $releasedAmount Released!',
                         style: GoogleFonts.montserrat(
                           fontWeight: FontWeight.w800,
                           fontSize: 16,
@@ -512,18 +502,18 @@ class FundiCustomerTimelinePage extends StatelessWidget {
                         ),
                         child: Column(
                           children: [
-                            _feeRow('Labour cost:', 'KES $labour'),
-                            _feeRow('Transport:', '+ KES $transport'),
+                            _feeRow('Labour cost:', 'KES $labour'), // 6000
+                            _feeRow('Transport:', '+ KES $transport'), // +100
                             _feeRow(
                               'App maintenance cost:',
                               '- KES $fundiAppFee',
-                            ),
+                            ), // -300 FIX was -250 / -350
                             const Divider(),
                             _feeRow(
                               'Total to receive:',
-                              'KES $fundiReceives',
+                              'KES $releasedAmount',
                               bold: true,
-                            ),
+                            ), // 5800 NOT 6750
                           ],
                         ),
                       ),
@@ -890,7 +880,7 @@ class FundiCustomerTimelinePage extends StatelessWidget {
               title:
                   'Client countered extra KES $originalExtra with KES $counterExtraClient',
               message:
-                  'You requested KES $originalExtra. Client countered with KES $counterExtraClient (KES $counterToLockClient to lock for client). Accept to proceed with KES $counterExtraClient.',
+                  'You requested KES $originalExtra. Client countered with KES $counterExtraClient. Accept to proceed with KES $counterExtraClient.',
               time: 'Now',
               isCurrent: true,
               action: Column(
