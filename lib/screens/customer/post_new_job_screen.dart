@@ -324,8 +324,7 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
             TextField(
               controller: titleC,
               decoration: const InputDecoration(
-                labelText:
-                    'Job Title e.g TV Mounting Milimani, Dishwasher Install Tom Mboya',
+                labelText: 'Job Title e.g TV Mounting',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -335,7 +334,7 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
               isExpanded: true,
               alignment: AlignmentDirectional.centerStart,
               decoration: const InputDecoration(
-                labelText: 'Category (24) - All Installations Covered',
+                labelText: 'Category',
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
