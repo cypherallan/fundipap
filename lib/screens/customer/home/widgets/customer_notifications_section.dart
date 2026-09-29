@@ -1,9 +1,11 @@
+// lib/screens/customer/home/widgets/customer_notifications_section.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
 import 'customer_home_status.dart';
-import '../../confirm/confirm_fundi_page.dart';
 import '../timeline/customer_fundi_timeline_page.dart';
+import 'pending/pending_bid_list.dart';
+import '../models/customer_home_models.dart';
 
 class CustomerNotificationsSection extends StatelessWidget {
   final List<Map<String, dynamic>> groupedList;
@@ -95,17 +97,14 @@ class CustomerNotificationsSection extends StatelessWidget {
                 ),
               ),
             ),
+
           ...groupedList.take(5).map((g) {
             String fundiKey = (g['fundiId'] ?? '').toString();
             int badgeCount = fundiUnreadCounts[fundiKey] ?? 0;
             final job = Map<String, dynamic>.from(g['jobData'] as Map);
-            final bidData = g['bidData'] != null
-                ? Map<String, dynamic>.from(g['bidData'] as Map)
-                : <String, dynamic>{};
             final type = (g['type'] ?? '').toString();
             final isBid = type == 'bid';
 
-            // === FIX: BIDS DON'T SHOW WAITING TIMELINE ===
             if (isBid) {
               final bidCount = (g['bidCount'] ?? 1) as int;
               return Container(
@@ -176,9 +175,7 @@ class CustomerNotificationsSection extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Text(
-                    bidCount == 1
-                        ? '${g['fundiName']} bid • Tap to review'
-                        : '${g['fundiName']} • Check Pending Jobs below',
+                    '${g['fundiName']} • Tap to view bids',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       color: Colors.black54,
@@ -188,45 +185,92 @@ class CustomerNotificationsSection extends StatelessWidget {
                   onTap: () async {
                     await onMarkRead(fundiKey);
                     if (!context.mounted) return;
-                    // single bid -> open confirm, multiple -> just mark read, user sees pending banner
-                    if (bidCount == 1) {
-                      final confirmed = await Navigator.push<bool>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ConfirmFundiPage(
-                            jobId: g['jobId'].toString(),
-                            jobData: job,
-                            bidId: g['bidId'].toString(),
-                            bidData: bidData,
-                          ),
+                    // ALWAYS show banner with PendingBidCard, even for 1 bid
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.white,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(16),
                         ),
-                      );
-                      if (confirmed == true && context.mounted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => CustomerFundiTimelinePage(
-                              jobId: g['jobId'].toString(),
-                              fundiName: g['fundiName'].toString(),
-                              trade: g['category'].toString(),
-                              jobData: job,
+                      ),
+                      builder: (_) => DraggableScrollableSheet(
+                        expand: false,
+                        initialChildSize: 0.85,
+                        minChildSize: 0.5,
+                        maxChildSize: 0.95,
+                        builder: (ctx, scrollCtrl) => Column(
+                          children: [
+                            const SizedBox(height: 12),
+                            Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.black12,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
                             ),
-                          ),
-                        );
-                      }
-                    }
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Bids for ${g['category']}',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: FundipapColors.primaryYellow,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      '$bidCount ${bidCount == 1 ? 'bid' : 'bids'}',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                controller: scrollCtrl,
+                                padding: const EdgeInsets.all(12),
+                                child: PendingBidList(
+                                  jobId: g['jobId'].toString(),
+                                  job: job,
+                                  filter: FilterType.all,
+                                  userPos: null,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
                   },
                 ),
               );
             }
 
-            // ACTIVE JOBS - keep orange waiting timeline here
+            // ACTIVE JOBS - timeline + waiting state unchanged
             var status = (job['status'] ?? '').toString();
-            bool isCompleted = status == 'completed';
-            Color borderCol = isCompleted
+            Color borderCol = status == 'completed'
                 ? Colors.green
                 : Colors.orange.shade700;
-
             return Container(
               margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               decoration: BoxDecoration(
