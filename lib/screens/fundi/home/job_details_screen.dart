@@ -56,51 +56,40 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
   ) async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
     final ref = FirebaseFirestore.instance.collection('jobs').doc(jobId);
+    final int transport = _toInt(job['transportFee'] ?? 100);
+    final int clientAppFee = (clientAmt * 0.05).round();
+    final int fundiAppFee = (clientAmt * 0.05).round();
 
-    // FIX: keep transport, recalc fees from final countered labour
-    final int transport = _transport(job); // 100 boda or real calc
-    final int clientAppFee = (clientAmt * 0.05).round(); // 250
-    final int fundiAppFee = (clientAmt * 0.05).round(); // 250
-    final int totalClientPays =
-        clientAmt + transport + clientAppFee; // 5000+100+250 = 5350
-    final int fundiReceives =
-        clientAmt - fundiAppFee + transport; // 5000-250+100 = 4850
-
+    // FIX: fundi does NOT assign job, he just says "I accept your counter"
     await ref.collection('bids').doc(bidId).update({
-      'status': 'accepted',
+      'status': 'counter_accepted_by_fundi', // NEW STATUS
       'agreedPrice': clientAmt,
       'price': clientAmt,
-      'lastCounterPrice': clientAmt,
-      'lastCounterAmount': clientAmt,
-      'acceptedAt': FieldValue.serverTimestamp(),
+      'fundiAcceptedCounterAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       'clientCounterSeenByFundi': true,
     });
+
     await ref.update({
-      'status': 'assigned',
-      'assignedFundiId': uid,
-      'assignedFundi': uid,
-      'agreedPrice': clientAmt,
-      'laborCost': clientAmt,
-      'acceptedBidAmount': clientAmt,
+      'status': 'counter_accepted', // job still open, not assigned
+      'counterAcceptedBy': FieldValue.arrayUnion([uid]),
+      'counterAcceptedBids': FieldValue.arrayUnion([bidId]),
+      'lastCounterAcceptedBy': uid,
+      'lastCounterAcceptedAt': FieldValue.serverTimestamp(),
       'transportFee': transport,
       'clientAppFee': clientAppFee,
       'fundiAppFee': fundiAppFee,
-      'totalClientPays': totalClientPays,
-      'fundiReceives': fundiReceives,
-      'fundiPayoutAmount': fundiReceives,
-      'updatedAt': FieldValue.serverTimestamp(),
       'clientHasUnread': true,
     });
 
     await FirebaseFirestore.instance.collection('notifications').add({
       'toUserId': job['customerId'] ?? job['clientId'],
-      'type': 'bid_accepted',
+      'type': 'counter_accepted_by_fundi',
       'jobId': jobId,
       'bidId': bidId,
-      'title': 'Fundi accepted your counter',
+      'title': 'Fundi accepted your KES $clientAmt counter',
       'body':
-          'Fundi accepted KES $clientAmt • Lock KES $totalClientPays to escrow (labour $clientAmt + transport $transport + fee $clientAppFee)',
+          'Tap Proceed with Fundi to lock KES ${clientAmt + transport + clientAppFee} to escrow',
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });

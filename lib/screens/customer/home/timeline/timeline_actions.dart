@@ -53,6 +53,109 @@ class TimelineActions {
     });
   }
 
+  // FIX: NEW - client must explicitly proceed, prevents 10x escrow
+  static Future<void> proceedWithFundi(
+    String jobId,
+    String fundiId,
+    int expectedTotal,
+  ) async {
+    final jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
+    final jobSnap = await jobRef.get();
+    if (!jobSnap.exists) throw 'Job not found';
+    final job = jobSnap.data() as Map<String, dynamic>;
+
+    // find the bid this fundi accepted (counter_accepted_by_fundi)
+    final q = await jobRef
+        .collection('bids')
+        .where('fundiId', isEqualTo: fundiId)
+        .where(
+          'status',
+          whereIn: [
+            'counter_accepted_by_fundi',
+            'countered',
+            'counter_accepted',
+          ],
+        )
+        .limit(1)
+        .get();
+    // fallback: search by assigned field if fundiId stored differently
+    final bidSnap = q.docs.isNotEmpty
+        ? q.docs.first
+        : (await jobRef
+                  .collection('bids')
+                  .where('status', isEqualTo: 'counter_accepted_by_fundi')
+                  .limit(1)
+                  .get())
+              .docs
+              .first;
+    final bidId = bidSnap.id;
+    final bidData = bidSnap.data();
+
+    int labour = toInt(
+      bidData['agreedPrice'] ??
+          bidData['price'] ??
+          job['laborCost'] ??
+          job['agreedPrice'] ??
+          0,
+    );
+    int transport = toInt(
+      job['transportFee'] ?? bidData['transportFee'] ?? 100,
+    ); // FIX: default 100 not 0
+    int clientFee = (labour * 0.05).round();
+    int fundiFee = (labour * 0.05).round();
+    int totalClient = labour + transport + clientFee; // 5000+100+250 = 5350
+    int fundiRec = labour - fundiFee + transport; // 4850
+
+    final batch = FirebaseFirestore.instance.batch();
+    batch.update(jobRef, {
+      'status': 'assigned',
+      'assignedFundiId': fundiId,
+      'assignedFundi': fundiId,
+      'agreedPrice': labour,
+      'laborCost': labour,
+      'acceptedBidAmount': labour,
+      'transportFee': transport,
+      'clientAppFee': clientFee,
+      'fundiAppFee': fundiFee,
+      'totalClientPays': totalClient,
+      'fundiReceives': fundiRec,
+      'fundiPayoutAmount': fundiRec,
+      'proceededAt': FieldValue.serverTimestamp(),
+      'proceededWithFundiId': fundiId,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    batch.update(jobRef.collection('bids').doc(bidId), {
+      'status': 'accepted',
+      'acceptedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // reject other 9 who also accepted your counter
+    final others = await jobRef
+        .collection('bids')
+        .where(
+          'status',
+          whereIn: [
+            'counter_accepted_by_fundi',
+            'countered',
+            'pending',
+            'bidding',
+          ],
+        )
+        .get();
+    for (var d in others.docs) {
+      if (d.id != bidId) {
+        batch.update(d.reference, {
+          'status': 'rejected',
+          'rejectedReason': 'client_proceeded_with_other_fundi',
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    }
+    await batch.commit();
+  }
+
   static Future<void> confirmCompletion({
     required String jobId,
     required String fundiId,
@@ -70,7 +173,7 @@ class TimelineActions {
       var reneg = j['renegotiation'] as Map<String, dynamic>?;
 
       int labour = toInt(j['laborCost'] ?? j['agreedPrice'] ?? 0);
-      int transport = toInt(j['transportFee'] ?? 0);
+      int transport = toInt(j['transportFee'] ?? 100); // FIX: was 0
       int clientAppFee = toInt(j['clientAppFee'] ?? (labour * 0.05).round());
       int fundiAppFee = toInt(j['fundiAppFee'] ?? (labour * 0.05).round());
       int totalClient = toInt(
@@ -133,7 +236,8 @@ class TimelineActions {
       }
 
       if (!context.mounted) return;
-      int displayRelease = labour + transport;
+      int displayRelease =
+          labour + transport; // 5000+100=5100 shown as locked, payout is 4850
       if (reneg != null && reneg['newLaborTotal'] != null) {
         displayRelease = toInt(reneg['newLaborTotal']) + transport;
       }

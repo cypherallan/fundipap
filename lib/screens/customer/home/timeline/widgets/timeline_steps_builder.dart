@@ -3,6 +3,7 @@ import '../widgets/timeline_header.dart';
 import '../timeline_context.dart';
 import '../steps/completed_step.dart';
 import '../steps/cancelled_step.dart';
+import '../steps/counter_accepted_step.dart'; // FIX: missing import
 import '../steps/escrow_step.dart';
 import '../steps/travelling_step.dart';
 import '../steps/renegotiation_step.dart';
@@ -35,6 +36,9 @@ class TimelineStepsBuilder {
 
     if (CompletedSteps.handle(timeline, c)) return timeline;
     if (CancelledSteps.handle(timeline, c)) return timeline;
+    // FIX: if 10 fundis accepted your counter, show PROCEED WITH FUNDI first, not escrow
+    // prevents 10x Pay to Escrow - only after proceed does Escrow show
+    if (CounterAcceptedSteps.handle(timeline, c)) return timeline;
     if (EscrowSteps.handle(timeline, c)) return timeline;
     if (TravellingSteps.handle(timeline, c)) return timeline;
     if (RenegotiationSteps.handle(timeline, c)) return timeline;

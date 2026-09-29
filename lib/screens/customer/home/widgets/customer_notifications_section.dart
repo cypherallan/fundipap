@@ -28,7 +28,11 @@ class CustomerNotificationsSection extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 16, offset: const Offset(0, 6)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
         ],
       ),
       child: Column(
@@ -40,17 +44,44 @@ class CustomerNotificationsSection extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(color: FundipapColors.primaryYellow, borderRadius: BorderRadius.circular(9)),
-                  child: Icon(totalTabCounter > 0 ? Icons.notifications_active : Icons.notifications_none, size: 16),
+                  decoration: BoxDecoration(
+                    color: FundipapColors.primaryYellow,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(
+                    totalTabCounter > 0
+                        ? Icons.notifications_active
+                        : Icons.notifications_none,
+                    size: 16,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('Notifications', style: GoogleFonts.montserrat(fontWeight: FontWeight.w800, fontSize: 15)),
+                Text(
+                  'Notifications',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 if (totalTabCounter > 0)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(20)),
-                    child: Text('$totalTabCounter new', style: GoogleFonts.montserrat(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '$totalTabCounter new',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -58,7 +89,12 @@ class CustomerNotificationsSection extends StatelessWidget {
           if (groupedList.isEmpty)
             Padding(
               padding: const EdgeInsets.all(24),
-              child: Center(child: Text('No notifications yet', style: GoogleFonts.inter(color: Colors.black54, fontSize: 12))),
+              child: Center(
+                child: Text(
+                  'No notifications yet',
+                  style: GoogleFonts.inter(color: Colors.black54, fontSize: 12),
+                ),
+              ),
             ),
 
           ...groupedList.take(5).map((g) {
@@ -68,15 +104,33 @@ class CustomerNotificationsSection extends StatelessWidget {
             final type = (g['type'] ?? '').toString();
             final isBid = type == 'bid';
 
-            // === INCOMING BIDS - NO WAITING STATE ===
-            if (isBid) {
-              final bidCount = (g['bidCount'] ?? 1) as int;
+            // FIX: detect counter accepted
+            final bidStatus = (g['bidStatus'] ?? job['bidStatus'] ?? '')
+                .toString();
+            final isCounterAccepted =
+                bidStatus.contains('counter_accepted_by_fundi') ||
+                type == 'counter_accepted_by_fundi' ||
+                (job['status'] ?? '').toString() == 'counter_accepted' ||
+                (job['counterAcceptedBy'] != null &&
+                    (job['counterAcceptedBy'] as List).isNotEmpty &&
+                    isBid);
+
+            // === COUNTER ACCEPTED - YOUR REQUEST ===
+            if (isCounterAccepted) {
+              final acceptedAmt =
+                  (g['agreedPrice'] ??
+                          g['clientCounterAmount'] ??
+                          job['agreedPrice'] ??
+                          0)
+                      .toString();
               return Container(
                 margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFFBE6),
+                  color: const Color(
+                    0xFFE8F5E9,
+                  ), // green tint different from rest
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: FundipapColors.primaryYellow, width: 1.5),
+                  border: Border.all(color: Colors.green.shade400, width: 1.5),
                 ),
                 child: ListTile(
                   leading: Stack(
@@ -85,40 +139,81 @@ class CustomerNotificationsSection extends StatelessWidget {
                       Container(
                         width: 40,
                         height: 40,
-                        decoration: BoxDecoration(color: FundipapColors.blackGray, borderRadius: BorderRadius.circular(10)),
-                        child: const Icon(Icons.gavel, color: Colors.white, size: 20),
+                        decoration: BoxDecoration(
+                          color: Colors.green,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.check_circle,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                       if (badgeCount > 0)
                         Positioned(
                           right: -6,
                           top: -6,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white, width: 1.5)),
-                            child: Text('$badgeCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Text(
+                              '$badgeCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
                         ),
                     ],
                   ),
                   title: Text(
-                    bidCount == 1 ? 'You have a new bid for ${g['category']}' : 'You have $bidCount new bids for ${g['category']}',
-                    style: GoogleFonts.montserrat(fontWeight: FontWeight.w800, fontSize: 12),
+                    '${g['fundiName']} accepted your counter offer',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      color: Colors.green.shade900,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  subtitle: Text('${g['fundiName']} • Tap to view bids', style: GoogleFonts.inter(fontSize: 11, color: Colors.black54)),
-                  trailing: const Icon(Icons.chevron_right, size: 18),
+                  subtitle: Text(
+                    'KES $acceptedAmt • Your counter offer has been accepted. Tap to view',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: Colors.green,
+                  ),
                   onTap: () async {
                     await onMarkRead(fundiKey);
                     if (!context.mounted) return;
-
                     final parentContext = context;
-
                     showModalBottomSheet(
                       context: parentContext,
                       isScrollControlled: true,
                       backgroundColor: Colors.white,
-                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(16),
+                        ),
+                      ),
                       builder: (sheetContext) => DraggableScrollableSheet(
                         expand: false,
                         initialChildSize: 0.85,
@@ -127,16 +222,44 @@ class CustomerNotificationsSection extends StatelessWidget {
                         builder: (ctx, scrollCtrl) => Column(
                           children: [
                             const SizedBox(height: 12),
-                            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(2))),
+                            Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.black12,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                               child: Row(
                                 children: [
-                                  Expanded(child: Text('Bids for ${g['category']}', style: GoogleFonts.montserrat(fontWeight: FontWeight.w800, fontSize: 14))),
+                                  Expanded(
+                                    child: Text(
+                                      'Accepted counters for ${g['category']}',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(color: FundipapColors.primaryYellow, borderRadius: BorderRadius.circular(20)),
-                                    child: Text('$bidCount ${bidCount == 1 ? 'bid' : 'bids'}', style: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w800)),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      'ACCEPTED',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -165,14 +288,184 @@ class CustomerNotificationsSection extends StatelessWidget {
               );
             }
 
-            // === ACTIVE JOBS - keep timeline + waiting state ===
+            // === INCOMING BIDS ===
+            if (isBid) {
+              final bidCount = (g['bidCount'] ?? 1) as int;
+              return Container(
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBE6),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: FundipapColors.primaryYellow,
+                    width: 1.5,
+                  ),
+                ),
+                child: ListTile(
+                  leading: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: FundipapColors.blackGray,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.gavel,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      if (badgeCount > 0)
+                        Positioned(
+                          right: -6,
+                          top: -6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Text(
+                              '$badgeCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  title: Text(
+                    bidCount == 1
+                        ? 'You have a new bid for ${g['category']}'
+                        : 'You have $bidCount new bids for ${g['category']}',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${g['fundiName']} • Tap to view bids',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right, size: 18),
+                  onTap: () async {
+                    await onMarkRead(fundiKey);
+                    if (!context.mounted) return;
+                    final parentContext = context;
+                    showModalBottomSheet(
+                      context: parentContext,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.white,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(16),
+                        ),
+                      ),
+                      builder: (sheetContext) => DraggableScrollableSheet(
+                        expand: false,
+                        initialChildSize: 0.85,
+                        minChildSize: 0.5,
+                        maxChildSize: 0.95,
+                        builder: (ctx, scrollCtrl) => Column(
+                          children: [
+                            const SizedBox(height: 12),
+                            Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.black12,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Bids for ${g['category']}',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: FundipapColors.primaryYellow,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      '$bidCount ${bidCount == 1 ? 'bid' : 'bids'}',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                controller: scrollCtrl,
+                                padding: const EdgeInsets.all(12),
+                                child: PendingBidList(
+                                  jobId: g['jobId'].toString(),
+                                  job: job,
+                                  filter: FilterType.all,
+                                  userPos: null,
+                                  parentContextForNav: parentContext,
+                                  sheetContextForClose: sheetContext,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            }
+
+            // === ACTIVE JOBS ===
             var status = (job['status'] ?? '').toString();
             bool isCompleted = status == 'completed';
-            Color borderCol = isCompleted ? Colors.green : Colors.orange.shade700;
+            Color borderCol = isCompleted
+                ? Colors.green
+                : Colors.orange.shade700;
 
             return Container(
               margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderCol, width: 1.5)),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderCol, width: 1.5),
+              ),
               child: Column(
                 children: [
                   ListTile(
@@ -182,7 +475,14 @@ class CustomerNotificationsSection extends StatelessWidget {
                         CircleAvatar(
                           radius: 20,
                           backgroundColor: FundipapColors.blackGray,
-                          child: Text(((g['fundiName'] ?? 'F').toString())[0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                          child: Text(
+                            ((g['fundiName'] ?? 'F').toString())[0]
+                                .toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                         if (badgeCount > 0)
                           Positioned(
@@ -190,31 +490,72 @@ class CustomerNotificationsSection extends StatelessWidget {
                             bottom: -4,
                             child: Container(
                               padding: const EdgeInsets.all(5),
-                              decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
-                              child: Text('$badgeCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Text(
+                                '$badgeCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                             ),
                           ),
                       ],
                     ),
-                    title: Text((g['category'] ?? 'Job').toString(), style: GoogleFonts.montserrat(fontWeight: FontWeight.w800, fontSize: 12)),
-                    subtitle: Text((g['fundiName'] ?? 'Fundi').toString(), style: GoogleFonts.inter(fontSize: 11)),
+                    title: Text(
+                      (g['category'] ?? 'Job').toString(),
+                      style: GoogleFonts.montserrat(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                      ),
+                    ),
+                    subtitle: Text(
+                      (g['fundiName'] ?? 'Fundi').toString(),
+                      style: GoogleFonts.inter(fontSize: 11),
+                    ),
                     trailing: const Icon(Icons.chevron_right, size: 18),
                     onTap: () async {
                       await onMarkRead(fundiKey);
                       if (!context.mounted) return;
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => CustomerFundiTimelinePage(jobId: g['jobId'].toString(), fundiName: g['fundiName'].toString(), trade: g['category'].toString(), jobData: job)),
+                        MaterialPageRoute(
+                          builder: (_) => CustomerFundiTimelinePage(
+                            jobId: g['jobId'].toString(),
+                            fundiName: g['fundiName'].toString(),
+                            trade: g['category'].toString(),
+                            jobData: job,
+                          ),
+                        ),
                       );
                     },
                   ),
-                  Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: HomeStatusWidget(job: job, parentContext: context)),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    child: HomeStatusWidget(job: job, parentContext: context),
+                  ),
                 ],
               ),
             );
           }),
           if (groupedList.length > 5)
-            Padding(padding: const EdgeInsets.only(bottom: 12), child: Center(child: Text('${groupedList.length - 5} more notifications', style: GoogleFonts.inter(fontSize: 11, color: Colors.black45)))),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Center(
+                child: Text(
+                  '${groupedList.length - 5} more notifications',
+                  style: GoogleFonts.inter(fontSize: 11, color: Colors.black45),
+                ),
+              ),
+            ),
         ],
       ),
     );
