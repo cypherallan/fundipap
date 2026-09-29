@@ -10,7 +10,7 @@ import 'customer_home_header.dart';
 import 'models/customer_home_models.dart';
 import 'helpers/customer_home_utils.dart';
 import 'widgets/customer_notifications_section.dart';
-import 'widgets/customer_pending_section.dart';
+import '../home/widgets/pending/pending_section.dart';
 
 class CustomerHome extends StatefulWidget {
   const CustomerHome({super.key});
