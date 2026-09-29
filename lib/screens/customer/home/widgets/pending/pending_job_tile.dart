@@ -6,6 +6,7 @@ import '../../../../../theme/app_theme.dart';
 import '../../models/customer_home_models.dart';
 import '../../helpers/customer_home_utils.dart';
 import 'pending_bid_list.dart';
+import '../../../post_new_job_screen.dart';
 
 class PendingJobTile extends StatelessWidget {
   final QueryDocumentSnapshot jobDoc;
@@ -18,6 +19,52 @@ class PendingJobTile extends StatelessWidget {
     required this.filter,
     required this.userPos,
   });
+
+  Future<void> _confirmDelete(BuildContext context, String jobId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(
+          'Delete Job?',
+          style: GoogleFonts.montserrat(
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to delete this job?',
+          style: GoogleFonts.inter(fontSize: 12),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.w600),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Yes',
+              style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      deleteJob(jobId);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +81,7 @@ class PendingJobTile extends StatelessWidget {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          tilePadding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          tilePadding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
           childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           leading: Container(
             width: 44,
@@ -111,14 +158,50 @@ class PendingJobTile extends StatelessWidget {
               ],
             ),
           ),
-          trailing: PopupMenuButton(
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                child: Text('Delete', style: GoogleFonts.inter()),
-                onTap: () => deleteJob(jobId),
+          // EDIT + DELETE ICONS INSTEAD OF 3 DOTS
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          PostNewJobScreen(jobId: jobId, existingJob: job),
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F1F1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.edit_outlined, size: 18),
+                ),
               ),
+              const SizedBox(width: 6),
+              InkWell(
+                onTap: () => _confirmDelete(context, jobId),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFEAEA),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: Colors.red,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.expand_more, size: 20),
             ],
-            icon: const Icon(Icons.more_horiz),
           ),
           children: [
             const Divider(height: 1),

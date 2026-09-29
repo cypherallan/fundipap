@@ -157,11 +157,12 @@ class _CustomerHomeState extends State<CustomerHome> {
         .collection('users')
         .doc(uid)
         .get();
-    if (doc.exists && mounted)
+    if (doc.exists && mounted) {
       setState(() {
         _me = doc.data();
         _profilePct = calcProfilePct(_me);
       });
+    }
   }
 
   Future<void> _loadCompletedCount() async {
@@ -184,8 +185,9 @@ class _CustomerHomeState extends State<CustomerHome> {
         return;
       }
       LocationPermission perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied)
+      if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
+      }
       if (perm == LocationPermission.deniedForever ||
           perm == LocationPermission.denied) {
         if (mounted) setState(() => _loadingLoc = false);
@@ -194,11 +196,12 @@ class _CustomerHomeState extends State<CustomerHome> {
       Position pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _userPos = pos;
           _loadingLoc = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingLoc = false);
     }
@@ -356,9 +359,10 @@ class _CustomerHomeState extends State<CustomerHome> {
       );
     Map<String, int> fundiUnreadCounts = {};
     for (var g in list) {
-      if (g['isRead'] == false)
+      if (g['isRead'] == false) {
         fundiUnreadCounts[g['fundiId'].toString()] =
             (fundiUnreadCounts[g['fundiId'].toString()] ?? 0) + 1;
+      }
     }
     int totalTabCounter = fundiUnreadCounts.values.fold(0, (a, b) => a + b);
 
