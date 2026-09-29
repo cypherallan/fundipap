@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
 import 'customer_home_status.dart';
 import '../../confirm/confirm_fundi_page.dart';
-import '../customer_fundi_timeline_page.dart';
+import '../timeline/customer_fundi_timeline_page.dart';
 
 class CustomerNotificationsSection extends StatelessWidget {
   final List<Map<String, dynamic>> groupedList;
@@ -96,9 +96,13 @@ class CustomerNotificationsSection extends StatelessWidget {
               ),
             ),
           ...groupedList.take(5).map((g) {
-            String fundiKey = g['fundiId'] as String;
+            String fundiKey = (g['fundiId'] ?? '').toString();
             int badgeCount = fundiUnreadCounts[fundiKey] ?? 0;
-            var job = g['jobData'] as Map<String, dynamic>;
+            // SAFE CAST - fixes _Map<dynamic,dynamic> error
+            final job = Map<String, dynamic>.from(g['jobData'] as Map);
+            final bidData = g['bidData'] != null
+                ? Map<String, dynamic>.from(g['bidData'] as Map)
+                : <String, dynamic>{};
             var status = (job['status'] ?? '').toString();
             bool isCompleted = status == 'completed';
             Color borderCol = isCompleted
@@ -122,7 +126,8 @@ class CustomerNotificationsSection extends StatelessWidget {
                           radius: 20,
                           backgroundColor: FundipapColors.blackGray,
                           child: Text(
-                            (g['fundiName'] as String)[0].toUpperCase(),
+                            ((g['fundiName'] ?? 'F').toString())[0]
+                                .toUpperCase(),
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
@@ -156,14 +161,14 @@ class CustomerNotificationsSection extends StatelessWidget {
                       ],
                     ),
                     title: Text(
-                      g['category'],
+                      (g['category'] ?? 'Job').toString(),
                       style: GoogleFonts.montserrat(
                         fontWeight: FontWeight.w800,
                         fontSize: 12,
                       ),
                     ),
                     subtitle: Text(
-                      g['fundiName'],
+                      (g['fundiName'] ?? 'Fundi').toString(),
                       style: GoogleFonts.inter(fontSize: 11),
                     ),
                     trailing: const Icon(Icons.chevron_right, size: 18),
@@ -175,10 +180,10 @@ class CustomerNotificationsSection extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                             builder: (_) => ConfirmFundiPage(
-                              jobId: g['jobId'],
-                              jobData: g['jobData'],
-                              bidId: g['bidId'],
-                              bidData: g['bidData'],
+                              jobId: g['jobId'].toString(),
+                              jobData: job,
+                              bidId: g['bidId'].toString(),
+                              bidData: bidData,
                             ),
                           ),
                         );
@@ -187,10 +192,10 @@ class CustomerNotificationsSection extends StatelessWidget {
                             context,
                             MaterialPageRoute(
                               builder: (_) => CustomerFundiTimelinePage(
-                                jobId: g['jobId'],
-                                fundiName: g['fundiName'],
-                                trade: g['category'],
-                                jobData: g['jobData'],
+                                jobId: g['jobId'].toString(),
+                                fundiName: g['fundiName'].toString(),
+                                trade: g['category'].toString(),
+                                jobData: job,
                               ),
                             ),
                           );
@@ -200,10 +205,10 @@ class CustomerNotificationsSection extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                             builder: (_) => CustomerFundiTimelinePage(
-                              jobId: g['jobId'],
-                              fundiName: g['fundiName'],
-                              trade: g['category'],
-                              jobData: g['jobData'],
+                              jobId: g['jobId'].toString(),
+                              fundiName: g['fundiName'].toString(),
+                              trade: g['category'].toString(),
+                              jobData: job,
                             ),
                           ),
                         );

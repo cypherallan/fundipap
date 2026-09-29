@@ -10,7 +10,7 @@ import 'customer_home_header.dart';
 import 'models/customer_home_models.dart';
 import 'helpers/customer_home_utils.dart';
 import 'widgets/customer_notifications_section.dart';
-import '../home/widgets/pending/pending_section.dart';
+import 'widgets/pending/pending_section.dart';
 
 class CustomerHome extends StatefulWidget {
   const CustomerHome({super.key});
@@ -44,7 +44,6 @@ class _CustomerHomeState extends State<CustomerHome> {
     });
   }
 
-  // ===== LISTENERS =====
   void _initNotificationListeners() {
     var uid = FirebaseAuth.instance.currentUser!.uid;
     _jobsSub?.cancel();
@@ -69,13 +68,15 @@ class _CustomerHomeState extends State<CustomerHome> {
                 .listen((bidsSnap) {
                   _bids.removeWhere((b) => b['jobId'] == jobId);
                   for (var b in bidsSnap.docs) {
-                    var bid = b.data();
+                    var bidRaw = b.data();
+                    var bid = Map<String, dynamic>.from(bidRaw);
                     if (bid['deletedForFundi'] == true) continue;
+                    var jobRaw = jobDoc.data();
                     _bids.add({
                       'jobId': jobId,
                       'bidId': b.id,
-                      'jobTitle': jobDoc.data()['title'] ?? '',
-                      'jobData': jobDoc.data(),
+                      'jobTitle': jobRaw['title'] ?? '',
+                      'jobData': Map<String, dynamic>.from(jobRaw),
                       'bidData': bid,
                       'fundiName': bid['fundiName'] ?? 'Fundi',
                       'fundiId': (bid['fundiId'] ?? bid['fundiName'])
@@ -134,7 +135,7 @@ class _CustomerHomeState extends State<CustomerHome> {
         );
       }
       for (var d in _activeJobs) {
-        var j = d.data() as Map<String, dynamic>;
+        var j = Map<String, dynamic>.from(d.data() as Map);
         var assignedKey = (j['assignedFundiId'] ?? j['assignedFundiName'] ?? '')
             .toString();
         if (assignedKey == fundiKey) {
@@ -220,7 +221,7 @@ class _CustomerHomeState extends State<CustomerHome> {
       final Map<String, QueryDocumentSnapshot> map = {};
       for (var d in [...snap1.docs, ...snap2.docs]) map[d.id] = d;
       final unrated = map.values.where((d) {
-        var data = d.data() as Map<String, dynamic>;
+        var data = Map<String, dynamic>.from(d.data() as Map);
         bool notRated = data['clientRated'] != true;
         bool released =
             (data['escrowStatus'] ?? '') == 'released' ||
@@ -233,7 +234,7 @@ class _CustomerHomeState extends State<CustomerHome> {
       }).toList();
       if (unrated.isNotEmpty && mounted) {
         var first = unrated.first;
-        var data = first.data() as Map<String, dynamic>;
+        var data = Map<String, dynamic>.from(first.data() as Map);
         String fundiId = (data['fundiId'] ?? data['assignedFundiId'] ?? '')
             .toString()
             .trim();
@@ -276,25 +277,29 @@ class _CustomerHomeState extends State<CustomerHome> {
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
-    // Group notifications for header
     final activeJobIds = _activeJobs.map((d) => d.id).toSet();
     Map<String, Map<String, dynamic>> grouped = {};
     for (var b in _bids) {
       if (activeJobIds.contains(b['jobId'])) continue;
       String key = "${b['jobId']}_${b['fundiId']}";
+      var jobDataRaw = b['jobData'] as Map;
+      var jobDataSafe = Map<String, dynamic>.from(jobDataRaw);
+      // If job already completed, don't show bid notification at all
+      if ((jobDataSafe['status'] ?? '').toString() == 'completed') continue;
+      var bidDataSafe = Map<String, dynamic>.from(b['bidData'] as Map);
       grouped[key] = {
-        'jobId': b['jobId'],
-        'fundiName': b['fundiName'],
-        'fundiId': b['fundiId'],
+        'jobId': b['jobId'].toString(),
+        'fundiName': (b['fundiName'] ?? 'Fundi').toString(),
+        'fundiId': (b['fundiId'] ?? '').toString(),
         'category':
-            (b['jobData']['title'] ??
+            (jobDataSafe['title'] ??
                     b['jobTitle'] ??
-                    b['jobData']['category'] ??
+                    jobDataSafe['category'] ??
                     'Job')
                 .toString(),
-        'jobData': {...b['jobData'], 'jobId': b['jobId']},
-        'bidData': b['bidData'],
-        'bidId': b['bidId'],
+        'jobData': {...jobDataSafe, 'jobId': b['jobId'].toString()},
+        'bidData': bidDataSafe,
+        'bidId': b['bidId'].toString(),
         'latestAt': (b['createdAt'] is Timestamp)
             ? (b['createdAt'] as Timestamp).toDate()
             : DateTime.now(),
@@ -304,7 +309,9 @@ class _CustomerHomeState extends State<CustomerHome> {
       };
     }
     for (var doc in _activeJobs) {
-      var job = doc.data() as Map<String, dynamic>;
+      var job = Map<String, dynamic>.from(doc.data() as Map);
+      // === FIX: REMOVE COMPLETELY WHEN CLIENT MARKS COMPLETED ===
+      if ((job['status'] ?? '').toString() == 'completed') continue;
       var fundiId =
           (job['assignedFundiId'] ?? job['assignedFundiName'] ?? 'Fundi')
               .toString();
@@ -329,8 +336,8 @@ class _CustomerHomeState extends State<CustomerHome> {
     Map<String, int> fundiUnreadCounts = {};
     for (var g in list) {
       if (g['isRead'] == false)
-        fundiUnreadCounts[g['fundiId']] =
-            (fundiUnreadCounts[g['fundiId']] ?? 0) + 1;
+        fundiUnreadCounts[g['fundiId'].toString()] =
+            (fundiUnreadCounts[g['fundiId'].toString()] ?? 0) + 1;
     }
     int totalTabCounter = fundiUnreadCounts.values.fold(0, (a, b) => a + b);
 
