@@ -7,9 +7,9 @@ import '../post_new_job_screen.dart';
 import 'post_job_crud_actions.dart';
 import 'post_job_bidding_actions.dart';
 import 'post_job_escrow_actions.dart';
-import 'post_job_confirmed_tab.dart';
-import 'post_job_rejected_tab.dart';
-import 'post_job_completed_tab.dart';
+import 'client_confirmed_tab.dart';
+import 'client_rejected_tab.dart';
+import 'client_completed_tab.dart';
 import 'client_cancelled_tab.dart';
 
 class PostJobScreen extends StatefulWidget {

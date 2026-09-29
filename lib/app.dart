@@ -10,11 +10,11 @@ import 'screens/customer/my_jobs/post_job_screen.dart';
 import 'screens/customer/disputes_screen.dart';
 import 'screens/fundi/home/fundi_home.dart';
 import 'screens/fundi/home/fundi_notifications_page.dart';
-import 'screens/fundi/disputes_screen.dart' as fundi_disputes;
+import 'screens/fundi/fundi_disputes_screen.dart' as fundi_disputes;
 import 'services/auth_service.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/fundi/fundi_profile.dart';
-import 'screens/fundi/my_jobs/my_jobs_page.dart';
+import 'screens/fundi/my_jobs/fundi_my_jobs_page.dart';
 import 'screens/admin/admin_screen.dart';
 
 class FundiPapApp extends StatelessWidget {

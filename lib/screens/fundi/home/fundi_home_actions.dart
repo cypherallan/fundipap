@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../services/location_service.dart';
-import 'logic.dart';
+import 'fundi_home_logic.dart';
 import 'fundi_bid_dialog.dart';
 import '../../../services/fundi_penalty_service.dart';
 

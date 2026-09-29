@@ -4,8 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../theme/app_theme.dart';
-import 'add_part_receipt.dart';
-import 'request_new_price.dart';
+import 'fundi_add_part_receipt.dart';
+import 'fundi_request_new_price_screen.dart';
 import '../../../services/job_cancel_service.dart'; // <-- NEW
 
 class FundiConfirmedTab extends StatelessWidget {

@@ -5,7 +5,7 @@ import '../../../theme/app_theme.dart';
 import 'fundi_home_actions.dart';
 import 'fundi_home_header_section.dart';
 import 'fundi_home_jobs_tab.dart';
-import 'completed_wrapper.dart';
+import 'fundi_completed_wrapper.dart';
 import '../../chats/chat_list_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';

@@ -2,10 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'actions.dart';
-import 'pending_tab.dart';
+import 'fundi_my_jobs_actions.dart';
+import 'fundi_pending_tab.dart';
 import 'fundi_confirmed_tab.dart';
-import 'rejected_tab.dart';
+import 'fundi_rejected_tab.dart';
 import 'fundi_completed_tab.dart';
 import 'fundi_cancelled_tab.dart'; // <-- NEW
 
