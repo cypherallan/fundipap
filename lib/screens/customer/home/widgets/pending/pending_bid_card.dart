@@ -4,24 +4,37 @@ import '../../../../../theme/app_theme.dart';
 import '../../../../../widgets/fundi_badge_chip.dart';
 import '../../models/customer_home_models.dart';
 import '../../../confirm/confirm_fundi_page.dart';
+import '../../timeline/customer_fundi_timeline_page.dart';
 
 class PendingBidCard extends StatelessWidget {
   final BidWithFundi bid;
   final String jobId;
   final Map<String, dynamic> jobData;
+  final BuildContext? parentContextForNav;
+  final BuildContext? sheetContextForClose;
 
   const PendingBidCard({
     super.key,
     required this.bid,
     required this.jobId,
     required this.jobData,
+    this.parentContextForNav,
+    this.sheetContextForClose,
   });
 
   @override
   Widget build(BuildContext context) {
-    void openConfirm() {
-      Navigator.push(
-        context,
+    Future<void> openConfirm() async {
+      // 1. If opened from Notifications bottom sheet, close sheet first
+      if (sheetContextForClose != null && sheetContextForClose!.mounted) {
+        Navigator.pop(sheetContextForClose!);
+      }
+
+      final navContext = parentContextForNav ?? context;
+
+      // 2. Open Confirm from HOME context, not sheet context
+      final confirmed = await Navigator.push<bool>(
+        navContext,
         MaterialPageRoute(
           builder: (_) => ConfirmFundiPage(
             jobId: jobId,
@@ -31,6 +44,22 @@ class PendingBidCard extends StatelessWidget {
           ),
         ),
       );
+
+      // 3. After confirm, replace Confirm with Timeline -> back = Home
+      if (confirmed == true && navContext.mounted) {
+        Navigator.pushReplacement(
+          navContext,
+          MaterialPageRoute(
+            builder: (_) => CustomerFundiTimelinePage(
+              jobId: jobId,
+              fundiName: bid.bid['fundiName'] ?? 'Fundi',
+              trade: (jobData['category'] ?? jobData['title'] ?? 'Job')
+                  .toString(),
+              jobData: jobData,
+            ),
+          ),
+        );
+      }
     }
 
     String distanceText = bid.distanceKm > 0
@@ -155,6 +184,7 @@ class PendingBidCard extends StatelessWidget {
                       ),
                       side: const BorderSide(color: Colors.black12),
                     ),
+                    onPressed: openConfirm,
                     child: Text(
                       'Counter',
                       style: GoogleFonts.montserrat(
@@ -163,7 +193,6 @@ class PendingBidCard extends StatelessWidget {
                         color: Colors.black,
                       ),
                     ),
-                    onPressed: openConfirm,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -177,14 +206,14 @@ class PendingBidCard extends StatelessWidget {
                       ),
                       elevation: 0,
                     ),
+                    onPressed: openConfirm,
                     child: Text(
-                      'View & Accept',
+                      'View Fundi & Accept',
                       style: GoogleFonts.montserrat(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    onPressed: openConfirm,
                   ),
                 ),
               ],

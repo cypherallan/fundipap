@@ -12,6 +12,8 @@ class PendingBidList extends StatelessWidget {
   final Map<String, dynamic> job;
   final FilterType filter;
   final Position? userPos;
+  final BuildContext? parentContextForNav;
+  final BuildContext? sheetContextForClose;
 
   const PendingBidList({
     super.key,
@@ -19,6 +21,8 @@ class PendingBidList extends StatelessWidget {
     required this.job,
     required this.filter,
     required this.userPos,
+    this.parentContextForNav,
+    this.sheetContextForClose,
   });
 
   @override
@@ -92,7 +96,13 @@ class PendingBidList extends StatelessWidget {
             return Column(
               children: filtered
                   .map(
-                    (e) => PendingBidCard(bid: e, jobId: jobId, jobData: job),
+                    (e) => PendingBidCard(
+                      bid: e,
+                      jobId: jobId,
+                      jobData: job,
+                      parentContextForNav: parentContextForNav,
+                      sheetContextForClose: sheetContextForClose,
+                    ),
                   )
                   .toList(),
             );
