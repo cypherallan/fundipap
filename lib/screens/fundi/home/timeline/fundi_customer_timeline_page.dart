@@ -206,10 +206,11 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
           .doc(widget.jobId)
           .snapshots(),
       builder: (context, jobSnap) {
-        if (!jobSnap.hasData)
+        if (!jobSnap.hasData) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
+        }
         var job = jobSnap.data!.data() as Map<String, dynamic>;
         var status = (job['status'] ?? '').toString().toLowerCase();
         var escrowStatus = (job['escrowStatus'] ?? 'pending')
@@ -264,10 +265,11 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
               .where('fundiId', isEqualTo: uid)
               .snapshots(),
           builder: (context, bidsSnap) {
-            if (!bidsSnap.hasData)
+            if (!bidsSnap.hasData) {
               return const Scaffold(
                 body: Center(child: CircularProgressIndicator()),
               );
+            }
             if (bidsSnap.data!.docs.isEmpty) {
               List<Widget> timeline = [];
               timeline.add(
@@ -276,7 +278,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                   message: '${widget.jobTitle} • ${widget.clientName}',
                 ),
               );
-              if (escrowDone)
+              if (escrowDone) {
                 timeline.add(
                   _greenCard(
                     title: 'Escrow locked - Done KES $fundiSees',
@@ -284,7 +286,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                         'Labour KES $labour + Transport KES $transport = KES $fundiSees locked',
                   ),
                 );
-              else
+              } else {
                 timeline.add(
                   OrangeAnimatedWaitingCard(
                     title: 'Waiting for client to pay KES $fundiSees to escrow',
@@ -292,6 +294,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                         'Client ${widget.clientName} has not locked money yet',
                   ),
                 );
+              }
               return Scaffold(
                 appBar: AppBar(
                   leading: IconButton(
@@ -316,7 +319,9 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
 
             var bidDoc = bidsSnap.data!.docs.first;
             var bid = bidDoc.data() as Map<String, dynamic>;
-            int myBidPrice = _toInt(bid['price'] ?? 0);
+            int myBidPrice = _toInt(
+              bid['price'] ?? bid['amount'] ?? bid['bidPrice'] ?? 0,
+            );
 
             return StreamBuilder<QuerySnapshot>(
               stream: bidDoc.reference
@@ -352,7 +357,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                               waitingState?.type ==
                                   FundiWaitingType.myCounter)))
                     continue;
-                  if (by != uid)
+                  if (by != uid) {
                     doneHistory.add(
                       _greenCard(
                         title: 'Client countered - KES $price - Done',
@@ -361,7 +366,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                         icon: Icons.compare_arrows,
                       ),
                     );
-                  else
+                  } else {
                     doneHistory.add(
                       _greenCard(
                         title: 'You countered - KES $price - Done',
@@ -369,6 +374,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                         icon: Icons.compare_arrows,
                       ),
                     );
+                  }
                 }
 
                 if (waitingState == null ||

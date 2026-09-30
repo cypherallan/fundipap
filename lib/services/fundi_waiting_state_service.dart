@@ -26,11 +26,15 @@ class FundiWaitingState {
   String get notificationCategory => title;
 }
 
-int _toInt(dynamic v) {
-  if (v == null) return 0;
+int _toInt(dynamic v, [int fb = 0]) {
+  if (v == null) return fb;
   if (v is int) return v;
   if (v is double) return v.toInt();
-  return int.tryParse(v.toString()) ?? 0;
+  if (v is num) return v.toInt();
+  // handles "KES 1,500", "1500.0", etc
+  String s = v.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+  if (s.isEmpty) return fb;
+  return int.tryParse(s.split('.').first) ?? fb;
 }
 
 bool _toBool(dynamic v) {
@@ -97,8 +101,19 @@ FundiWaitingState? getFundiWaitingState({
   }
 
   // 2. Bid sent
+  // 2. Bid sent
   if (bidStatus == 'pending' || bidStatus == 'sent' || bidStatus == '') {
-    int p = _toInt(bid['price']);
+    int p = _toInt(
+      bid['price'] ??
+          bid['amount'] ??
+          bid['bidPrice'] ??
+          bid['proposedPrice'] ??
+          bid['laborCost'] ??
+          job['laborCost'] ??
+          job['agreedPrice'] ??
+          job['price'] ??
+          0,
+    );
     return FundiWaitingState(
       type: FundiWaitingType.bidSent,
       title: 'Bid sent - KES $p - Waiting for client to react',
