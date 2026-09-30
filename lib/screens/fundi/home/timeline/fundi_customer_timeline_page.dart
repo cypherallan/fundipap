@@ -440,6 +440,29 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                   switch (waitingState.type) {
                     case FundiWaitingType.clientCounter:
                       int clientCounterAmt = waitingState.price;
+                      final renego =
+                          job['renegotiation'] as Map<String, dynamic>?;
+                      final bool isRenegoCounter =
+                          renego != null &&
+                          (renego['status'] == 'countered_by_client' ||
+                              renego['status'] == 'countered');
+
+                      int myExtraBid = _toInt(
+                        renego?['counteredExtraRequested'] ??
+                            renego?['extraLabor'] ??
+                            0,
+                      );
+                      int clientExtraCounter = _toInt(
+                        renego?['counterExtraLabor'] ?? 0,
+                      );
+                      int displayClientAmt =
+                          isRenegoCounter && clientExtraCounter > 0
+                          ? clientExtraCounter
+                          : clientCounterAmt;
+                      int displayMyBid = isRenegoCounter && myExtraBid > 0
+                          ? myExtraBid
+                          : myBidPrice;
+
                       currentWaiting = Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
@@ -462,7 +485,9 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    'Client countered your labour charges',
+                                    isRenegoCounter
+                                        ? 'Client countered your extra labour'
+                                        : 'Client countered your labour charges',
                                     style: GoogleFonts.montserrat(
                                       fontWeight: FontWeight.w800,
                                       fontSize: 13,
@@ -483,7 +508,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
-                                'Client countered: KES $clientCounterAmt (Your bid KES $myBidPrice)',
+                                'Client countered: KES $displayClientAmt (Your bid KES $displayMyBid)',
                                 style: GoogleFonts.inter(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
@@ -497,12 +522,24 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                                 Expanded(
                                   child: OutlinedButton(
                                     onPressed: () async {
-                                      await bidDoc.reference.update({
-                                        'status': 'rejected',
-                                        'rejectedBy': uid,
-                                        'rejectedAt':
-                                            FieldValue.serverTimestamp(),
-                                      });
+                                      if (isRenegoCounter) {
+                                        await FirebaseFirestore.instance
+                                            .collection('jobs')
+                                            .doc(widget.jobId)
+                                            .update({
+                                              'renegotiation.status':
+                                                  'rejected_by_fundi',
+                                              'renegotiation.rejectedAt':
+                                                  FieldValue.serverTimestamp(),
+                                            });
+                                      } else {
+                                        await bidDoc.reference.update({
+                                          'status': 'rejected',
+                                          'rejectedBy': uid,
+                                          'rejectedAt':
+                                              FieldValue.serverTimestamp(),
+                                        });
+                                      }
                                     },
                                     child: Text(
                                       'Reject',
@@ -519,7 +556,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                                     onPressed: () => counterAsFundi(
                                       bidDoc.reference,
                                       widget.jobId,
-                                      clientCounterAmt.toDouble(),
+                                      displayClientAmt.toDouble(),
                                     ),
                                     child: Text(
                                       'Counter',
@@ -538,47 +575,53 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                                           FundipapColors.greenSuccess,
                                     ),
                                     onPressed: () async {
-                                      await bidDoc.reference.update({
-                                        'status': 'accepted',
-                                        'agreedPrice': clientCounterAmt,
-                                        'price': clientCounterAmt,
-                                        'lastCounterPrice': clientCounterAmt,
-                                        'lastCounterAmount': clientCounterAmt,
-                                        'acceptedAt':
-                                            FieldValue.serverTimestamp(),
-                                      });
-                                      await FirebaseFirestore.instance
-                                          .collection('jobs')
-                                          .doc(widget.jobId)
-                                          .update({
-                                            'status': 'assigned',
-                                            'assignedFundiId': uid,
-                                            'agreedPrice': clientCounterAmt,
-                                            'price': clientCounterAmt,
-                                            'escrowStatus':
-                                                'pending', // FIX: reset so orange waiting shows, not green
-                                            'escrowAmount': FieldValue.delete(),
-                                            'travelling': false,
-                                            'siteVisitDone': false,
-                                            'siteVisited': false,
-                                            'renegotiation': {
-                                              'requested': false,
-                                            },
-                                            'priceHistory': FieldValue.arrayUnion(
-                                              [
-                                                {
-                                                  'price': clientCounterAmt,
-                                                  'by': uid,
-                                                  'type':
-                                                      'accepted_client_counter',
-                                                  'at': DateTime.now()
-                                                      .toIso8601String(),
-                                                },
-                                              ],
-                                            ),
-                                            'updatedAt':
-                                                FieldValue.serverTimestamp(),
-                                          });
+                                      if (isRenegoCounter) {
+                                        await FirebaseFirestore.instance
+                                            .collection('jobs')
+                                            .doc(widget.jobId)
+                                            .update({
+                                              'renegotiation.status':
+                                                  'approved',
+                                              'renegotiation.approvedAt':
+                                                  FieldValue.serverTimestamp(),
+                                              'laborCost': _toInt(
+                                                renego['counterLabor'] ?? 6000,
+                                              ),
+                                              'renegotiation.requested': false,
+                                              'status': 'assigned',
+                                              'escrowStatus': 'pending',
+                                              'updatedAt':
+                                                  FieldValue.serverTimestamp(),
+                                            });
+                                      } else {
+                                        await bidDoc.reference.update({
+                                          'status': 'accepted',
+                                          'agreedPrice': clientCounterAmt,
+                                          'price': clientCounterAmt,
+                                          'acceptedAt':
+                                              FieldValue.serverTimestamp(),
+                                        });
+                                        await FirebaseFirestore.instance
+                                            .collection('jobs')
+                                            .doc(widget.jobId)
+                                            .update({
+                                              'status': 'assigned',
+                                              'assignedFundiId': uid,
+                                              'agreedPrice': clientCounterAmt,
+                                              'price': clientCounterAmt,
+                                              'escrowStatus': 'pending',
+                                              'escrowAmount':
+                                                  FieldValue.delete(),
+                                              'travelling': false,
+                                              'siteVisitDone': false,
+                                              'siteVisited': false,
+                                              'renegotiation': {
+                                                'requested': false,
+                                              },
+                                              'updatedAt':
+                                                  FieldValue.serverTimestamp(),
+                                            });
+                                      }
                                     },
                                     child: const Text(
                                       'Accept',
@@ -595,15 +638,35 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                         ),
                       );
                       break;
-                    case FundiWaitingType.myCounter:
+
                     case FundiWaitingType.bidSent:
+                      currentWaiting = OrangeAnimatedWaitingCard(
+                        title: waitingState.title,
+                        message: waitingState.message,
+                      );
+                      break;
+
+                    case FundiWaitingType.myCounter:
+                      currentWaiting = OrangeAnimatedWaitingCard(
+                        title: waitingState.title,
+                        message: waitingState.message,
+                      );
+                      break;
+
                     case FundiWaitingType.waitingEscrow:
+                      currentWaiting = OrangeAnimatedWaitingCard(
+                        title: waitingState.title,
+                        message: waitingState.message,
+                      );
+                      break;
+
                     case FundiWaitingType.waitingNewPriceApproval:
                       currentWaiting = OrangeAnimatedWaitingCard(
                         title: waitingState.title,
                         message: waitingState.message,
                       );
                       break;
+
                     case FundiWaitingType.escrowLocked:
                       currentWaiting = fundiCard(
                         color: Colors.white,
@@ -634,6 +697,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                         ),
                       );
                       break;
+
                     case FundiWaitingType.travelling:
                       currentWaiting = fundiCard(
                         color: Colors.blue.shade50,
@@ -659,6 +723,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                         ),
                       );
                       break;
+
                     case FundiWaitingType.siteVisited:
                       currentWaiting = Container(
                         padding: const EdgeInsets.all(14),

@@ -38,7 +38,12 @@ bool _toBool(dynamic v, [bool fb = false]) {
   if (v == null) return fb;
   if (v is bool) return v;
   if (v is int) return v != 0;
-  if (v is String) return v.toLowerCase() == 'true' || v == '1';
+  if (v is double) return v != 0;
+  if (v is String) {
+    String l = v.toLowerCase();
+    if (l == 'true' || l == '1' || l == 'yes') return true;
+    if (l == 'false' || l == '0' || l == 'no') return false;
+  }
   if (v is Timestamp) return true;
   return fb;
 }
@@ -78,53 +83,51 @@ FundiWaitingState? getFundiWaitingState({
           jobStatus == 'travelling' ||
           jobStatus == 'on_the_way');
 
-  var renego = job['renegotiation'] as Map<String, dynamic>?;
+  // SAFE CAST - renegotiation can be null or map
+  Map<String, dynamic>? renego;
+  var rawRenego = job['renegotiation'];
+  if (rawRenego is Map) {
+    renego = Map<String, dynamic>.from(rawRenego);
+  }
+
   String renegoStatus = (renego?['status'] ?? '').toString().toLowerCase();
+  // FIX: use _toBool - handles true/false/1/0
+  bool renegoRequested = _toBool(renego?['requested']);
   bool renegoPending =
-      renego != null &&
-      renego['requested'] == true &&
-      renegoStatus == 'pending';
+      renego != null && renegoRequested && renegoStatus == 'pending';
   bool renegoCountered =
       renegoStatus == 'countered_by_client' || renegoStatus == 'countered';
 
   if (renegoCountered) {
     int requestedExtra = _toInt(
-      renego?['extraLabor'] ?? renego?['pendingLabor'] ?? renego?['extra'] ?? 0,
-    );
-    int counterExtra = _toInt(
-      renego?['counterExtraLabor'] ??
-          renego?['counterLabor'] ??
-          renego?['counterExtra'] ??
-          renego?['clientCounterExtra'] ??
+      renego?['counteredExtraRequested'] ??
+          renego?['extraLabor'] ??
+          renego?['pendingLabor'] ??
           0,
     );
+    int counterExtra = _toInt(renego?['counterExtraLabor'] ?? 0);
     if (counterExtra == 0) {
-      int counterToLock = _toInt(
-        renego?['counterExtraToLock'] ?? renego?['counterToLock'] ?? 0,
-      );
-      if (counterToLock > 0) counterExtra = (counterToLock / 1.05).round();
+      int toLock = _toInt(renego?['counterExtraToLock'] ?? 0);
+      if (toLock > 0) counterExtra = (toLock / 1.05).round();
     }
+    if (counterExtra > labour) counterExtra = counterExtra - labour;
     return FundiWaitingState(
       type: FundiWaitingType.clientCounter,
       title:
           'Client countered your extra KES $requestedExtra to KES $counterExtra',
       message:
-          'Client countered extra: KES $counterExtra (you asked KES $requestedExtra). Tap to Accept / Counter / Reject',
+          'Client countered extra: KES $counterExtra (you asked KES $requestedExtra)',
       price: counterExtra,
     );
   }
 
   if (renegoPending) {
     int extra = _toInt(
-      renego['extraLabor'] ??
-          renego['pendingLabor'] ??
-          renego['newLaborExtra'] ??
-          renego['extra'] ??
-          0,
+      renego['extraLabor'] ?? renego['pendingLabor'] ?? renego['extra'] ?? 0,
     );
     if (extra == 0) {
-      int extraToLock = _toInt(renego['extraToLock'] ?? 0);
-      if (extraToLock > 0) extra = (extraToLock / 1.05).round();
+      int toLock = _toInt(renego['extraToLock'] ?? 0);
+      if (toLock > 0) extra = (toLock / 1.05).round();
     }
     return FundiWaitingState(
       type: FundiWaitingType.waitingNewPriceApproval,
@@ -184,7 +187,11 @@ FundiWaitingState? getFundiWaitingState({
   int needExtra = needsTopup ? fundiSees - lockedAmount : 0;
   if (needExtra > 0) {
     int pureExtra = _toInt(
-      renego?['extraLabor'] ?? renego?['pendingLabor'] ?? 0,
+      renego?['approvedExtra'] ??
+          renego?['counterExtraLabor'] ?? // 1000 - client counter - USE THIS FIRST
+          renego?['extraLabor'] ??
+          renego?['pendingLabor'] ??
+          0,
     );
     if (pureExtra > 0) needExtra = pureExtra;
   }
