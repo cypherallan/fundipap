@@ -30,13 +30,31 @@ class _FundiHomeState extends State<FundiHome> {
   bool _loadingLoc = true;
   String search = '';
 
-  // notifications + pending
   final List<Map<String, dynamic>> _bids = [];
   StreamSubscription? _bidsSub;
   List<DocumentSnapshot> _assignedJobs = [];
   StreamSubscription? _assignedSub;
   Set<String> _excludedJobIds = {};
   final Map<String, DocumentSnapshot> _jobsMap = {};
+
+  int _toInt(dynamic v, [int fb = 0]) {
+    if (v == null) return fb;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    String s = v.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+    if (s.isEmpty) return fb;
+    return int.tryParse(s.split('.').first) ?? fb;
+  }
+
+  bool _toBool(dynamic v, [bool fb = false]) {
+    if (v == null) return fb;
+    if (v is bool) return v;
+    if (v is int) return v != 0;
+    if (v is String) return v.toLowerCase() == 'true' || v == '1';
+    if (v is Timestamp) return true;
+    return fb;
+  }
 
   @override
   void initState() {
@@ -142,7 +160,6 @@ class _FundiHomeState extends State<FundiHome> {
             var jId = (bid['jobId'] ?? b.reference.parent.parent?.id ?? '')
                 .toString();
             if (jId.isEmpty) continue;
-            // DON'T filter _excludedJobIds here - filter in build()
             _bids.add({
               'jobId': jId,
               'bidId': b.id,
@@ -158,11 +175,14 @@ class _FundiHomeState extends State<FundiHome> {
               'isRead':
                   bid['isReadByFundi'] == true ||
                   bid['clientCounterSeenByFundi'] == true,
-              'price':
-                  bid['clientCounterAmount'] ??
-                  bid['amount'] ??
-                  bid['price'] ??
-                  0,
+              'price': _toInt(
+                bid['clientCounterAmount'] ??
+                    bid['lastCounterAmount'] ??
+                    bid['lastCounterPrice'] ??
+                    bid['amount'] ??
+                    bid['price'] ??
+                    0,
+              ),
             });
           }
           if (mounted) setState(() {});
@@ -264,7 +284,6 @@ class _FundiHomeState extends State<FundiHome> {
     BadgeLevel level = badgeResult?.level ?? BadgeLevel.none;
     bool hasBadge = level != BadgeLevel.none;
 
-    // notifications grouped - USING SHARED SERVICE (same as timeline)
     final uid = FirebaseAuth.instance.currentUser!.uid;
     final assignedIds = _assignedJobs.map((d) => d.id).toSet();
     final assignedMap = {
@@ -275,7 +294,7 @@ class _FundiHomeState extends State<FundiHome> {
       if (_excludedJobIds.contains(b['jobId'])) continue;
       var jobDataForNotif =
           assignedMap[b['jobId']] ??
-          (b['jobData'] as Map<String, dynamic>? ?? {});
+          (b['jobData'] as Map<String, dynamic>? ?? <String, dynamic>{});
       var bidDataForNotif = (b['bidData'] as Map<String, dynamic>?) ?? b;
       FundiWaitingState? ws = getFundiWaitingState(
         job: jobDataForNotif,
@@ -284,21 +303,18 @@ class _FundiHomeState extends State<FundiHome> {
         uid: uid,
       );
       String category;
-      String type;
       FundiWaitingType waitingType;
       if (ws != null) {
-        category =
-            ws.title; // FIX: your service uses title, not notificationCategory
-        type = ws.type.name;
+        category = ws.title;
         waitingType = ws.type;
       } else {
-        var escrow = (jobDataForNotif['escrowStatus']?.toString() ?? 'pending');
-        bool escrowDone =
-            escrow == 'held' || escrow == 'paid' || escrow == 'released';
-        // FIX: only skip if REALLY done - if siteDone and no renego, skip bid_sent
+        var escrow = (jobDataForNotif['escrowStatus']?.toString() ?? 'pending')
+            .toLowerCase();
+        bool escrowDone = ['held', 'paid', 'released'].contains(escrow);
         bool siteDone =
-            jobDataForNotif['siteVisitDone'] == true ||
-            jobDataForNotif['siteVisited'] == true;
+            _toBool(jobDataForNotif['siteVisitDone']) ||
+            _toBool(jobDataForNotif['siteVisited']) ||
+            jobDataForNotif['siteVisitedAt'] != null;
         var renego = jobDataForNotif['renegotiation'] as Map<String, dynamic>?;
         bool renegoPending =
             renego != null &&
@@ -307,12 +323,9 @@ class _FundiHomeState extends State<FundiHome> {
         if (assignedIds.contains(b['jobId']) &&
             escrowDone &&
             siteDone &&
-            !renegoPending) {
-          // job fully in pending list, don't show as notification
+            !renegoPending)
           continue;
-        }
         category = 'Bid sent - KES ${b['price']} • ${b['jobTitle']}';
-        type = 'bid_sent';
         waitingType = FundiWaitingType.bidSent;
       }
       String key = "${b['jobId']}_${b['clientId']}";
@@ -327,7 +340,6 @@ class _FundiHomeState extends State<FundiHome> {
         'latestAt': (b['createdAt'] is Timestamp)
             ? (b['createdAt'] as Timestamp).toDate()
             : DateTime.now(),
-        'type': type,
         'isRead': b['isRead'] == true,
         'price': b['price'],
         'waitingType': waitingType,
@@ -349,7 +361,6 @@ class _FundiHomeState extends State<FundiHome> {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // 1. MINIMAL PROFILE BANNER - no badge banner, no earnings banner, no bio, no profile banners
             SliverToBoxAdapter(
               child: Container(
                 color: FundipapColors.blackGray,
@@ -457,7 +468,6 @@ class _FundiHomeState extends State<FundiHome> {
                         ],
                       ),
                     ),
-                    // RIGHT: badge icon above TOTAL EARNED - bigger as requested, value from FundiEarningsCard calculation
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -493,7 +503,6 @@ class _FundiHomeState extends State<FundiHome> {
                             ],
                           ),
                         if (hasBadge) const SizedBox(height: 6),
-                        // TOTAL EARNED bigger - from FundiEarningsCard totalEarned (labour -5% + transport)
                         Text(
                           'TOTAL EARNED',
                           style: GoogleFonts.montserrat(
@@ -518,7 +527,6 @@ class _FundiHomeState extends State<FundiHome> {
                 ),
               ),
             ),
-
             if (_loadingLoc)
               const SliverToBoxAdapter(
                 child: LinearProgressIndicator(
@@ -526,7 +534,7 @@ class _FundiHomeState extends State<FundiHome> {
                 ),
               ),
 
-            // 2. NOTIFICATIONS
+            // FIXED NOTIFICATIONS - ALL WAITING STATES ORANGE
             SliverToBoxAdapter(
               child: Container(
                 color: FundipapColors.blackGray,
@@ -596,19 +604,34 @@ class _FundiHomeState extends State<FundiHome> {
                         ),
                       ),
                     ...notifList.take(5).map((g) {
-                      bool isCounter = g['type'] == 'counter';
-                      bool isBidSent = g['type'] == 'bid_sent';
-                      bool isWaitingEscrow = g['type'] == 'waiting_escrow';
-                      bool isWaiting =
-                          isBidSent || isCounter || isWaitingEscrow;
+                      FundiWaitingType wt =
+                          g['waitingType'] as FundiWaitingType;
+                      bool isOrange =
+                          wt == FundiWaitingType.bidSent ||
+                          wt == FundiWaitingType.clientCounter ||
+                          wt == FundiWaitingType.myCounter ||
+                          wt == FundiWaitingType.waitingEscrow ||
+                          wt == FundiWaitingType.waitingNewPriceApproval ||
+                          wt == FundiWaitingType.escrowLocked;
 
-                      String msg = isCounter
-                          ? "${g['clientName']} • Tap to view • Client countered!"
-                          : isWaitingEscrow
-                          ? "${g['clientName']} • Tap to view • Waiting to lock escrow"
-                          : "${g['clientName']} • Tap to view • Waiting for client";
+                      String msg;
+                      if (wt == FundiWaitingType.clientCounter) {
+                        msg =
+                            "${g['clientName']} • Tap to view • Client countered!";
+                      } else if (wt == FundiWaitingType.waitingEscrow)
+                        msg =
+                            "${g['clientName']} • Tap to view • Waiting to lock escrow";
+                      else if (wt == FundiWaitingType.waitingNewPriceApproval)
+                        msg =
+                            "${g['clientName']} • Tap to view • Waiting extra approval";
+                      else if (wt == FundiWaitingType.myCounter)
+                        msg =
+                            "${g['clientName']} • Tap to view • Waiting for client reaction";
+                      else
+                        msg =
+                            "${g['clientName']} • Tap to view • Waiting for client";
 
-                      if (isWaiting) {
+                      if (isOrange) {
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           child: Stack(
@@ -662,8 +685,7 @@ class _FundiHomeState extends State<FundiHome> {
                           ),
                         );
                       }
-
-                      // accepted counter - green static
+                      // GREEN - escrowLocked, travelling, siteVisited
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
@@ -719,7 +741,6 @@ class _FundiHomeState extends State<FundiHome> {
               ),
             ),
 
-            // 3. PENDING JOBS - after notifications like client
             SliverToBoxAdapter(
               child: Container(
                 color: FundipapColors.blackGray,
@@ -794,8 +815,6 @@ class _FundiHomeState extends State<FundiHome> {
                 ),
               ),
             ),
-
-            // 4. JOBS NEAR YOU - continue normally after pending, using your FundiHomeJobsTab + FundiHomeJobList
             SliverToBoxAdapter(
               child: Container(
                 color: FundipapColors.blackGray,

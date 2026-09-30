@@ -7,14 +7,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 mixin FundiMyJobsActionsMixin<T extends StatefulWidget> on State<T> {
-  bool _toBool(dynamic v) {
-    if (v == null) return false;
-    if (v is bool) return v;
-    if (v is int) return v != 0;
-    if (v is String) return v == 'true' || v == '1';
-    return true;
-  }
-
   Future<void> counterAsFundi(
     DocumentReference bidRef,
     String jobId,

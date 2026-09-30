@@ -173,7 +173,7 @@ FundiWaitingState? getFundiWaitingState({
   if (escrowDone && !needsTopup && !siteDone && !travelling && !renegoPending) {
     return FundiWaitingState(
       type: FundiWaitingType.escrowLocked,
-      title: 'Escrow locked - KES $fundiSees - Start site visit now',
+      title: 'Escrow locked - KES $fundiSees - Click to Start site visit now',
       message: 'Client locked KES $fundiSees. Start travelling',
       price: fundiSees,
     );
