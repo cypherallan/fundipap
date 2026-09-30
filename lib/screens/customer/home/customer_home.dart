@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../theme/app_theme.dart';
-import '../../../notifications/notification_bell.dart';
 import '../rating/rate_fundi_screen.dart';
 import 'customer_home_header.dart';
 import 'models/customer_home_models.dart';
@@ -447,7 +446,6 @@ class _CustomerHomeState extends State<CustomerHome> {
                       onProfileTap: () {},
                     ),
                   ),
-                  NotificationBell(userId: uid, iconColor: Colors.white),
                 ],
               ),
             ),

@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth/role_select_screen.dart';
@@ -9,7 +7,6 @@ import 'screens/customer/home/customer_home.dart';
 import 'screens/customer/my_jobs/post_job_screen.dart';
 import 'screens/customer/disputes_screen.dart';
 import 'screens/fundi/home/fundi_home.dart';
-import 'screens/fundi/home/fundi_notifications_page.dart';
 import 'screens/fundi/fundi_disputes_screen.dart' as fundi_disputes;
 import 'services/auth_service.dart';
 import 'screens/profile/profile_screen.dart';
@@ -63,16 +60,10 @@ class _HomeNavigatorState extends State<HomeNavigator> {
 
   AppBar _buildAppBar() {
     bool isFundi = widget.role == 'fundi';
-    bool showBackOnNotifications = isFundi && _index == 1; // only for fundi now
     return AppBar(
       backgroundColor: isFundi ? FundipapColors.blackGray : Colors.white,
       foregroundColor: isFundi ? Colors.white : Colors.black,
-      leading: showBackOnNotifications
-          ? IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => setState(() => _index = 0),
-            )
-          : null,
+      leading: null,
       title: Text('FUNDI PAP - ${widget.role.toUpperCase()}'),
       actions: [
         PopupMenuButton<String>(
@@ -142,7 +133,6 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     if (widget.role == 'fundi') {
       final fundiPages = [
         FundiHome(key: ValueKey('fh_$_refreshId')),
-        FundiNotificationsPage(key: ValueKey('fn_$_refreshId')),
         FundiMyJobsPage(key: ValueKey('fmj_$_refreshId')),
         FundiProfile(key: ValueKey('fp_$_refreshId')),
         fundi_disputes.FundiDisputesScreen(key: ValueKey('fd_$_refreshId')),
@@ -152,10 +142,10 @@ class _HomeNavigatorState extends State<HomeNavigator> {
         body: RefreshIndicator(
           onRefresh: _handleRefresh,
           color: FundipapColors.primaryYellow,
-          child: fundiPages[_index.clamp(0, 4)],
+          child: fundiPages[_index.clamp(0, 3)],
         ),
         bottomNavigationBar: NavigationBar(
-          selectedIndex: _index.clamp(0, 4),
+          selectedIndex: _index.clamp(0, 3),
           backgroundColor: Colors.white,
           indicatorColor: FundipapColors.primaryYellow,
           onDestinationSelected: (i) => setState(() => _index = i),
@@ -164,10 +154,6 @@ class _HomeNavigatorState extends State<HomeNavigator> {
               icon: Icon(Icons.home_outlined),
               selectedIcon: Icon(Icons.home),
               label: 'Home',
-            ),
-            NavigationDestination(
-              icon: FundiNotifBadgeIcon(isSelected: _index == 1),
-              label: 'Notifications',
             ),
             const NavigationDestination(
               icon: Icon(Icons.work_outline),
@@ -242,117 +228,5 @@ class _HomeNavigatorState extends State<HomeNavigator> {
         ],
       ),
     );
-  }
-}
-
-class FundiNotifBadgeIcon extends StatefulWidget {
-  final bool isSelected;
-  const FundiNotifBadgeIcon({super.key, required this.isSelected});
-  @override
-  State<FundiNotifBadgeIcon> createState() => _FundiNotifBadgeIconState();
-}
-
-class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
-  int _count = 0;
-  StreamSubscription? _bidsSub;
-  StreamSubscription? _jobsSub;
-  int _bidsAccepted = 0;
-  int _bidsSent = 0;
-  int _clientCounters = 0;
-  int _counterAccepted = 0;
-  int _activeCount = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    var uid = FirebaseAuth.instance.currentUser!.uid;
-
-    _bidsSub = FirebaseFirestore.instance
-        .collectionGroup('bids')
-        .where('fundiId', isEqualTo: uid)
-        .snapshots()
-        .listen((snap) {
-          int accepted = 0;
-          int sent = 0;
-          int counters = 0;
-          int counterAcc = 0;
-
-          for (var doc in snap.docs) {
-            var b = doc.data();
-            var status = (b['status'] ?? '').toString();
-            var lastCounterBy = (b['lastCounterBy'] ?? b['counterBy'] ?? '')
-                .toString();
-
-            if (status == 'accepted' && b['isReadByFundi'] != true) accepted++;
-            if (status == 'pending' && b['isReadByFundi'] != true) sent++;
-            if (status == 'counter_accepted_by_fundi' &&
-                b['isReadByFundi'] != true)
-              counterAcc++;
-
-            bool isClientCounter =
-                (status == 'countered' &&
-                    lastCounterBy != uid &&
-                    lastCounterBy != '') ||
-                status == 'client_counter' ||
-                (status == 'countered' && b['clientCounterAmount'] != null);
-            if (isClientCounter && b['clientCounterSeenByFundi'] != true)
-              counters++;
-          }
-
-          _bidsAccepted = accepted;
-          _bidsSent = sent;
-          _clientCounters = counters;
-          _counterAccepted = counterAcc;
-          _recalc();
-        });
-
-    _jobsSub = FirebaseFirestore.instance
-        .collection('jobs')
-        .where('fundiHasUnread', isEqualTo: true)
-        .snapshots()
-        .listen((snap) {
-          int c = 0;
-          var uid2 = FirebaseAuth.instance.currentUser!.uid;
-          for (var doc in snap.docs) {
-            var job = doc.data();
-            bool isMine =
-                job['assignedFundiId'] == uid2 ||
-                job['assignedFundi'] == uid2 ||
-                job['fundiId'] == uid2 ||
-                job['acceptedFundiId'] == uid2;
-            if (!isMine) continue;
-            c++;
-          }
-          _activeCount = c;
-          _recalc();
-        });
-  }
-
-  void _recalc() {
-    if (!mounted) return;
-    setState(() {
-      _count =
-          _bidsAccepted +
-          _bidsSent +
-          _clientCounters +
-          _counterAccepted +
-          _activeCount;
-    });
-  }
-
-  @override
-  void dispose() {
-    _bidsSub?.cancel();
-    _jobsSub?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    IconData ic = widget.isSelected
-        ? Icons.notifications
-        : Icons.notifications_outlined;
-    if (_count <= 0) return Icon(ic);
-    return Badge(label: Text('$_count'), child: Icon(ic));
   }
 }
