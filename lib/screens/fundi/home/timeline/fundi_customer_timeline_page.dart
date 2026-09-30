@@ -341,6 +341,19 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                   counterOffers: coDocs,
                   uid: uid,
                 );
+
+                // force START JOB if siteDone, even if service still returns escrowLocked due to cache
+                if (siteDone &&
+                    waitingState?.type == FundiWaitingType.escrowLocked) {
+                  waitingState = FundiWaitingState(
+                    type: FundiWaitingType.siteVisited,
+                    title: 'Site visited - Done KES $fundiSees',
+                    message:
+                        'You visited site. Next: START JOB or request new price',
+                    price: fundiSees,
+                  );
+                }
+
                 List<Widget> doneHistory = [];
                 Widget? currentWaiting;
 
@@ -411,7 +424,9 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                     );
                   }
                 }
-                if (siteDone) {
+                // Only show green "Site visited - Done" AFTER job started, not while waiting to start work
+                if (siteDone &&
+                    waitingState?.type != FundiWaitingType.siteVisited) {
                   doneHistory.add(
                     _greenCard(
                       title: 'Site visited - Done',
@@ -646,26 +661,40 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                       break;
                     case FundiWaitingType.siteVisited:
                       currentWaiting = Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Colors.orange.shade50,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: FundipapColors.greenSuccess,
+                            color: Colors.orange.shade400,
                             width: 1.5,
                           ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Next action - Client locked KES $fundiSees secured to escrow',
-                              style: GoogleFonts.montserrat(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 12,
-                              ),
+                            Row(
+                              children: [
+                                Icon(Icons.work, color: Colors.orange.shade800),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Waiting for you to start work - KES $fundiSees',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12,
+                                      color: Colors.orange.shade800,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 6),
+                            Text(
+                              'You visited site. Client locked KES $fundiSees secured. Tap START JOB to begin.',
+                              style: GoogleFonts.inter(fontSize: 11),
+                            ),
+                            const SizedBox(height: 12),
                             Row(
                               children: [
                                 Expanded(
@@ -677,6 +706,10 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor:
                                           FundipapColors.greenSuccess,
+                                      minimumSize: const Size(
+                                        double.infinity,
+                                        48,
+                                      ),
                                     ),
                                     child: const Text(
                                       'START JOB',

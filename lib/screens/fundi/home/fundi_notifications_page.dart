@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import 'timeline/fundi_customer_timeline_page.dart';
 import 'job_details_screen.dart';
+import 'package:fundipap/widgets/animated_waiting_card.dart';
+import '../../../services/fundi_waiting_state_service.dart';
 
 class FundiNotificationsPage extends StatefulWidget {
   const FundiNotificationsPage({super.key});
@@ -24,6 +26,16 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
   StreamSubscription? _jobsSub2;
   Set<String> _excludedJobIds = {};
   final Map<String, DocumentSnapshot> _jobsMap = {};
+
+  int _toInt(dynamic v, [int fb = 0]) {
+    if (v == null) return fb;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    String s = v.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+    if (s.isEmpty) return fb;
+    return int.tryParse(s.split('.').first) ?? fb;
+  }
 
   @override
   void initState() {
@@ -52,14 +64,13 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     _jobsSub?.cancel();
     _jobsSub2?.cancel();
     _jobsMap.clear();
-    _excludedJobIds.clear(); // FIX 1: clear excluded
+    _excludedJobIds.clear();
     _assignedJobs = [];
     _acceptedBids.clear();
     _clientCounters.clear();
     _sentBids.clear();
     _acceptedCounters.clear();
-    if (mounted)
-      setState(() {}); // FIX 1: clear UI immediately, no flash of old
+    if (mounted) setState(() {});
 
     var uid = FirebaseAuth.instance.currentUser!.uid;
 
@@ -81,7 +92,6 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
             var jId = (bid['jobId'] ?? b.reference.parent.parent?.id ?? '')
                 .toString();
             if (jId.isEmpty) continue;
-            // FIX 2: DON'T check _excludedJobIds here, check in build() after jobs arrive
 
             bool isClientCounter =
                 (status == 'countered' &&
@@ -106,10 +116,9 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                 'type': 'accepted',
               });
             } else if (isClientCounter) {
-              int amt =
-                  ((bid['clientCounterAmount'] ?? bid['lastCounterAmount'] ?? 0)
-                          as num)
-                      .toInt();
+              int amt = _toInt(
+                bid['clientCounterAmount'] ?? bid['lastCounterAmount'] ?? 0,
+              );
               _clientCounters.add({
                 'jobId': jId,
                 'bidId': b.id,
@@ -129,13 +138,12 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                 'bidData': bid,
               });
             } else if (status == 'counter_accepted_by_fundi') {
-              int amt =
-                  ((bid['agreedPrice'] ??
-                              bid['price'] ??
-                              bid['clientCounterAmount'] ??
-                              0)
-                          as num)
-                      .toInt();
+              int amt = _toInt(
+                bid['agreedPrice'] ??
+                    bid['price'] ??
+                    bid['clientCounterAmount'] ??
+                    0,
+              );
               _acceptedCounters.add({
                 'jobId': jId,
                 'bidId': b.id,
@@ -163,7 +171,9 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                     (bid['customerName'] ?? bid['clientName'] ?? 'Client')
                         .toString(),
                 'clientId': (bid['customerId'] ?? '').toString(),
-                'price': bid['amount'] ?? bid['bidAmount'] ?? bid['price'] ?? 0,
+                'price': _toInt(
+                  bid['amount'] ?? bid['bidAmount'] ?? bid['price'] ?? 0,
+                ),
                 'createdAt': bid['createdAt'] ?? bid['updatedAt'],
                 'isRead': bid['isReadByFundi'] == true,
                 'type': 'bid_sent',
@@ -177,16 +187,12 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         .collection('jobs')
         .where('assignedFundiId', isEqualTo: uid)
         .snapshots()
-        .listen((snap) {
-          _mergeIntoMap(snap.docs);
-        });
+        .listen((snap) => _mergeIntoMap(snap.docs));
     _jobsSub2 = FirebaseFirestore.instance
         .collection('jobs')
         .where('fundiId', isEqualTo: uid)
         .snapshots()
-        .listen((snap) {
-          _mergeIntoMap(snap.docs);
-        });
+        .listen((snap) => _mergeIntoMap(snap.docs));
   }
 
   Future<void> _onRefresh() async {
@@ -269,6 +275,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
     final assignedIds = _assignedJobs.map((d) => d.id).toSet();
     Map<String, Map<String, dynamic>> grouped = {};
 
@@ -292,6 +299,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
             : DateTime.now(),
         'isRead': b['isRead'] == true,
         'type': 'bid_sent',
+        'waitingType': FundiWaitingType.bidSent,
       };
     }
     for (var b in _acceptedCounters) {
@@ -315,6 +323,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
             : DateTime.now(),
         'isRead': b['isRead'] == true,
         'type': 'accepted_counter',
+        'waitingType': FundiWaitingType.myCounter,
       };
     }
     for (var b in _acceptedBids) {
@@ -336,6 +345,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
             : DateTime.now(),
         'isRead': b['isRead'] == true,
         'type': 'accepted',
+        'waitingType': FundiWaitingType.bidSent,
       };
     }
     for (var b in _clientCounters) {
@@ -360,54 +370,65 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
             : DateTime.now(),
         'isRead': b['isRead'] == true,
         'type': 'counter',
+        'waitingType': FundiWaitingType.clientCounter,
       };
     }
 
+    // FIXED: ASSIGNED JOBS NOW USE SHARED SERVICE - SAME AS TIMELINE
     for (var doc in _assignedJobs) {
       var job = doc.data() as Map<String, dynamic>;
       var title = (job['title'] ?? 'Job').toString();
       var cName = (job['customerName'] ?? job['clientName'] ?? 'Client')
           .toString();
-      var reneg = job['renegotiation'] as Map<String, dynamic>?;
-      var renegStatus = (reneg?['status'] ?? '').toString();
-      bool isRenegCounter = renegStatus == 'countered_by_client';
-      bool isRenegPendingExtra =
-          renegStatus.contains('pending_extra_escrow') ||
-          job['status'] == 'renegotiation_countered_by_client';
-      bool isRenegPending =
-          renegStatus == 'pending' &&
-          reneg?['requested'] == true; // FIX 3: your new case
-      int counterExtra = 0;
-      if (isRenegCounter || isRenegPendingExtra) {
-        counterExtra =
-            int.tryParse(
-              (reneg?['counterExtraLabor'] ?? reneg?['counterLabor'] ?? 0)
-                  .toString(),
-            ) ??
-            0;
+
+      FundiWaitingState? ws = getFundiWaitingState(
+        job: job,
+        bid: job,
+        counterOffers: [],
+        uid: uid,
+      );
+
+      String category;
+      String type;
+      FundiWaitingType waitingType;
+
+      if (ws != null) {
+        category = ws
+            .title; // This will be "Waiting for you to start work - KES..." for siteVisited
+        type = ws.type.name;
+        waitingType = ws.type;
+      } else {
+        // fallback for reneg cases
+        var reneg = job['renegotiation'] as Map<String, dynamic>?;
+        var renegStatus = (reneg?['status'] ?? '').toString();
+        bool isRenegCounter = renegStatus == 'countered_by_client';
+        bool isRenegPending =
+            renegStatus == 'pending' && reneg?['requested'] == true;
+        int counterExtra = _toInt(
+          reneg?['counterExtraLabor'] ?? reneg?['counterLabor'] ?? 0,
+        );
+        int pendingExtra = _toInt(
+          reneg?['extraToLock'] ??
+              reneg?['pendingLabor'] ??
+              reneg?['extraLabor'] ??
+              0,
+        );
+        if (isRenegCounter) {
+          category = '$title • Client countered extra KES $counterExtra';
+          type = 'counter';
+          waitingType = FundiWaitingType.clientCounter;
+        } else if (isRenegPending) {
+          category =
+              '$title • Waiting for client to approve extra KES $pendingExtra';
+          type = 'reneg_pending';
+          waitingType = FundiWaitingType.waitingNewPriceApproval;
+        } else {
+          category = title;
+          type = 'assigned';
+          waitingType = FundiWaitingType.escrowLocked;
+        }
       }
-      int pendingExtra = 0;
-      if (isRenegPending) {
-        pendingExtra =
-            int.tryParse(
-              (reneg?['extraToLock'] ??
-                      reneg?['pendingLabor'] ??
-                      reneg?['extraLabor'] ??
-                      0)
-                  .toString(),
-            ) ??
-            0;
-      }
-      String category = title;
-      String type = 'assigned';
-      if (isRenegCounter) {
-        category = '$title • Client countered extra KES $counterExtra';
-        type = 'counter';
-      } else if (isRenegPending) {
-        category =
-            '$title • Waiting for client to approve extra KES $pendingExtra';
-        type = 'reneg_pending';
-      } // FIX 3
+
       grouped[doc.id] = {
         'jobId': doc.id,
         'clientName': cName,
@@ -419,6 +440,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
             : DateTime.now(),
         'isRead': job['fundiHasUnread'] != true,
         'type': type,
+        'waitingType': waitingType,
       };
     }
 
@@ -481,6 +503,58 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (_, i) {
                       var g = list[i];
+                      FundiWaitingType wt =
+                          g['waitingType'] as FundiWaitingType;
+                      bool isOrange =
+                          wt == FundiWaitingType.bidSent ||
+                          wt == FundiWaitingType.clientCounter ||
+                          wt == FundiWaitingType.myCounter ||
+                          wt == FundiWaitingType.waitingEscrow ||
+                          wt == FundiWaitingType.waitingNewPriceApproval ||
+                          wt == FundiWaitingType.escrowLocked ||
+                          wt == FundiWaitingType.travelling ||
+                          wt == FundiWaitingType.siteVisited;
+
+                      if (isOrange) {
+                        String msg;
+                        if (wt == FundiWaitingType.clientCounter)
+                          msg =
+                              "${g['clientName']} • Tap to Accept / Counter / Reject";
+                        else if (wt == FundiWaitingType.waitingEscrow)
+                          msg = "${g['clientName']} • Waiting to lock escrow";
+                        else if (wt == FundiWaitingType.escrowLocked)
+                          msg = "${g['clientName']} • Tap to Start site visit";
+                        else if (wt == FundiWaitingType.travelling)
+                          msg = "${g['clientName']} • You are on the way";
+                        else if (wt == FundiWaitingType.siteVisited)
+                          msg =
+                              "${g['clientName']} • Waiting for you to start work";
+                        else
+                          msg = "${g['clientName']} • Tap to view";
+
+                        return OrangeAnimatedWaitingCard(
+                          title: g['category'],
+                          message: msg,
+                          onTap: () async {
+                            await _markThisClientAsRead(
+                              g['clientId'],
+                              g['jobId'],
+                            );
+                            if (!context.mounted) return;
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FundiCustomerTimelinePage(
+                                  jobId: g['jobId'],
+                                  clientName: g['clientName'],
+                                  jobTitle: g['category'],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      }
+
                       bool isCounter = g['type'] == 'counter';
                       bool isSent = g['type'] == 'bid_sent';
                       bool isAcceptedCounter = g['type'] == 'accepted_counter';

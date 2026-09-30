@@ -612,7 +612,9 @@ class _FundiHomeState extends State<FundiHome> {
                           wt == FundiWaitingType.myCounter ||
                           wt == FundiWaitingType.waitingEscrow ||
                           wt == FundiWaitingType.waitingNewPriceApproval ||
-                          wt == FundiWaitingType.escrowLocked;
+                          wt == FundiWaitingType.escrowLocked ||
+                          wt == FundiWaitingType.siteVisited ||
+                          wt == FundiWaitingType.travelling;
 
                       String msg;
                       if (wt == FundiWaitingType.clientCounter) {
@@ -627,6 +629,15 @@ class _FundiHomeState extends State<FundiHome> {
                       else if (wt == FundiWaitingType.myCounter)
                         msg =
                             "${g['clientName']} • Tap to view • Waiting for client reaction";
+                      else if (wt == FundiWaitingType.escrowLocked)
+                        msg =
+                            "${g['clientName']} • Tap to view • Escrow locked - Start site visit";
+                      else if (wt == FundiWaitingType.travelling)
+                        msg =
+                            "${g['clientName']} • Tap to view • You are on the way";
+                      else if (wt == FundiWaitingType.siteVisited)
+                        msg =
+                            "${g['clientName']} • Tap to view • Waiting for you to start work";
                       else
                         msg =
                             "${g['clientName']} • Tap to view • Waiting for client";
