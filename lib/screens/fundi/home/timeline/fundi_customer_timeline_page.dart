@@ -576,23 +576,77 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                                     ),
                                     onPressed: () async {
                                       if (isRenegoCounter) {
+                                        int approvedExtra = _toInt(
+                                          renego['counterExtraLabor'] ?? 0,
+                                        ); // 1000
+                                        int approvedExtraToLock = _toInt(
+                                          renego['counterExtraToLock'] ??
+                                              (approvedExtra * 1.05).round(),
+                                        ); // 1050
+                                        int newLabour = _toInt(
+                                          renego['counterLabor'] ??
+                                              renego['counterPrice'] ??
+                                              6000,
+                                        );
+
                                         await FirebaseFirestore.instance
                                             .collection('jobs')
                                             .doc(widget.jobId)
                                             .update({
                                               'renegotiation.status':
-                                                  'approved',
+                                                  'approved_pending_extra_escrow', // <- contains pending_extra_escrow so ClientPriceApprovalScreen shows LOCK UI
                                               'renegotiation.approvedAt':
                                                   FieldValue.serverTimestamp(),
-                                              'laborCost': _toInt(
-                                                renego['counterLabor'] ?? 6000,
-                                              ),
+                                              'renegotiation.approvedExtra':
+                                                  approvedExtra, // 1000
+                                              'renegotiation.approvedExtraToLock':
+                                                  approvedExtraToLock, // 1050
+                                              'renegotiation.acceptedCounterExtraLabor':
+                                                  approvedExtra, // <- for ClientPriceApprovalScreen compatibility
+                                              'renegotiation.acceptedCounterExtraToLock':
+                                                  approvedExtraToLock,
+                                              'renegotiation.acceptedCounterExtraAppFee':
+                                                  (approvedExtra * 0.05)
+                                                      .round(),
                                               'renegotiation.requested': false,
-                                              'status': 'assigned',
-                                              'escrowStatus': 'pending',
+                                              'laborCost': newLabour, // 6000
+                                              'status':
+                                                  'awaiting_extra_escrow', // <- in _activeSub whereIn
+                                              'escrowStatus': 'pending_topup',
+                                              'clientNeedsToTopup': true,
+                                              'extraTopupAmount': approvedExtra,
+                                              'extraTopupToLock':
+                                                  approvedExtraToLock,
+                                              'customerHasUnread': true,
+                                              'fundiHasUnread': false,
                                               'updatedAt':
                                                   FieldValue.serverTimestamp(),
                                             });
+
+                                        // notify client
+                                        String clientId =
+                                            (job['clientId'] ??
+                                                    job['customerId'] ??
+                                                    job['userId'] ??
+                                                    '')
+                                                .toString();
+                                        if (clientId.isNotEmpty) {
+                                          await FirebaseFirestore.instance
+                                              .collection('notifications')
+                                              .add({
+                                                'jobId': widget.jobId,
+                                                'toUserId': clientId,
+                                                'type':
+                                                    'renegotiation_approved',
+                                                'title':
+                                                    'Fundi accepted counter KES $approvedExtra',
+                                                'message':
+                                                    'Please lock extra KES $approvedExtraToLock to escrow',
+                                                'createdAt':
+                                                    FieldValue.serverTimestamp(),
+                                                'read': false,
+                                              });
+                                        }
                                       } else {
                                         await bidDoc.reference.update({
                                           'status': 'accepted',

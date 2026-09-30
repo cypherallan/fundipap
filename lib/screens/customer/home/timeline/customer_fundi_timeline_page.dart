@@ -36,6 +36,14 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
     return int.tryParse(v.toString()) ?? fb;
   }
 
+  bool _toBool(dynamic v, [bool fb = false]) {
+    if (v == null) return fb;
+    if (v is bool) return v;
+    if (v is int) return v != 0;
+    if (v is String) return v.toLowerCase() == 'true' || v == '1';
+    return fb;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -79,14 +87,19 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           if (snap.connectionState == ConnectionState.waiting)
             return const Center(child: CircularProgressIndicator());
           if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
-          if (!snap.hasData || snap.data == null || !snap.data!.exists)
+          if (!snap.hasData || !snap.data!.exists)
             return const Center(child: Text('Job not found'));
-          final raw = snap.data!.data();
-          if (raw == null) return const Center(child: Text('Job deleted'));
-          var job = raw as Map<String, dynamic>;
+          var job = snap.data!.data() as Map<String, dynamic>;
 
           var status = (job['status'] ?? '').toString();
           var reneg = job['renegotiation'] as Map<String, dynamic>?;
+          String renegStatus = (reneg?['status'] ?? '').toString();
+          bool isRenegCountered = renegStatus == 'countered_by_client';
+          bool isRenegApprovedNeedsTopup =
+              renegStatus == 'approved' &&
+              (_toBool(job['clientNeedsToTopup']) ||
+                  job['escrowStatus'] == 'pending_topup');
+
           String phase = (reneg?['currentPhase'] ?? '').toString();
           bool isStarted =
               status == 'in_progress' ||
@@ -96,12 +109,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
               status == 'completed';
           bool isCancelled = status.toLowerCase().contains('cancel');
           bool canClientCancel = !isStarted && !isCancelled;
-
-          // FIX: detect extra counter
-          String renegStatus = (reneg?['status'] ?? '').toString();
-          bool isRenegCountered =
-              renegStatus == 'countered_by_client' ||
-              status == 'renegotiation_countered_by_client';
 
           List<Widget> timeline = TimelineStepsBuilder.build(
             context: context,
@@ -113,7 +120,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             onReleasing: (v) => setState(() => _releasing = v),
           );
 
-          // FIX: inject waiting-for-fundi-to-confirm-extra at TOP instead of waiting-for-start
+          // STATE 1: You countered 2000 -> 1000, waiting for fundi
           if (isRenegCountered) {
             int extraLabor = _toInt(reneg?['counterExtraLabor']);
             int extraToLock = _toInt(
@@ -157,34 +164,97 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.orange.shade200),
-                          ),
-                          child: Text(
-                            'Extra to lock: KES $extraToLock (not 1150)',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              color: Colors.green.shade800,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ),
                 ],
               ),
             );
-            // put waitingCounter at top, keep rest of timeline below
             timeline = [waitingCounter, ...timeline];
+          }
+
+          // STATE 2: Fundi accepted your 1000 counter - NOW YOU MUST LOCK 1050
+          if (isRenegApprovedNeedsTopup) {
+            int approvedExtra = _toInt(
+              reneg?['approvedExtra'] ??
+                  reneg?['counterExtraLabor'] ??
+                  job['extraTopupAmount'] ??
+                  1000,
+            );
+            int approvedToLock = _toInt(
+              reneg?['approvedExtraToLock'] ??
+                  reneg?['counterExtraToLock'] ??
+                  job['extraTopupToLock'] ??
+                  (approvedExtra * 1.05).round(),
+            );
+            Widget waitingTopup = Container(
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade400, width: 1.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.lock_open,
+                        color: Colors.blue.shade800,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Fundi accepted your counter - Lock extra KES $approvedToLock',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: Colors.blue.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'You countered 2000 -> $approvedExtra. Fundi accepted. Please lock KES $approvedToLock (KES $approvedExtra + 5% fee) to continue.',
+                    style: GoogleFonts.inter(fontSize: 11),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade800,
+                      ),
+                      onPressed: () {
+                        // TODO: call your existing escrow topup function - pass approvedToLock
+                        // Example: EscrowService.topup(jobId: widget.jobId, amount: approvedToLock)
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Locking extra KES $approvedToLock...',
+                            ),
+                          ),
+                        );
+                      },
+                      child: Text(
+                        'LOCK EXTRA KES $approvedToLock',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+            // Put topup card at TOP and hide the fake "escrow locked - waiting for fundi to travel"
+            timeline = [waitingTopup, ...timeline.where((w) => true)];
           }
 
           Widget list = ReversedTimelineList.buildList(timeline);

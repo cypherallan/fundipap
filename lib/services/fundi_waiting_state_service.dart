@@ -200,7 +200,13 @@ FundiWaitingState? getFundiWaitingState({
       !escrowDone &&
       !siteDone &&
       !travelling &&
-      ['assigned', 'confirmed', 'negotiating', 'accepted'].contains(jobStatus);
+      [
+        'assigned',
+        'confirmed',
+        'negotiating',
+        'accepted',
+        'awaiting_extra_escrow',
+      ].contains(jobStatus);
   bool isTopupWait =
       needsTopup && !travelling && !renegoPending && !renegoCountered;
 

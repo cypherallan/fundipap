@@ -31,6 +31,14 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
     return int.tryParse(v.toString()) ?? fb;
   }
 
+  bool _toBool(dynamic v, [bool fb = false]) {
+    if (v == null) return fb;
+    if (v is bool) return v;
+    if (v is int) return v != 0;
+    if (v is String) return v.toLowerCase() == 'true' || v == '1';
+    return fb;
+  }
+
   Future<void> _acceptClientBuys(
     Map<String, dynamic> job,
     int newLabor,
@@ -307,6 +315,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
             return const Center(child: CircularProgressIndicator());
           var job = snap.data!.data() as Map<String, dynamic>;
           var reneg = (job['renegotiation'] as Map<String, dynamic>?) ?? {};
+          String renegStatus = (reneg['status'] ?? 'pending').toString();
 
           int oldLabor = _toInt(
             reneg['oldLabor'] ??
@@ -323,12 +332,21 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
 
           int acceptedCounterLabour = _toInt(
             reneg['acceptedCounterExtraLabor'] ??
+                reneg['approvedExtra'] ?? // <- fundi accept saves this
                 reneg['counterExtraLabor'] ??
+                0,
+          );
+          int acceptedCounterToLock = _toInt(
+            reneg['acceptedCounterExtraToLock'] ??
+                reneg['approvedExtraToLock'] ??
+                reneg['counterExtraToLock'] ??
                 0,
           );
           bool isCounterAccepted =
               acceptedCounterLabour > 0 &&
-              _toInt(reneg['acceptedCounterExtraToLock'] ?? 0) > 0;
+              (renegStatus == 'approved' ||
+                  renegStatus.contains('approved') ||
+                  acceptedCounterToLock > 0);
 
           int newLabor = isCounterAccepted
               ? oldLabor + acceptedCounterLabour
@@ -359,8 +377,11 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
           int extraToLock = extraLabor + extraAppFee;
           int newTotal = alreadyLockedCorrect + extraToLock;
 
-          String renegStatus = (reneg['status'] ?? 'pending').toString();
-          bool needsExtraEscrow = renegStatus.contains('pending_extra_escrow');
+          bool needsExtraEscrow =
+              renegStatus.contains('pending_extra_escrow') ||
+              renegStatus == 'approved' ||
+              renegStatus == 'approved_pending_extra_escrow' ||
+              _toBool(job['clientNeedsToTopup']);
 
           List<String> reasons = List<String>.from(
             reneg['reasons'] ?? [reneg['reason'] ?? 'Extra work'],

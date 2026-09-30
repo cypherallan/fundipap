@@ -28,6 +28,14 @@ class CustomerNotificationsSection extends StatelessWidget {
     return int.tryParse(v.toString()) ?? fb;
   }
 
+  bool _toBool(dynamic v, [bool fb = false]) {
+    if (v == null) return fb;
+    if (v is bool) return v;
+    if (v is int) return v != 0;
+    if (v is String) return v.toLowerCase() == 'true' || v == '1';
+    return fb;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -122,15 +130,22 @@ class CustomerNotificationsSection extends StatelessWidget {
                     (job['counterAcceptedBy'] as List).isNotEmpty &&
                     isBid);
 
-            // === NEW: detect extra counter ===
             final reneg = (job['renegotiation'] as Map<String, dynamic>?) ?? {};
             final renegStatus = (reneg['status'] ?? '').toString();
             final jobStatus = (job['status'] ?? '').toString();
+            final escrowStatus = (job['escrowStatus'] ?? '').toString();
+
             final isRenegCountered =
                 renegStatus == 'countered_by_client' ||
                 jobStatus == 'renegotiation_countered_by_client';
+            final isRenegApprovedNeedsTopup =
+                (renegStatus.contains('approved') ||
+                    renegStatus == 'approved_pending_extra_escrow') &&
+                (_toBool(job['clientNeedsToTopup']) ||
+                    jobStatus == 'awaiting_extra_escrow' ||
+                    escrowStatus == 'pending_topup' ||
+                    jobStatus.contains('awaiting_extra_escrow'));
 
-            // === COUNTER ACCEPTED ===
             if (isCounterAccepted) {
               final acceptedAmt =
                   (g['agreedPrice'] ??
@@ -270,7 +285,6 @@ class CustomerNotificationsSection extends StatelessWidget {
               );
             }
 
-            // === NEW: YOU COUNTERED EXTRA LABOUR ===
             if (isRenegCountered) {
               int extraLabor = _toInt(reneg['counterExtraLabor'] ?? 0);
               int extraToLock = _toInt(
@@ -340,7 +354,96 @@ class CustomerNotificationsSection extends StatelessWidget {
               );
             }
 
-            // === INCOMING BIDS ===
+            // === FIX: FUNDI ACCEPTED YOUR EXTRA COUNTER ===
+            if (isRenegApprovedNeedsTopup) {
+              int approvedExtra = _toInt(
+                reneg['approvedExtra'] ??
+                    reneg['counterExtraLabor'] ??
+                    job['extraTopupAmount'] ??
+                    1000,
+              );
+              int approvedToLock = _toInt(
+                reneg['approvedExtraToLock'] ??
+                    reneg['counterExtraToLock'] ??
+                    job['extraTopupToLock'] ??
+                    approvedExtra + (approvedExtra * 0.05).round(),
+              );
+              return Container(
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue.shade600, width: 1.5),
+                ),
+                child: ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade700,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.lock_open,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    'Fundi accepted KES $approvedExtra - Lock extra KES $approvedToLock',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      color: Colors.blue.shade900,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${g['fundiName']} accepted your counter • Tap to lock escrow',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade700,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'KES $approvedToLock',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  onTap: () async {
+                    await onMarkRead(fundiKey);
+                    if (!context.mounted) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CustomerFundiTimelinePage(
+                          jobId: g['jobId'].toString(),
+                          fundiName: g['fundiName'].toString(),
+                          trade: g['category'].toString(),
+                          jobData: job,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            }
+
             if (isBid) {
               final bidCount = (g['bidCount'] ?? 1) as int;
               return Container(
@@ -504,13 +607,11 @@ class CustomerNotificationsSection extends StatelessWidget {
               );
             }
 
-            // === ACTIVE JOBS (normal) ===
             var status = (job['status'] ?? '').toString();
             bool isCompleted = status == 'completed';
             Color borderCol = isCompleted
                 ? Colors.green
                 : Colors.orange.shade700;
-
             return Container(
               margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
               decoration: BoxDecoration(
