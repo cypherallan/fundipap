@@ -373,12 +373,14 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                     int clientAmt = _toInt(
                       bidData['clientCounterAmount'] ??
                           bidData['lastCounterAmount'] ??
+                          bidData['agreedPrice'] ??
                           0,
                     );
                     int originalPrice = _bidPrice(bidData);
                     int myCounterAmt = _toInt(
                       bidData['fundiCounterAmount'] ?? 0,
                     );
+
                     bool isClientCounter =
                         (bStatus == 'countered' &&
                             lastBy != FirebaseAuth.instance.currentUser!.uid) ||
@@ -386,6 +388,45 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                     bool isMyCounter =
                         bStatus == 'countered' &&
                         lastBy == FirebaseAuth.instance.currentUser!.uid;
+                    bool isCounterAccepted =
+                        bStatus == 'counter_accepted_by_fundi';
+
+                    if (isCounterAccepted) {
+                      // NEW - This fixes the full-screen issue - compact card in bottom nav, not full page
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.blue.shade300),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  color: Colors.blue.shade700,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Accepted counter KES $clientAmt - Waiting for client to confirm',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+
                     if (isClientCounter) {
                       return Column(
                         mainAxisSize: MainAxisSize.min,
@@ -468,12 +509,13 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                         ],
                       );
                     }
-                    if (isMyCounter)
+                    if (isMyCounter) {
                       return OrangeAnimatedWaitingCard(
                         title: 'Counter sent • KES $myCounterAmt',
                         message:
                             'You countered KES $myCounterAmt. Waiting for client...',
                       );
+                    }
                   }
                   if (alreadyBid) {
                     final int labour = _labour(jData);

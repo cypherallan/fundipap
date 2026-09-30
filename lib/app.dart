@@ -259,12 +259,14 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
   int _bidsAccepted = 0;
   int _bidsSent = 0;
   int _clientCounters = 0;
+  int _counterAccepted = 0;
   int _activeCount = 0;
 
   @override
   void initState() {
     super.initState();
     var uid = FirebaseAuth.instance.currentUser!.uid;
+
     _bidsSub = FirebaseFirestore.instance
         .collectionGroup('bids')
         .where('fundiId', isEqualTo: uid)
@@ -273,6 +275,8 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
           int accepted = 0;
           int sent = 0;
           int counters = 0;
+          int counterAcc = 0;
+
           for (var doc in snap.docs) {
             var b = doc.data();
             var status = (b['status'] ?? '').toString();
@@ -280,8 +284,10 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
                 .toString();
 
             if (status == 'accepted' && b['isReadByFundi'] != true) accepted++;
-            if (status == 'pending' && b['isReadByFundi'] != true)
-              sent++; // YOUR NEW ONE
+            if (status == 'pending' && b['isReadByFundi'] != true) sent++;
+            if (status == 'counter_accepted_by_fundi' &&
+                b['isReadByFundi'] != true)
+              counterAcc++;
 
             bool isClientCounter =
                 (status == 'countered' &&
@@ -292,9 +298,11 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
             if (isClientCounter && b['clientCounterSeenByFundi'] != true)
               counters++;
           }
+
           _bidsAccepted = accepted;
           _bidsSent = sent;
           _clientCounters = counters;
+          _counterAccepted = counterAcc;
           _recalc();
         });
 
@@ -321,11 +329,15 @@ class _FundiNotifBadgeIconState extends State<FundiNotifBadgeIcon> {
   }
 
   void _recalc() {
-    if (mounted)
-      setState(
-        () =>
-            _count = _bidsAccepted + _bidsSent + _clientCounters + _activeCount,
-      );
+    if (!mounted) return;
+    setState(() {
+      _count =
+          _bidsAccepted +
+          _bidsSent +
+          _clientCounters +
+          _counterAccepted +
+          _activeCount;
+    });
   }
 
   @override

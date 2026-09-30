@@ -7,6 +7,7 @@ import 'fundi_timeline_context.dart';
 import 'fundi_timeline_actions.dart';
 import 'widgets/chat_sheet.dart';
 import 'widgets/cancel_button.dart';
+import 'widgets/timeline_card.dart';
 import 'steps/cancelled_view.dart';
 import 'steps/completed_released_view.dart';
 import 'steps/escrow_waiting_view.dart';
@@ -38,14 +39,11 @@ class FundiCustomerTimelinePage extends StatelessWidget {
           .doc(jobId)
           .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData) {
+        if (!snap.hasData)
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
-        }
-        final jobData = snap.data!.data() as Map<String, dynamic>?;
-        final job = jobData ?? {};
-
+        final job = (snap.data!.data() as Map<String, dynamic>?) ?? {};
         final c = FundiTimelineContext.fromSnapshot(
           context: context,
           jobId: jobId,
@@ -66,14 +64,24 @@ class FundiCustomerTimelinePage extends StatelessWidget {
             int bidAmount = 0;
             if (hasBid) {
               var b = bidSnap.data!.data() as Map<String, dynamic>?;
-              if (b != null) {
-                bidAmount =
-                    int.tryParse(
-                      (b['amount'] ?? b['bidAmount'] ?? 0).toString(),
-                    ) ??
-                    0;
-              }
+              bidAmount =
+                  int.tryParse(
+                    (b?['amount'] ?? b?['bidAmount'] ?? 0).toString(),
+                  ) ??
+                  0;
             }
+            var bidData = bidSnap.data?.data() as Map<String, dynamic>?;
+            String bidStatus = (bidData?['status'] ?? '').toString();
+            int acceptedAmt =
+                int.tryParse(
+                  (bidData?['agreedPrice'] ?? bidData?['price'] ?? bidAmount)
+                      .toString(),
+                ) ??
+                bidAmount;
+
+            if (c.isCancelled) return buildCancelledView(context, c);
+            if (c.status == 'completed' && c.escrowReleased)
+              return buildCompletedReleasedView(context, c);
 
             bool isBidSentState =
                 hasBid &&
@@ -83,29 +91,76 @@ class FundiCustomerTimelinePage extends StatelessWidget {
                     c.status == 'bidding' ||
                     c.status == 'bid_sent' ||
                     c.status == 'pending_client_response');
-
-            if (isBidSentState || c.isBidSent) {
-              return buildBidSentView(context, c, bidAmount: bidAmount);
-            }
-
-            if (c.isCancelled) return buildCancelledView(context, c);
-            if (c.status == 'completed' && c.escrowReleased) {
-              return buildCompletedReleasedView(context, c);
-            }
+            if (isBidSentState || c.isBidSent)
+              return buildBidSentView(context, c, bidAmount);
 
             List<Widget> timeline = [];
-            if (!c.escrowDone) {
-              return buildEscrowWaitingView(context, c, timeline);
-            }
+            bool isCounterAccepted =
+                bidStatus == 'counter_accepted_by_fundi' ||
+                c.status == 'counter_accepted';
 
-            if (handleCounterStep(timeline, c)) {
-            } else if (handleExtraEscrowStep(timeline, c)) {
-            } else if (handlePartsSteps(timeline, c)) {
+            if (isCounterAccepted) {
+              // THIS IS NOW A TIMELINE ROW, NOT A FULL SCREEN
+              timeline.add(
+                fundiCard(
+                  color: Colors.orange.shade50,
+                  border: Colors.orange,
+                  icon: Icons.hourglass_top,
+                  iconColor: Colors.orange.shade800,
+                  title: 'Accepted counter bid - KES $acceptedAmt',
+                  message:
+                      'You accepted KES $acceptedAmt. Waiting for client to confirm and lock escrow. You will receive KES ${c.fundiReceives}.',
+                  time: 'Waiting',
+                  isDone: false,
+                ),
+              );
+              timeline.add(
+                fundiCard(
+                  color: Colors.green.shade50,
+                  border: Colors.green,
+                  icon: Icons.check_circle,
+                  iconColor: Colors.green,
+                  title: 'Counter accepted KES $acceptedAmt - Done',
+                  message: 'Done',
+                  time: 'Just now',
+                  isDone: true,
+                ),
+              );
+              timeline.add(
+                fundiCard(
+                  color: Colors.green.shade50,
+                  border: Colors.green,
+                  icon: Icons.send,
+                  iconColor: Colors.green,
+                  title: 'Bid sent - Done KES $bidAmount',
+                  message: 'Original bid',
+                  time: 'Earlier',
+                  isDone: true,
+                ),
+              );
             } else {
-              handleWorkSteps(timeline, c);
-              handleSiteVisitSteps(timeline, c);
+              if (!c.escrowDone)
+                return buildEscrowWaitingView(
+                  context,
+                  c,
+                  timeline,
+                  bidAmount: bidAmount,
+                  hasBid: hasBid,
+                );
+              if (handleCounterStep(timeline, c)) {
+              } else if (handleExtraEscrowStep(timeline, c)) {
+              } else if (handlePartsSteps(timeline, c)) {
+              } else {
+                handleWorkSteps(timeline, c);
+                handleSiteVisitSteps(timeline, c);
+              }
+              addHistoryCards(
+                timeline,
+                c,
+                bidAmount: bidAmount,
+                hasBid: hasBid,
+              );
             }
-            addHistoryCards(timeline, c);
 
             Widget list = ListView.separated(
               padding: const EdgeInsets.all(12),

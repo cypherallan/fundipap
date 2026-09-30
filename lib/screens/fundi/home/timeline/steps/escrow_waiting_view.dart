@@ -10,8 +10,10 @@ import '../fundi_timeline_context.dart';
 Widget buildEscrowWaitingView(
   BuildContext context,
   FundiTimelineContext c,
-  List<Widget> timeline,
-) {
+  List<Widget> timeline, {
+  int bidAmount = 0,
+  bool hasBid = false,
+}) {
   timeline.insert(
     0,
     OrangeAnimatedWaitingCard(
@@ -33,6 +35,23 @@ Widget buildEscrowWaitingView(
       isDone: true,
     ),
   );
+
+  if (hasBid) {
+    int amount = bidAmount > 0 ? bidAmount : c.labour;
+    timeline.insert(
+      2,
+      fundiCard(
+        color: Colors.green.shade50,
+        border: Colors.green,
+        icon: Icons.send,
+        iconColor: Colors.green,
+        title: 'Bid sent - Done KES $amount',
+        message: 'You sent a bid for ${c.jobTitle} - KES $amount',
+        time: 'Done',
+        isDone: true,
+      ),
+    );
+  }
 
   Widget list = ListView.separated(
     padding: const EdgeInsets.all(12),

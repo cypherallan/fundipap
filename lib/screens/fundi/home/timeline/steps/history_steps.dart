@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import '../widgets/timeline_card.dart';
 import '../fundi_timeline_context.dart';
 
-void addHistoryCards(List<Widget> timeline, FundiTimelineContext c) {
+void addHistoryCards(
+  List<Widget> timeline,
+  FundiTimelineContext c, {
+  int bidAmount = 0,
+  bool hasBid = false,
+}) {
   timeline.add(
     fundiCard(
       color: Colors.green.shade50,
@@ -59,4 +64,20 @@ void addHistoryCards(List<Widget> timeline, FundiTimelineContext c) {
       isDone: true,
     ),
   );
+
+  if (hasBid) {
+    int amount = bidAmount > 0 ? bidAmount : c.labour;
+    timeline.add(
+      fundiCard(
+        color: Colors.green.shade50,
+        border: Colors.green,
+        icon: Icons.send,
+        iconColor: Colors.green,
+        title: 'Bid sent - Done KES $amount',
+        message: 'You sent a bid for ${c.jobTitle} - KES $amount',
+        time: 'Done',
+        isDone: true,
+      ),
+    );
+  }
 }
