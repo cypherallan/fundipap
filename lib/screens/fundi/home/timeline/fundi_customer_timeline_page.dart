@@ -6,6 +6,11 @@ import '../../../../theme/app_theme.dart';
 import '../../../../widgets/animated_waiting_card.dart';
 import '../../../../app.dart';
 import '../../../../widgets/job_chat_section.dart';
+import '../../../../services/fundi_waiting_state_service.dart';
+import '../timeline/fundi_timeline_actions.dart';
+import 'widgets/timeline_card.dart';
+import '../../my_jobs/fundi_request_new_price_screen.dart';
+import '../fundi_visit_customer_tab.dart';
 
 class FundiCustomerTimelinePage extends StatefulWidget {
   final String jobId;
@@ -36,6 +41,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
     if (v is bool) return v;
     if (v is int) return v != 0;
     if (v is String) return v.toLowerCase() == 'true' || v == '1';
+    if (v is Timestamp) return true;
     return fb;
   }
 
@@ -200,32 +206,27 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
           .doc(widget.jobId)
           .snapshots(),
       builder: (context, jobSnap) {
-        if (!jobSnap.hasData) {
+        if (!jobSnap.hasData)
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
-        }
         var job = jobSnap.data!.data() as Map<String, dynamic>;
-        var status = (job['status'] ?? '').toString();
-        var escrowStatus = (job['escrowStatus'] ?? 'pending').toString();
-        bool escrowDone =
-            escrowStatus == 'held' ||
-            escrowStatus == 'paid' ||
-            escrowStatus == 'released';
+        var status = (job['status'] ?? '').toString().toLowerCase();
+        var escrowStatus = (job['escrowStatus'] ?? 'pending')
+            .toString()
+            .toLowerCase();
+        bool escrowDone = ['held', 'paid', 'released'].contains(escrowStatus);
         int labour = _toInt(
           job['laborCost'] ?? job['agreedPrice'] ?? job['price'] ?? 0,
         );
         int transport = _toInt(job['transportFee'] ?? 0);
         int fundiSees = labour + transport;
         bool siteDone =
-            _toBool(job['siteVisitDone']) || _toBool(job['siteVisited']);
-        bool travelling = _toBool(job['travelling']) || status == 'travelling';
-        bool isStarted =
-            status == 'in_progress' ||
-            status == 'job_completed' ||
-            status == 'pending_completion' ||
-            status == 'completed';
-        bool isCancelled = status.toLowerCase().contains('cancel');
+            _toBool(job['siteVisitDone']) ||
+            _toBool(job['siteVisited']) ||
+            job['siteVisitedAt'] != null ||
+            ['site_visit', 'site_visit_done'].contains(status);
+        bool isCancelled = status.contains('cancel');
 
         if (isCancelled) {
           return Scaffold(
@@ -263,13 +264,11 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
               .where('fundiId', isEqualTo: uid)
               .snapshots(),
           builder: (context, bidsSnap) {
-            if (!bidsSnap.hasData) {
+            if (!bidsSnap.hasData)
               return const Scaffold(
                 body: Center(child: CircularProgressIndicator()),
               );
-            }
             if (bidsSnap.data!.docs.isEmpty) {
-              // No bid found, fallback to job only
               List<Widget> timeline = [];
               timeline.add(
                 _greenCard(
@@ -277,7 +276,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                   message: '${widget.jobTitle} • ${widget.clientName}',
                 ),
               );
-              if (escrowDone) {
+              if (escrowDone)
                 timeline.add(
                   _greenCard(
                     title: 'Escrow locked - Done KES $fundiSees',
@@ -285,7 +284,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                         'Labour KES $labour + Transport KES $transport = KES $fundiSees locked',
                   ),
                 );
-              } else {
+              else
                 timeline.add(
                   OrangeAnimatedWaitingCard(
                     title: 'Waiting for client to pay KES $fundiSees to escrow',
@@ -293,7 +292,6 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                         'Client ${widget.clientName} has not locked money yet',
                   ),
                 );
-              }
               return Scaffold(
                 appBar: AppBar(
                   leading: IconButton(
@@ -306,67 +304,6 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                   ),
                   backgroundColor: FundipapColors.blackGray,
                   foregroundColor: Colors.white,
-                  actions: [
-                    IconButton(
-                      icon: const Icon(Icons.chat_bubble_outline),
-                      onPressed: () {
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.white,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(16),
-                            ),
-                          ),
-                          builder: (_) => DraggableScrollableSheet(
-                            expand: false,
-                            initialChildSize: 0.85,
-                            minChildSize: 0.5,
-                            maxChildSize: 0.95,
-                            builder: (context, scrollCtrl) => Padding(
-                              padding: EdgeInsets.only(
-                                bottom: MediaQuery.of(
-                                  context,
-                                ).viewInsets.bottom,
-                              ),
-                              child: Column(
-                                children: [
-                                  const SizedBox(height: 12),
-                                  Container(
-                                    width: 40,
-                                    height: 4,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade300,
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'Chat with ${widget.clientName}',
-                                    style: GoogleFonts.montserrat(
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  const Divider(),
-                                  Expanded(
-                                    child: SingleChildScrollView(
-                                      controller: scrollCtrl,
-                                      padding: const EdgeInsets.all(12),
-                                      child: JobChatSection(
-                                        jobId: widget.jobId,
-                                        isClient: false,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
                 ),
                 body: ListView.separated(
                   padding: const EdgeInsets.all(12),
@@ -380,15 +317,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
             var bidDoc = bidsSnap.data!.docs.first;
             var bid = bidDoc.data() as Map<String, dynamic>;
             int myBidPrice = _toInt(bid['price'] ?? 0);
-            String bidStatus = (bid['status'] ?? '').toString();
-            String lastBy = (bid['lastCounterBy'] ?? bid['counterBy'] ?? '')
-                .toString();
-            bool isClientCounterPending =
-                (bidStatus == 'countered' && lastBy != uid) ||
-                bidStatus == 'client_counter';
-            bool isMyCounterPending = bidStatus == 'countered' && lastBy == uid;
 
-            // Counter offers history
             return StreamBuilder<QuerySnapshot>(
               stream: bidDoc.reference
                   .collection('counterOffers')
@@ -401,44 +330,29 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                         ?.cast<Map<String, dynamic>>() ??
                     [];
 
+                FundiWaitingState? waitingState = getFundiWaitingState(
+                  job: job,
+                  bid: bid,
+                  counterOffers: coDocs,
+                  uid: uid,
+                );
                 List<Widget> doneHistory = [];
                 Widget? currentWaiting;
 
-                // 1. Bid sent - done history
-                bool bidIsDone =
-                    isClientCounterPending ||
-                    isMyCounterPending ||
-                    status == 'assigned' ||
-                    escrowDone ||
-                    isStarted;
-                if (bidIsDone) {
-                  doneHistory.add(
-                    _greenCard(
-                      title: 'Bid sent - KES $myBidPrice - Done',
-                      message:
-                          'You sent bid KES $myBidPrice for ${widget.jobTitle} • ${widget.clientName}',
-                    ),
-                  );
-                } else {
-                  currentWaiting = OrangeAnimatedWaitingCard(
-                    title:
-                        'Bid sent - KES $myBidPrice - Waiting for client to react',
-                    message:
-                        'You sent KES $myBidPrice. Waiting for ${widget.clientName} to accept or counter',
-                  );
-                }
-
-                // 2. Past counters -> done history only
                 for (int i = 0; i < coDocs.length; i++) {
                   var co = coDocs[i].data() as Map<String, dynamic>;
                   int price = _toInt(co['price'] ?? 0);
                   String by = (co['by'] ?? '').toString();
                   bool isLast = i == coDocs.length - 1;
                   if (isLast &&
-                      ((by != uid && isClientCounterPending) ||
-                          (by == uid && isMyCounterPending)))
+                      ((by != uid &&
+                              waitingState?.type ==
+                                  FundiWaitingType.clientCounter) ||
+                          (by == uid &&
+                              waitingState?.type ==
+                                  FundiWaitingType.myCounter)))
                     continue;
-                  if (by != uid) {
+                  if (by != uid)
                     doneHistory.add(
                       _greenCard(
                         title: 'Client countered - KES $price - Done',
@@ -447,7 +361,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                         icon: Icons.compare_arrows,
                       ),
                     );
-                  } else {
+                  else
                     doneHistory.add(
                       _greenCard(
                         title: 'You countered - KES $price - Done',
@@ -455,10 +369,18 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                         icon: Icons.compare_arrows,
                       ),
                     );
-                  }
                 }
 
-                // 3. Accepted history -> done
+                if (waitingState == null ||
+                    waitingState.type != FundiWaitingType.bidSent) {
+                  doneHistory.add(
+                    _greenCard(
+                      title: 'Bid sent - KES $myBidPrice - Done',
+                      message:
+                          'You sent bid KES $myBidPrice for ${widget.jobTitle} • ${widget.clientName}',
+                    ),
+                  );
+                }
                 for (var ph in priceHistory) {
                   if ((ph['type'] ?? '') == 'accepted_client_counter') {
                     doneHistory.add(
@@ -471,10 +393,9 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                     );
                   }
                 }
-
-                // 4. Escrow/site -> done or waiting
-                if (status == 'assigned' || escrowDone || isStarted) {
-                  if (escrowDone) {
+                if (escrowDone && !siteDone) {
+                  // Don't add green escrow here if waitingState says waiting - waiting card will show orange
+                  if (waitingState?.type != FundiWaitingType.waitingEscrow) {
                     doneHistory.add(
                       _greenCard(
                         title: 'Escrow locked - Done KES $fundiSees',
@@ -482,219 +403,312 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                             'Labour KES $labour + Transport KES $transport = KES $fundiSees locked',
                       ),
                     );
-                    if (siteDone) {
-                      doneHistory.add(
-                        _greenCard(
-                          title: 'Site visited - Done',
-                          message: 'You visited site • Done',
+                  }
+                }
+                if (siteDone) {
+                  doneHistory.add(
+                    _greenCard(
+                      title: 'Site visited - Done',
+                      message: 'You visited site • Done',
+                    ),
+                  );
+                }
+
+                // BUILD CURRENT WAITING BASED ON SERVICE - ORDER MATTERS
+                if (waitingState != null) {
+                  switch (waitingState.type) {
+                    case FundiWaitingType.clientCounter:
+                      int clientCounterAmt = waitingState.price;
+                      currentWaiting = Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.orange.shade300,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.compare_arrows,
+                                  color: Colors.orange.shade800,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Client countered your labour charges',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                      color: Colors.orange.shade800,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Client countered: KES $clientCounterAmt (Your bid KES $myBidPrice)',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.blue.shade800,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () async {
+                                      await bidDoc.reference.update({
+                                        'status': 'rejected',
+                                        'rejectedBy': uid,
+                                        'rejectedAt':
+                                            FieldValue.serverTimestamp(),
+                                      });
+                                    },
+                                    child: Text(
+                                      'Reject',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () => counterAsFundi(
+                                      bidDoc.reference,
+                                      widget.jobId,
+                                      clientCounterAmt.toDouble(),
+                                    ),
+                                    child: Text(
+                                      'Counter',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor:
+                                          FundipapColors.greenSuccess,
+                                    ),
+                                    onPressed: () async {
+                                      await bidDoc.reference.update({
+                                        'status': 'accepted',
+                                        'agreedPrice': clientCounterAmt,
+                                        'price': clientCounterAmt,
+                                        'lastCounterPrice': clientCounterAmt,
+                                        'lastCounterAmount': clientCounterAmt,
+                                        'acceptedAt':
+                                            FieldValue.serverTimestamp(),
+                                      });
+                                      await FirebaseFirestore.instance
+                                          .collection('jobs')
+                                          .doc(widget.jobId)
+                                          .update({
+                                            'status': 'assigned',
+                                            'assignedFundiId': uid,
+                                            'agreedPrice': clientCounterAmt,
+                                            'price': clientCounterAmt,
+                                            'escrowStatus':
+                                                'pending', // FIX: reset so orange waiting shows, not green
+                                            'escrowAmount': FieldValue.delete(),
+                                            'travelling': false,
+                                            'siteVisitDone': false,
+                                            'siteVisited': false,
+                                            'renegotiation': {
+                                              'requested': false,
+                                            },
+                                            'priceHistory': FieldValue.arrayUnion(
+                                              [
+                                                {
+                                                  'price': clientCounterAmt,
+                                                  'by': uid,
+                                                  'type':
+                                                      'accepted_client_counter',
+                                                  'at': DateTime.now()
+                                                      .toIso8601String(),
+                                                },
+                                              ],
+                                            ),
+                                            'updatedAt':
+                                                FieldValue.serverTimestamp(),
+                                          });
+                                    },
+                                    child: const Text(
+                                      'Accept',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       );
-                      if (isStarted) {
-                        doneHistory.add(
-                          _greenCard(
-                            title: 'Site visit - Done',
-                            message: 'Done',
+                      break;
+                    case FundiWaitingType.myCounter:
+                    case FundiWaitingType.bidSent:
+                    case FundiWaitingType.waitingEscrow:
+                    case FundiWaitingType.waitingNewPriceApproval:
+                      currentWaiting = OrangeAnimatedWaitingCard(
+                        title: waitingState.title,
+                        message: waitingState.message,
+                      );
+                      break;
+                    case FundiWaitingType.escrowLocked:
+                      currentWaiting = fundiCard(
+                        color: Colors.white,
+                        border: FundipapColors.blackGray,
+                        icon: Icons.location_on,
+                        iconColor: Colors.black,
+                        title: waitingState.title,
+                        message: waitingState.message,
+                        time: 'Now',
+                        isCurrent: true,
+                        action: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: FundipapColors.blackGray,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(double.infinity, 52),
+                            ),
+                            icon: const Icon(Icons.navigation),
+                            label: const Text('START SITE VISIT'),
+                            onPressed: () =>
+                                FundiTimelineActions.startSiteVisit(
+                                  context,
+                                  widget.jobId,
+                                  widget.jobTitle,
+                                ),
                           ),
-                        );
-                      }
-                    } else if (travelling) {
-                      currentWaiting = OrangeAnimatedWaitingCard(
+                        ),
+                      );
+                      break;
+                    case FundiWaitingType.travelling:
+                      currentWaiting = fundiCard(
+                        color: Colors.blue.shade50,
+                        border: Colors.blue,
+                        icon: Icons.directions_bike,
+                        iconColor: Colors.blue,
                         title: 'You are on the way',
-                        message: 'Travelling to client',
+                        message: 'Travelling to client - open tracking',
+                        time: 'Now',
+                        isCurrent: true,
+                        action: ElevatedButton.icon(
+                          icon: const Icon(Icons.map),
+                          label: const Text('OPEN TRACKING'),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => VisitCustomerScreen(
+                                jobId: widget.jobId,
+                                job: job,
+                              ),
+                            ),
+                          ),
+                        ),
                       );
-                    } else {
-                      currentWaiting = OrangeAnimatedWaitingCard(
-                        title:
-                            'Escrow locked - KES $fundiSees - Start site visit now',
-                        message:
-                            'Client locked KES $fundiSees. Start travelling to site',
+                      break;
+                    case FundiWaitingType.siteVisited:
+                      currentWaiting = Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: FundipapColors.greenSuccess,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Next action - Client locked KES $fundiSees secured to escrow',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: () =>
+                                        FundiTimelineActions.startJob(
+                                          widget.jobId,
+                                        ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor:
+                                          FundipapColors.greenSuccess,
+                                    ),
+                                    child: const Text(
+                                      'START JOB',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            FundiRequestNewPriceScreen(
+                                              jobId: widget.jobId,
+                                              job: job,
+                                            ),
+                                      ),
+                                    ),
+                                    child: const Text('New Price'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       );
-                    }
-                  } else {
-                    currentWaiting = OrangeAnimatedWaitingCard(
-                      title:
-                          'Waiting for client to lock KES $fundiSees to escrow',
-                      message:
-                          'You accepted KES $labour. Client ${widget.clientName} needs to lock KES $fundiSees to escrow before you start',
-                    );
+                      break;
                   }
                 }
 
-                // 5. Current counter overrides any other waiting
-                if (isClientCounterPending) {
-                  int clientCounterAmt = _toInt(
-                    bid['lastCounterAmount'] ??
-                        bid['lastCounterPrice'] ??
-                        bid['clientCounterAmount'] ??
-                        0,
-                  );
-                  currentWaiting = Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.orange.shade300,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.compare_arrows,
-                              color: Colors.orange.shade800,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Client countered your labour charges',
-                              style: GoogleFonts.montserrat(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 13,
-                                color: Colors.orange.shade800,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'Client countered: KES $clientCounterAmt (Your bid KES $myBidPrice)',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.blue.shade800,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () async {
-                                  await bidDoc.reference.update({
-                                    'status': 'rejected',
-                                    'rejectedBy': uid,
-                                    'rejectedAt': FieldValue.serverTimestamp(),
-                                  });
-                                },
-                                child: Text(
-                                  'Reject',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => counterAsFundi(
-                                  bidDoc.reference,
-                                  widget.jobId,
-                                  clientCounterAmt.toDouble(),
-                                ),
-                                child: Text(
-                                  'Counter',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: FundipapColors.greenSuccess,
-                                ),
-                                onPressed: () async {
-                                  await bidDoc.reference.update({
-                                    'status': 'accepted',
-                                    'agreedPrice': clientCounterAmt,
-                                    'price': clientCounterAmt,
-                                    'lastCounterPrice': clientCounterAmt,
-                                    'lastCounterAmount': clientCounterAmt,
-                                    'acceptedAt': FieldValue.serverTimestamp(),
-                                  });
-                                  await FirebaseFirestore.instance
-                                      .collection('jobs')
-                                      .doc(widget.jobId)
-                                      .update({
-                                        'status': 'assigned',
-                                        'assignedFundiId': uid,
-                                        'agreedPrice': clientCounterAmt,
-                                        'price': clientCounterAmt,
-                                        'renegotiation': {'requested': false},
-                                        'priceHistory': FieldValue.arrayUnion([
-                                          {
-                                            'price': clientCounterAmt,
-                                            'by': uid,
-                                            'type': 'accepted_client_counter',
-                                            'at': DateTime.now()
-                                                .toIso8601String(),
-                                          },
-                                        ]),
-                                        'updatedAt':
-                                            FieldValue.serverTimestamp(),
-                                      });
-                                },
-                                child: const Text(
-                                  'Accept',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  );
-                } else if (isMyCounterPending) {
-                  int lastAmt = _toInt(
-                    bid['lastCounterAmount'] ??
-                        bid['lastCounterPrice'] ??
-                        myBidPrice,
-                  );
-                  currentWaiting = OrangeAnimatedWaitingCard(
-                    title:
-                        'You countered • KES $lastAmt - Waiting for client to react',
-                    message:
-                        'You countered KES $lastAmt. Waiting for ${widget.clientName} to accept, counter or reject...',
-                  );
-                }
-
-                // 6. Build final list: waiting ALWAYS first, then newest done first
                 List<Widget> timeline = [];
                 if (currentWaiting != null) timeline.add(currentWaiting);
                 timeline.addAll(doneHistory.reversed);
-                if (timeline.isEmpty) {
-                  timeline.add(
-                    _greenCard(
-                      title: 'Bid sent - KES $myBidPrice',
-                      message: 'Waiting',
-                    ),
-                  );
-                }
-
-                // Reverse? Keep chronological: oldest first, current waiting on top? Client does oldest first? User said client does well - keep oldest top, current pending top as well? We will keep current pending at top (insert 0), history below in order sent.
-                // Already current pending inserted at 0
 
                 return Scaffold(
                   appBar: AppBar(

@@ -4,9 +4,43 @@ import '../widgets/timeline_card.dart';
 import '../fundi_timeline_actions.dart';
 import '../fundi_timeline_context.dart';
 import '../../../my_jobs/fundi_request_new_price_screen.dart';
+import '../../fundi_visit_customer_tab.dart'; // FIX: public VisitCustomerScreen
+
+bool _toBool(dynamic v) {
+  if (v == null) return false;
+  if (v is bool) return v;
+  if (v is int) return v != 0;
+  if (v is String) return v == 'true' || v == '1';
+  return v is! String;
+}
 
 bool handleSiteVisitSteps(List<Widget> timeline, FundiTimelineContext c) {
-  if (!c.siteDone && c.travelling) {
+  String escrowRaw = (c.job['escrowStatus'] ?? 'pending')
+      .toString()
+      .toLowerCase();
+  bool escrowDone = ['held', 'paid', 'released'].contains(escrowRaw);
+  bool siteDone =
+      _toBool(c.job['siteVisitDone']) ||
+      _toBool(c.job['siteVisited']) ||
+      c.job['siteVisitedAt'] != null ||
+      c.siteDone;
+  bool travelling =
+      !siteDone &&
+      (c.travelling ||
+          (c.job['travelling'] == true) ||
+          c.status == 'travelling');
+
+  if (!escrowDone) return false;
+
+  var reneg = c.job['renegotiation'] as Map<String, dynamic>?;
+  bool renegPending =
+      reneg != null &&
+      reneg['requested'] == true &&
+      (reneg['status'] ?? 'pending') == 'pending';
+  if (renegPending) return false;
+
+  // 1. TRAVELLING - OPEN TRACKING
+  if (travelling && !siteDone) {
     timeline.add(
       fundiCard(
         color: Colors.blue.shade50,
@@ -14,32 +48,35 @@ bool handleSiteVisitSteps(List<Widget> timeline, FundiTimelineContext c) {
         icon: Icons.directions_bike,
         iconColor: Colors.blue,
         title: 'You are on the way',
-        message: 'Travelling to client',
+        message: 'Client sees you travelling',
         time: 'Now',
         isCurrent: true,
         action: ElevatedButton.icon(
-          icon: const Icon(Icons.navigation),
-          label: const Text('OPEN MAP'),
-          onPressed: () => FundiTimelineActions.startSiteVisit(
+          icon: const Icon(Icons.map),
+          label: const Text('OPEN TRACKING / CONFIRM ARRIVAL'),
+          onPressed: () => Navigator.push(
             c.context,
-            c.jobId,
-            c.jobTitle,
+            MaterialPageRoute(
+              builder: (_) => VisitCustomerScreen(jobId: c.jobId, job: c.job),
+            ),
           ),
         ),
       ),
     );
-    return false;
+    return true;
   }
-  if (!c.siteDone) {
+
+  // 2. ESCROW LOCKED
+  if (!siteDone && escrowDone) {
     timeline.add(
       fundiCard(
         color: Colors.white,
         border: FundipapColors.blackGray,
         icon: Icons.location_on,
         iconColor: Colors.black,
-        title: 'Escrow locked - Done KES ${c.fundiSeesWaiting}',
+        title: 'Escrow locked - KES ${c.fundiSeesWaiting} secured',
         message:
-            'Labour KES ${c.labour} + Transport KES ${c.transport} = KES ${c.fundiSeesWaiting} locked.',
+            'Labour KES ${c.labour} + Transport KES ${c.transport} = KES ${c.fundiSeesWaiting} locked. Start site visit now.',
         time: 'Now',
         isCurrent: true,
         action: SizedBox(
@@ -61,12 +98,18 @@ bool handleSiteVisitSteps(List<Widget> timeline, FundiTimelineContext c) {
         ),
       ),
     );
-    return false;
+    return true;
   }
-  if (c.siteDone &&
-      (c.status == 'site_visit' ||
-          c.status == 'assigned' ||
-          c.status == 'confirmed')) {
+
+  // 3. SITE DONE -> START JOB
+  if (siteDone) {
+    bool isStarted = [
+      'in_progress',
+      'pending_completion',
+      'job_completed',
+    ].contains(c.status);
+    if (isStarted) return false;
+
     timeline.add(
       Container(
         padding: const EdgeInsets.all(12),
@@ -121,7 +164,8 @@ bool handleSiteVisitSteps(List<Widget> timeline, FundiTimelineContext c) {
         ),
       ),
     );
-    return false;
+    return true;
   }
+
   return false;
 }

@@ -24,6 +24,14 @@ class FundiConfirmedTab extends StatelessWidget {
     required this.onMarkCompleted,
   });
 
+  bool _toBool(dynamic v) {
+    if (v == null) return false;
+    if (v is bool) return v;
+    if (v is int) return v != 0;
+    if (v is String) return v == 'true' || v == '1';
+    return true; // if Timestamp / exists, treat as true
+  }
+
   Future<void> _startSiteVisit(
     BuildContext context,
     String jobId,
@@ -33,9 +41,10 @@ class FundiConfirmedTab extends StatelessWidget {
       'travelling': true,
       'siteVisitStarted': true,
       'travellingAt': FieldValue.serverTimestamp(),
-      'siteVisitStartedAt':
-          FieldValue.serverTimestamp(), // <-- ADD for 2h30m rule
+      'siteVisitStartedAt': FieldValue.serverTimestamp(),
       'status': 'travelling',
+      'siteVisitDone': false, // reset in case old
+      'siteVisited': false,
       'updatedAt': FieldValue.serverTimestamp(),
     });
     if (!context.mounted) return;
@@ -65,17 +74,15 @@ class FundiConfirmedTab extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: jobsStream,
       builder: (_, snap) {
-        if (snap.hasError) {
+        if (snap.hasError)
           return Center(child: SelectableText('Error: ${snap.error}'));
-        }
-        if (!snap.hasData) {
+        if (!snap.hasData)
           return const Center(child: CircularProgressIndicator());
-        }
 
         final allDocs = snap.data!.docs;
         var docs = allDocs.where((d) {
           final data = d.data() as Map<String, dynamic>;
-          final s = data['status']?.toString() ?? '';
+          final s = data['status']?.toString().toLowerCase() ?? '';
           return [
             'confirmed',
             'assigned',
@@ -87,14 +94,13 @@ class FundiConfirmedTab extends StatelessWidget {
           ].contains(s);
         }).toList();
 
-        if (docs.isEmpty) {
+        if (docs.isEmpty)
           return Center(
             child: Text(
               'No confirmed jobs',
               style: GoogleFonts.inter(color: Colors.black45),
             ),
           );
-        }
 
         return ListView.builder(
           padding: const EdgeInsets.all(12),
@@ -102,14 +108,24 @@ class FundiConfirmedTab extends StatelessWidget {
           itemBuilder: (_, i) {
             var job = docs[i].data() as Map<String, dynamic>;
             var jobId = docs[i].id;
-            String escrow = (job['escrowStatus'] ?? 'pending').toString();
+            String escrow = (job['escrowStatus'] ?? 'pending')
+                .toString()
+                .toLowerCase();
+            bool escrowDone =
+                escrow == 'held' || escrow == 'paid' || escrow == 'released';
             bool siteDone =
-                job['siteVisitDone'] == true || job['siteVisited'] == true;
+                _toBool(job['siteVisitDone']) ||
+                _toBool(job['siteVisited']) ||
+                job['siteVisitedAt'] != null;
             bool isTravelling =
-                job['travelling'] == true || job['status'] == 'travelling';
-            bool isStarted =
-                job['status'] == 'in_progress' ||
-                job['status'] == 'pending_completion';
+                !siteDone &&
+                (job['travelling'] == true ||
+                    (job['status'] ?? '').toString() == 'travelling');
+            bool isStarted = [
+              'in_progress',
+              'pending_completion',
+              'job_completed',
+            ].contains((job['status'] ?? '').toString());
             int agreedPrice =
                 (job['agreedPrice'] ??
                         job['acceptedBidAmount'] ??
@@ -118,7 +134,11 @@ class FundiConfirmedTab extends StatelessWidget {
                         0)
                     .toInt();
 
-            // FINAL CANCEL LOGIC: fundi can cancel ONLY before travelling
+            var reneg = job['renegotiation'] as Map<String, dynamic>?;
+            bool renegPending =
+                reneg != null &&
+                reneg['requested'] == true &&
+                (reneg['status'] ?? 'pending') == 'pending';
             bool canFundiCancel =
                 (job['status'] == 'assigned' || job['status'] == 'confirmed') &&
                 !isTravelling &&
@@ -153,7 +173,8 @@ class FundiConfirmedTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
 
-                  if (escrow != 'held' && escrow != 'paid')
+                  // 1. NO ESCROW -> waiting only, NO START SITE VISIT BUTTON
+                  if (!escrowDone)
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -193,8 +214,27 @@ class FundiConfirmedTab extends StatelessWidget {
                       ),
                     ),
 
-                  if (escrow == 'held' || escrow == 'paid') ...[
-                    if (!siteDone && !isTravelling) ...[
+                  // 2. ESCROW DONE
+                  if (escrowDone) ...[
+                    if (renegPending) ...[
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.purple.shade200),
+                        ),
+                        child: Text(
+                          'Waiting for client to approve extra KES ${reneg['extraToLock'] ?? reneg['extraLabor'] ?? ''}',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: Colors.purple.shade800,
+                          ),
+                        ),
+                      ),
+                    ] else if (!siteDone && !isTravelling) ...[
+                      // START SITE VISIT - only when escrowDone && !siteDone && !travelling
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
@@ -217,37 +257,7 @@ class FundiConfirmedTab extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.red.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.lock,
-                              size: 14,
-                              color: Colors.red.shade700,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'Tap above ONLY when you leave. Client will then see "Fundi is travelling"',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  color: Colors.red.shade800,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    if (!siteDone && isTravelling) ...[
+                    ] else if (!siteDone && isTravelling) ...[
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
@@ -293,8 +303,8 @@ class FundiConfirmedTab extends StatelessWidget {
                           label: const Text('OPEN TRACKING / CONFIRM ARRIVAL'),
                         ),
                       ),
-                    ],
-                    if (siteDone) ...[
+                    ] else if (siteDone) ...[
+                      // SITE DONE -> START JOB / NEW PRICE - NEVER show START SITE VISIT again
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
@@ -302,16 +312,16 @@ class FundiConfirmedTab extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          '✓ Site visited. Client notified. Status: ${job['status']}',
+                          '✓ Site visited - GPS verified. Status: ${job['status']}',
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             color: Colors.green.shade800,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
                       const SizedBox(height: 8),
-                      if (job['status'] == 'assigned' ||
-                          job['status'] == 'site_visit')
+                      if (!isStarted)
                         Row(
                           children: [
                             Expanded(
@@ -336,7 +346,7 @@ class FundiConfirmedTab extends StatelessWidget {
                             ),
                           ],
                         ),
-                      if (job['status'] == 'in_progress')
+                      if (isStarted && job['status'] == 'in_progress')
                         Row(
                           children: [
                             Expanded(
@@ -374,7 +384,6 @@ class FundiConfirmedTab extends StatelessWidget {
                     ],
                   ],
 
-                  // CANCEL BUTTON - FUNDI ONLY BEFORE TRAVELLING
                   if (canFundiCancel) ...[
                     const SizedBox(height: 10),
                     SizedBox(
@@ -401,46 +410,6 @@ class FundiConfirmedTab extends StatelessWidget {
                       ),
                     ),
                   ],
-                  if (!canFundiCancel &&
-                      !isStarted &&
-                      (job['status'] == 'travelling' || siteDone))
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'Cancel locked after travelling. Only client can cancel now.',
-                          style: GoogleFonts.inter(
-                            fontSize: 10,
-                            color: Colors.black54,
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (isStarted)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.green.shade200),
-                        ),
-                        child: Text(
-                          'Job started - Cancel inactive for both. Must complete.',
-                          style: GoogleFonts.inter(
-                            fontSize: 10,
-                            color: Colors.green.shade800,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               ),
             );
@@ -536,13 +505,21 @@ class _VisitCustomerScreenState extends State<_VisitCustomerScreen> {
           'siteVisitedAt': FieldValue.serverTimestamp(),
           'fundiLatAtVisit': currentPos?.latitude,
           'fundiLngAtVisit': currentPos?.longitude,
-          'travelling': false,
+          'travelling': false, // FIX: force false
+          'travellingAt': FieldValue.delete(), // clear travelling
           'status': 'site_visit',
+          'fundiHasUnread': false,
+          'customerHasUnread': true,
+          'updatedAt': FieldValue.serverTimestamp(),
         });
     if (!mounted) return;
-    Navigator.pop(context);
+    Navigator.pop(context); // back to list
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('✓ Site visit confirmed with GPS')),
+      const SnackBar(
+        content: Text(
+          '✓ Site visit confirmed - Now START JOB or Request New Price',
+        ),
+      ),
     );
   }
 

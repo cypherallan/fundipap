@@ -988,7 +988,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                           FundiBidDialog(jobId: jobId, jobData: jData),
                     ),
                     child: Text(
-                      'BID NOW',
+                      'BID NOW (You set the Price)',
                       style: GoogleFonts.montserrat(
                         fontWeight: FontWeight.w800,
                       ),

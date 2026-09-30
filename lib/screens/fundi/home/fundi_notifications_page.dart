@@ -17,7 +17,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
   final List<Map<String, dynamic>> _acceptedBids = [];
   final List<Map<String, dynamic>> _clientCounters = [];
   final List<Map<String, dynamic>> _sentBids = [];
-  final List<Map<String, dynamic>> _acceptedCounters = []; // NEW
+  final List<Map<String, dynamic>> _acceptedCounters = [];
   StreamSubscription? _bidsSub;
   List<DocumentSnapshot> _assignedJobs = [];
   StreamSubscription? _jobsSub;
@@ -52,6 +52,15 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     _jobsSub?.cancel();
     _jobsSub2?.cancel();
     _jobsMap.clear();
+    _excludedJobIds.clear(); // FIX 1: clear excluded
+    _assignedJobs = [];
+    _acceptedBids.clear();
+    _clientCounters.clear();
+    _sentBids.clear();
+    _acceptedCounters.clear();
+    if (mounted)
+      setState(() {}); // FIX 1: clear UI immediately, no flash of old
+
     var uid = FirebaseAuth.instance.currentUser!.uid;
 
     _bidsSub = FirebaseFirestore.instance
@@ -72,7 +81,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
             var jId = (bid['jobId'] ?? b.reference.parent.parent?.id ?? '')
                 .toString();
             if (jId.isEmpty) continue;
-            if (_excludedJobIds.contains(jId)) continue;
+            // FIX 2: DON'T check _excludedJobIds here, check in build() after jobs arrive
 
             bool isClientCounter =
                 (status == 'countered' &&
@@ -154,7 +163,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                     (bid['customerName'] ?? bid['clientName'] ?? 'Client')
                         .toString(),
                 'clientId': (bid['customerId'] ?? '').toString(),
-                'price': bid['amount'] ?? bid['bidAmount'] ?? 0,
+                'price': bid['amount'] ?? bid['bidAmount'] ?? bid['price'] ?? 0,
                 'createdAt': bid['createdAt'] ?? bid['updatedAt'],
                 'isRead': bid['isReadByFundi'] == true,
                 'type': 'bid_sent',
@@ -285,7 +294,6 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         'type': 'bid_sent',
       };
     }
-
     for (var b in _acceptedCounters) {
       if (assignedIds.contains(b['jobId'])) continue;
       if (_excludedJobIds.contains(b['jobId'])) continue;
@@ -309,7 +317,6 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         'type': 'accepted_counter',
       };
     }
-
     for (var b in _acceptedBids) {
       if (assignedIds.contains(b['jobId'])) continue;
       if (_excludedJobIds.contains(b['jobId'])) continue;
@@ -331,7 +338,6 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         'type': 'accepted',
       };
     }
-
     for (var b in _clientCounters) {
       if (assignedIds.contains(b['jobId'])) continue;
       if (_excludedJobIds.contains(b['jobId'])) continue;
@@ -368,6 +374,9 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       bool isRenegPendingExtra =
           renegStatus.contains('pending_extra_escrow') ||
           job['status'] == 'renegotiation_countered_by_client';
+      bool isRenegPending =
+          renegStatus == 'pending' &&
+          reneg?['requested'] == true; // FIX 3: your new case
       int counterExtra = 0;
       if (isRenegCounter || isRenegPendingExtra) {
         counterExtra =
@@ -377,12 +386,28 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
             ) ??
             0;
       }
+      int pendingExtra = 0;
+      if (isRenegPending) {
+        pendingExtra =
+            int.tryParse(
+              (reneg?['extraToLock'] ??
+                      reneg?['pendingLabor'] ??
+                      reneg?['extraLabor'] ??
+                      0)
+                  .toString(),
+            ) ??
+            0;
+      }
       String category = title;
       String type = 'assigned';
       if (isRenegCounter) {
         category = '$title • Client countered extra KES $counterExtra';
         type = 'counter';
-      }
+      } else if (isRenegPending) {
+        category =
+            '$title • Waiting for client to approve extra KES $pendingExtra';
+        type = 'reneg_pending';
+      } // FIX 3
       grouped[doc.id] = {
         'jobId': doc.id,
         'clientName': cName,
@@ -459,6 +484,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                       bool isCounter = g['type'] == 'counter';
                       bool isSent = g['type'] == 'bid_sent';
                       bool isAcceptedCounter = g['type'] == 'accepted_counter';
+                      bool isRenegPending = g['type'] == 'reneg_pending';
                       return Card(
                         color: isCounter
                             ? Colors.orange.shade50
@@ -466,6 +492,8 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                             ? Colors.blue.shade50
                             : isAcceptedCounter
                             ? Colors.green.shade50
+                            : isRenegPending
+                            ? Colors.purple.shade50
                             : null,
                         shape: RoundedRectangleBorder(
                           side: BorderSide(
@@ -475,8 +503,14 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                                 ? Colors.blue.shade300
                                 : isAcceptedCounter
                                 ? Colors.green.shade300
+                                : isRenegPending
+                                ? Colors.purple.shade300
                                 : Colors.transparent,
-                            width: isCounter || isSent || isAcceptedCounter
+                            width:
+                                isCounter ||
+                                    isSent ||
+                                    isAcceptedCounter ||
+                                    isRenegPending
                                 ? 1.2
                                 : 0,
                           ),
@@ -491,6 +525,8 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                                 ? Colors.blue.shade700
                                 : isAcceptedCounter
                                 ? Colors.green.shade700
+                                : isRenegPending
+                                ? Colors.purple.shade700
                                 : FundipapColors.blackGray,
                             child: Icon(
                               isCounter
@@ -499,6 +535,8 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                                   ? Icons.send
                                   : isAcceptedCounter
                                   ? Icons.check_circle
+                                  : isRenegPending
+                                  ? Icons.hourglass_top
                                   : Icons.person,
                               color: Colors.white,
                               size: 18,
@@ -518,6 +556,8 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                                 ? ' • Waiting for client'
                                 : isAcceptedCounter
                                 ? ' • Waiting for client to confirm'
+                                : isRenegPending
+                                ? ' • Waiting for approval'
                                 : ''}',
                             style: GoogleFonts.inter(fontSize: 11),
                           ),

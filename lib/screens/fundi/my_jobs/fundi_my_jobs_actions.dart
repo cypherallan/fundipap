@@ -7,6 +7,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 mixin FundiMyJobsActionsMixin<T extends StatefulWidget> on State<T> {
+  bool _toBool(dynamic v) {
+    if (v == null) return false;
+    if (v is bool) return v;
+    if (v is int) return v != 0;
+    if (v is String) return v == 'true' || v == '1';
+    return true;
+  }
+
   Future<void> counterAsFundi(
     DocumentReference bidRef,
     String jobId,
@@ -108,12 +116,18 @@ mixin FundiMyJobsActionsMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
+  // FIXED: was only setting siteVisitDone -> loop back to START SITE VISIT
   Future<void> markSiteVisited(String jobId) async {
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'siteVisited': true,
       'siteVisitDone': true,
+      'siteVisitedAt': FieldValue.serverTimestamp(),
       'siteVisitAt': FieldValue.serverTimestamp(),
+      'travelling': false,
       'status': 'site_visit',
       'updatedAt': FieldValue.serverTimestamp(),
+      'customerHasUnread': true,
+      'fundiHasUnread': false,
     });
   }
 
@@ -156,18 +170,6 @@ mixin FundiMyJobsActionsMixin<T extends StatefulWidget> on State<T> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Site Photos (optional for now)',
-                    style: GoogleFonts.montserrat(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11,
-                      color: Colors.black54,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
                 if (pickedImages.isNotEmpty)
                   Wrap(
                     spacing: 6,
@@ -274,13 +276,6 @@ mixin FundiMyJobsActionsMixin<T extends StatefulWidget> on State<T> {
                         });
                       } catch (e) {
                         setDialog(() => isUploading = false);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Upload failed, sending without photos: $e',
-                            ),
-                          ),
-                        );
                         Navigator.pop(ctx, {
                           'price': priceCtrl.text.trim(),
                           'reason': reasonCtrl.text.trim(),
@@ -296,22 +291,30 @@ mixin FundiMyJobsActionsMixin<T extends StatefulWidget> on State<T> {
     );
     if (result == null) return;
     double newPrice = double.tryParse(result['price']) ?? 0;
+    // FIX: set extraToLock fields that fundi_waiting_state_service reads
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'renegotiation': {
         'requested': true,
         'newPrice': newPrice,
+        'extraToLock': newPrice, // FIX for waiting state
+        'extraLabor': newPrice,
+        'pendingLabor': newPrice,
         'reason': result['reason'],
         'photos': result['photos'],
         'status': 'pending',
         'requestedBy': FirebaseAuth.instance.currentUser!.uid,
         'at': FieldValue.serverTimestamp(),
       },
+      'siteVisited': true,
       'siteVisitDone': true,
       'siteVisitFindings': result['reason'],
       'siteVisitPhotos': result['photos'],
+      'siteVisitedAt': FieldValue.serverTimestamp(),
       'siteVisitAt': FieldValue.serverTimestamp(),
+      'travelling': false,
       'status': 'site_visit',
       'updatedAt': FieldValue.serverTimestamp(),
+      'customerHasUnread': true,
     });
   }
 
@@ -319,6 +322,7 @@ mixin FundiMyJobsActionsMixin<T extends StatefulWidget> on State<T> {
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'status': 'in_progress',
       'startedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 

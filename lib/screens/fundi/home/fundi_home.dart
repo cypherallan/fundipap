@@ -12,6 +12,7 @@ import 'timeline/fundi_customer_timeline_page.dart';
 import 'job_details_screen.dart';
 import 'fundi_home_logic.dart';
 import 'package:fundipap/widgets/animated_waiting_card.dart';
+import '../../../services/fundi_waiting_state_service.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});
@@ -120,9 +121,15 @@ class _FundiHomeState extends State<FundiHome> {
   }
 
   void _initNotificationListeners() {
-    var uid = FirebaseAuth.instance.currentUser!.uid;
     _bidsSub?.cancel();
     _assignedSub?.cancel();
+    _jobsMap.clear();
+    _excludedJobIds.clear();
+    _assignedJobs = [];
+    _bids.clear();
+    if (mounted) setState(() {});
+
+    var uid = FirebaseAuth.instance.currentUser!.uid;
     _bidsSub = FirebaseFirestore.instance
         .collectionGroup('bids')
         .where('fundiId', isEqualTo: uid)
@@ -134,7 +141,8 @@ class _FundiHomeState extends State<FundiHome> {
             if (bid['deletedForFundi'] == true) continue;
             var jId = (bid['jobId'] ?? b.reference.parent.parent?.id ?? '')
                 .toString();
-            if (jId.isEmpty || _excludedJobIds.contains(jId)) continue;
+            if (jId.isEmpty) continue;
+            // DON'T filter _excludedJobIds here - filter in build()
             _bids.add({
               'jobId': jId,
               'bidId': b.id,
@@ -150,7 +158,11 @@ class _FundiHomeState extends State<FundiHome> {
               'isRead':
                   bid['isReadByFundi'] == true ||
                   bid['clientCounterSeenByFundi'] == true,
-              'price': bid['clientCounterAmount'] ?? bid['amount'] ?? 0,
+              'price':
+                  bid['clientCounterAmount'] ??
+                  bid['amount'] ??
+                  bid['price'] ??
+                  0,
             });
           }
           if (mounted) setState(() {});
@@ -252,7 +264,8 @@ class _FundiHomeState extends State<FundiHome> {
     BadgeLevel level = badgeResult?.level ?? BadgeLevel.none;
     bool hasBadge = level != BadgeLevel.none;
 
-    // notifications grouped like CustomerHome
+    // notifications grouped - USING SHARED SERVICE (same as timeline)
+    final uid = FirebaseAuth.instance.currentUser!.uid;
     final assignedIds = _assignedJobs.map((d) => d.id).toSet();
     final assignedMap = {
       for (var d in _assignedJobs) d.id: (d.data() as Map<String, dynamic>),
@@ -260,33 +273,47 @@ class _FundiHomeState extends State<FundiHome> {
     Map<String, Map<String, dynamic>> grouped = {};
     for (var b in _bids) {
       if (_excludedJobIds.contains(b['jobId'])) continue;
-
-      // Don't hide assigned job if escrow not held yet - show as waiting to lock
-      var escrow =
-          assignedMap[b['jobId']]?['escrowStatus']?.toString() ?? 'pending';
-      bool escrowDone =
-          escrow == 'held' || escrow == 'paid' || escrow == 'released';
-      if (assignedIds.contains(b['jobId']) && escrowDone) continue;
-
-      var status = (b['status'] ?? '').toString();
-      bool isCounter = status == 'countered' || status == 'client_counter';
-      bool isAccepted =
-          status == 'accepted' ||
-          status == 'pending_client_accept' ||
-          status == 'counter_accepted_by_fundi' ||
-          assignedIds.contains(b['jobId']);
+      var jobDataForNotif =
+          assignedMap[b['jobId']] ??
+          (b['jobData'] as Map<String, dynamic>? ?? {});
+      var bidDataForNotif = (b['bidData'] as Map<String, dynamic>?) ?? b;
+      FundiWaitingState? ws = getFundiWaitingState(
+        job: jobDataForNotif,
+        bid: bidDataForNotif,
+        counterOffers: [],
+        uid: uid,
+      );
       String category;
       String type;
-      if (isCounter) {
-        category = 'Client countered your labour charges';
-        type = 'counter';
-      } else if (isAccepted) {
+      FundiWaitingType waitingType;
+      if (ws != null) {
         category =
-            'Waiting for ${b['clientName']} to lock KES ${b['price']} to escrow';
-        type = 'waiting_escrow';
+            ws.title; // FIX: your service uses title, not notificationCategory
+        type = ws.type.name;
+        waitingType = ws.type;
       } else {
+        var escrow = (jobDataForNotif['escrowStatus']?.toString() ?? 'pending');
+        bool escrowDone =
+            escrow == 'held' || escrow == 'paid' || escrow == 'released';
+        // FIX: only skip if REALLY done - if siteDone and no renego, skip bid_sent
+        bool siteDone =
+            jobDataForNotif['siteVisitDone'] == true ||
+            jobDataForNotif['siteVisited'] == true;
+        var renego = jobDataForNotif['renegotiation'] as Map<String, dynamic>?;
+        bool renegoPending =
+            renego != null &&
+            renego['requested'] == true &&
+            (renego['status'] ?? 'pending') == 'pending';
+        if (assignedIds.contains(b['jobId']) &&
+            escrowDone &&
+            siteDone &&
+            !renegoPending) {
+          // job fully in pending list, don't show as notification
+          continue;
+        }
         category = 'Bid sent - KES ${b['price']} • ${b['jobTitle']}';
         type = 'bid_sent';
+        waitingType = FundiWaitingType.bidSent;
       }
       String key = "${b['jobId']}_${b['clientId']}";
       grouped[key] = {
@@ -303,6 +330,7 @@ class _FundiHomeState extends State<FundiHome> {
         'type': type,
         'isRead': b['isRead'] == true,
         'price': b['price'],
+        'waitingType': waitingType,
       };
     }
     var notifList = grouped.values.toList()

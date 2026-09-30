@@ -5,26 +5,40 @@ enum FundiWaitingType {
   clientCounter,
   myCounter,
   waitingEscrow,
+  escrowLocked,
   travelling,
-  startSiteVisit,
-  none,
+  siteVisited,
+  waitingNewPriceApproval,
 }
 
 class FundiWaitingState {
   final FundiWaitingType type;
-  final String title; // for timeline orange card
-  final String message; // for timeline orange card
-  final String notificationCategory; // for home notification
+  final String title;
+  final String message;
   final int price;
-  final bool isCounter;
-  const FundiWaitingState({
+  FundiWaitingState({
     required this.type,
     required this.title,
     required this.message,
-    required this.notificationCategory,
-    required this.price,
-    this.isCounter = false,
+    this.price = 0,
   });
+
+  String get notificationCategory => title;
+}
+
+int _toInt(dynamic v) {
+  if (v == null) return 0;
+  if (v is int) return v;
+  if (v is double) return v.toInt();
+  return int.tryParse(v.toString()) ?? 0;
+}
+
+bool _toBool(dynamic v) {
+  if (v == null) return false;
+  if (v is bool) return v;
+  if (v is int) return v != 0;
+  if (v is String) return v == 'true' || v == '1';
+  return true;
 }
 
 FundiWaitingState? getFundiWaitingState({
@@ -33,109 +47,142 @@ FundiWaitingState? getFundiWaitingState({
   required List<DocumentSnapshot> counterOffers,
   required String uid,
 }) {
-  int toInt(dynamic v, [int fb = 0]) {
-    if (v == null) return fb;
-    if (v is int) return v;
-    if (v is double) return v.toInt();
-    return int.tryParse(v.toString()) ?? fb;
-  }
-
   String bidStatus = (bid['status'] ?? '').toString();
   String lastBy = (bid['lastCounterBy'] ?? bid['counterBy'] ?? '').toString();
-  bool isClientCounter =
-      (bidStatus == 'countered' && lastBy != uid) ||
-      bidStatus == 'client_counter';
-  bool isMyCounter = bidStatus == 'countered' && lastBy == uid;
+  String jobStatus = (job['status'] ?? '').toString().toLowerCase();
+  String escrowStatus = (job['escrowStatus'] ?? '').toString().toLowerCase();
+  bool escrowDone = ['held', 'paid', 'released'].contains(escrowStatus);
 
-  String status = (job['status'] ?? '').toString();
-  String escrow = (job['escrowStatus'] ?? 'pending').toString();
-  bool escrowDone =
-      escrow == 'held' || escrow == 'paid' || escrow == 'released';
   bool siteDone =
-      (job['siteVisitDone'] == true) || (job['siteVisited'] == true);
-  bool travelling = (job['travelling'] == true) || status == 'travelling';
+      _toBool(job['siteVisitDone']) ||
+      _toBool(job['siteVisited']) ||
+      job['siteVisitedAt'] != null ||
+      ['site_visit', 'site_visit_done', 'site_visited'].contains(jobStatus);
 
-  int labour = toInt(
-    job['laborCost'] ?? job['agreedPrice'] ?? bid['price'] ?? 0,
+  bool travelling =
+      !siteDone && (job['travelling'] == true || jobStatus == 'travelling');
+
+  var renego = job['renegotiation'] as Map<String, dynamic>?;
+  bool renegoPending =
+      renego != null &&
+      renego['requested'] == true &&
+      (renego['status'] ?? 'pending') == 'pending';
+
+  int labour = _toInt(
+    job['laborCost'] ?? job['agreedPrice'] ?? job['price'] ?? bid['price'] ?? 0,
   );
-  int transport = toInt(job['transportFee'] ?? 0);
+  int transport = _toInt(job['transportFee'] ?? 0);
   int fundiSees = labour + transport;
-  int myBid = toInt(bid['price'] ?? 0);
-  int clientCounterAmt = toInt(
-    bid['lastCounterAmount'] ??
-        bid['lastCounterPrice'] ??
-        bid['clientCounterAmount'] ??
-        0,
-  );
-  int lastAmt = toInt(
-    bid['lastCounterAmount'] ?? bid['lastCounterPrice'] ?? myBid,
-  );
 
-  String clientName = (job['clientName'] ?? bid['clientName'] ?? 'Client')
-      .toString();
-
-  // Priority 1: client countered you - needs your action
-  if (isClientCounter) {
+  // 1. Counter
+  if (bidStatus == 'countered' && lastBy != uid) {
+    int p = _toInt(bid['lastCounterPrice'] ?? bid['lastCounterAmount']);
     return FundiWaitingState(
       type: FundiWaitingType.clientCounter,
       title: 'Client countered your labour charges',
-      message: '$clientName • Tap to view • Client countered!',
-      notificationCategory: 'Client countered your labour charges',
-      price: clientCounterAmt,
-      isCounter: true,
+      message: 'Client countered KES $p (Your bid KES ${bid['price']})',
+      price: p,
     );
   }
-  // Priority 2: you countered - waiting client
-  if (isMyCounter) {
+  if (bidStatus == 'countered' && lastBy == uid) {
+    int p = _toInt(
+      bid['lastCounterPrice'] ?? bid['lastCounterAmount'] ?? bid['price'],
+    );
     return FundiWaitingState(
       type: FundiWaitingType.myCounter,
-      title: 'You countered • KES $lastAmt - Waiting for client to react',
-      message:
-          'You countered KES $lastAmt. Waiting for $clientName to accept...',
-      notificationCategory:
-          'Waiting for $clientName to react to your counter KES $lastAmt',
-      price: lastAmt,
+      title: 'You countered • KES $p - Waiting for client to react',
+      message: 'Waiting for client',
+      price: p,
     );
   }
-  // Priority 3: assigned but escrow not locked
-  if (status == 'assigned' && !escrowDone) {
-    return FundiWaitingState(
-      type: FundiWaitingType.waitingEscrow,
-      title: 'Waiting for client to lock KES $fundiSees to escrow',
-      message: '$clientName • Tap to view • Waiting to lock escrow',
-      notificationCategory:
-          'Waiting for $clientName to lock KES $fundiSees to escrow',
-      price: fundiSees,
-    );
-  }
-  // Priority 4: bid sent pending
-  if (bidStatus == 'pending' || bidStatus == 'bidding') {
+
+  // 2. Bid sent
+  if (bidStatus == 'pending' || bidStatus == 'sent' || bidStatus == '') {
+    int p = _toInt(bid['price']);
     return FundiWaitingState(
       type: FundiWaitingType.bidSent,
-      title: 'Bid sent - KES $myBid - Waiting for client to react',
-      message: '$clientName • Tap to view • Waiting for client',
-      notificationCategory: 'Bid sent - KES $myBid • ${job['title'] ?? ''}',
-      price: myBid,
+      title: 'Bid sent - KES $p - Waiting for client to react',
+      message: 'You sent KES $p',
+      price: p,
     );
   }
-  // Priority 5: escrow done but not started site visit
-  if (escrowDone && !siteDone && !travelling) {
+
+  // 3. Renegotiation pending
+  if (renegoPending) {
+    int extra = _toInt(
+      renego['extraToLock'] ??
+          renego['pendingLabor'] ??
+          renego['extraLabor'] ??
+          0,
+    );
     return FundiWaitingState(
-      type: FundiWaitingType.startSiteVisit,
+      type: FundiWaitingType.waitingNewPriceApproval,
+      title: 'Waiting for client to approve extra KES $extra',
+      message:
+          'You requested extra labour KES $extra. Waiting for client ${job['clientName'] ?? ''} to approve',
+      price: extra,
+    );
+  }
+
+  // FIX: check locked amount vs needed - stops green showing before escrow
+  int lockedAmount = _toInt(
+    job['escrowAmount'] ??
+        job['lockedEscrow'] ??
+        job['escrowLockedAmount'] ??
+        0,
+  );
+  bool hasLockedAmount = lockedAmount > 0;
+  bool needsTopup = hasLockedAmount && fundiSees > lockedAmount;
+  bool shouldWaitEscrow =
+      (!escrowDone || needsTopup) &&
+      !siteDone &&
+      !travelling &&
+      ['assigned', 'confirmed', 'negotiating', 'accepted'].contains(jobStatus);
+
+  // 4. WAITING FOR ESCROW - ORANGE
+  if (shouldWaitEscrow) {
+    int need = needsTopup ? fundiSees - lockedAmount : fundiSees;
+    return FundiWaitingState(
+      type: FundiWaitingType.waitingEscrow,
+      title: needsTopup
+          ? 'Waiting for client to lock extra KES $need to escrow'
+          : 'Waiting for client to lock KES $fundiSees to escrow',
+      message: needsTopup
+          ? 'Client locked KES $lockedAmount, needs extra KES $need (Total KES $fundiSees)'
+          : 'Client needs to lock KES $fundiSees',
+      price: need,
+    );
+  }
+
+  // 5. ESCROW LOCKED - GREEN + START SITE VISIT
+  if (escrowDone && !needsTopup && !siteDone && !travelling && !renegoPending) {
+    return FundiWaitingState(
+      type: FundiWaitingType.escrowLocked,
       title: 'Escrow locked - KES $fundiSees - Start site visit now',
       message: 'Client locked KES $fundiSees. Start travelling',
-      notificationCategory: 'Escrow locked - Start site visit KES $fundiSees',
       price: fundiSees,
     );
   }
-  if (travelling) {
+
+  // 6. Travelling
+  if (travelling && !siteDone) {
     return FundiWaitingState(
       type: FundiWaitingType.travelling,
       title: 'You are on the way',
-      message: 'Travelling to client',
-      notificationCategory: 'You are on the way to $clientName',
+      message: 'Travelling to client site',
       price: fundiSees,
     );
   }
-  return null; // no waiting, all done
+
+  // 7. Site visited -> START JOB / New Price
+  if (siteDone && !renegoPending) {
+    return FundiWaitingState(
+      type: FundiWaitingType.siteVisited,
+      title: 'Site visited - Done KES $fundiSees',
+      message: 'You visited site. Next: START JOB or request new price',
+      price: fundiSees,
+    );
+  }
+
+  return null;
 }
