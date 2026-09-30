@@ -254,16 +254,41 @@ class _FundiHomeState extends State<FundiHome> {
 
     // notifications grouped like CustomerHome
     final assignedIds = _assignedJobs.map((d) => d.id).toSet();
+    final assignedMap = {
+      for (var d in _assignedJobs) d.id: (d.data() as Map<String, dynamic>),
+    };
     Map<String, Map<String, dynamic>> grouped = {};
     for (var b in _bids) {
-      if (assignedIds.contains(b['jobId'])) continue;
       if (_excludedJobIds.contains(b['jobId'])) continue;
-      String key = "${b['jobId']}_${b['clientId']}";
+
+      // Don't hide assigned job if escrow not held yet - show as waiting to lock
+      var escrow =
+          assignedMap[b['jobId']]?['escrowStatus']?.toString() ?? 'pending';
+      bool escrowDone =
+          escrow == 'held' || escrow == 'paid' || escrow == 'released';
+      if (assignedIds.contains(b['jobId']) && escrowDone) continue;
+
       var status = (b['status'] ?? '').toString();
       bool isCounter = status == 'countered' || status == 'client_counter';
-      String category = isCounter
-          ? 'Client countered your labour charges'
-          : 'Bid sent - KES ${b['price']} • ${b['jobTitle']}';
+      bool isAccepted =
+          status == 'accepted' ||
+          status == 'pending_client_accept' ||
+          status == 'counter_accepted_by_fundi' ||
+          assignedIds.contains(b['jobId']);
+      String category;
+      String type;
+      if (isCounter) {
+        category = 'Client countered your labour charges';
+        type = 'counter';
+      } else if (isAccepted) {
+        category =
+            'Waiting for ${b['clientName']} to lock KES ${b['price']} to escrow';
+        type = 'waiting_escrow';
+      } else {
+        category = 'Bid sent - KES ${b['price']} • ${b['jobTitle']}';
+        type = 'bid_sent';
+      }
+      String key = "${b['jobId']}_${b['clientId']}";
       grouped[key] = {
         'jobId': b['jobId'],
         'bidId': b['bidId'],
@@ -275,8 +300,9 @@ class _FundiHomeState extends State<FundiHome> {
         'latestAt': (b['createdAt'] is Timestamp)
             ? (b['createdAt'] as Timestamp).toDate()
             : DateTime.now(),
-        'type': isCounter ? 'counter' : 'bid_sent',
+        'type': type,
         'isRead': b['isRead'] == true,
+        'price': b['price'],
       };
     }
     var notifList = grouped.values.toList()
@@ -285,9 +311,7 @@ class _FundiHomeState extends State<FundiHome> {
             (b['latestAt'] as DateTime).compareTo(a['latestAt'] as DateTime),
       );
     int totalUnread = notifList.where((g) => g['isRead'] == false).length;
-    int displayCount = totalUnread > 0
-        ? totalUnread
-        : notifList.length; // shows unread if any, otherwise total like client
+    int displayCount = totalUnread > 0 ? totalUnread : notifList.length;
 
     return Scaffold(
       backgroundColor: FundipapColors.blackGray,
@@ -504,7 +528,6 @@ class _FundiHomeState extends State<FundiHome> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        // RED BOX - THIS IS THE "X NEW" BOX
                         if (displayCount > 0)
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -547,7 +570,16 @@ class _FundiHomeState extends State<FundiHome> {
                     ...notifList.take(5).map((g) {
                       bool isCounter = g['type'] == 'counter';
                       bool isBidSent = g['type'] == 'bid_sent';
-                      bool isWaiting = isBidSent || isCounter;
+                      bool isWaitingEscrow = g['type'] == 'waiting_escrow';
+                      bool isWaiting =
+                          isBidSent || isCounter || isWaitingEscrow;
+
+                      String msg = isCounter
+                          ? "${g['clientName']} • Tap to view • Client countered!"
+                          : isWaitingEscrow
+                          ? "${g['clientName']} • Tap to view • Waiting to lock escrow"
+                          : "${g['clientName']} • Tap to view • Waiting for client";
+
                       if (isWaiting) {
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
@@ -556,8 +588,7 @@ class _FundiHomeState extends State<FundiHome> {
                             children: [
                               OrangeAnimatedWaitingCard(
                                 title: g['category'],
-                                message:
-                                    "${g['clientName']} • Tap to view • ${isCounter ? 'Client countered!' : 'Waiting'}",
+                                message: msg,
                                 onTap: () async {
                                   await _markRead(g['clientId'], g['jobId']);
                                   if (!context.mounted) return;
@@ -603,6 +634,8 @@ class _FundiHomeState extends State<FundiHome> {
                           ),
                         );
                       }
+
+                      // accepted counter - green static
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(

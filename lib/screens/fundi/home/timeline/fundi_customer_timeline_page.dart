@@ -3,23 +3,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
-import 'fundi_timeline_context.dart';
-import 'fundi_timeline_actions.dart';
-import 'widgets/chat_sheet.dart';
-import 'widgets/cancel_button.dart';
-import 'widgets/timeline_card.dart';
-import 'steps/cancelled_view.dart';
-import 'steps/completed_released_view.dart';
-import 'steps/escrow_waiting_view.dart';
-import 'steps/parts_steps.dart';
-import 'steps/counter_step.dart';
-import 'steps/extra_escrow_step.dart';
-import 'steps/site_visit_steps.dart';
-import 'steps/work_steps.dart';
-import 'steps/history_steps.dart';
-import 'steps/bid_sent_view.dart';
+import '../../../../widgets/animated_waiting_card.dart';
+import '../../../../app.dart';
+import '../../../../widgets/job_chat_section.dart';
 
-class FundiCustomerTimelinePage extends StatelessWidget {
+class FundiCustomerTimelinePage extends StatefulWidget {
   final String jobId;
   final String clientName;
   final String jobTitle;
@@ -29,174 +17,769 @@ class FundiCustomerTimelinePage extends StatelessWidget {
     required this.clientName,
     required this.jobTitle,
   });
+  @override
+  State<FundiCustomerTimelinePage> createState() =>
+      _FundiCustomerTimelinePageState();
+}
+
+class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
+  int _toInt(dynamic v, [int fb = 0]) {
+    if (v == null) return fb;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? fb;
+  }
+
+  bool _toBool(dynamic v, [bool fb = false]) {
+    if (v == null) return fb;
+    if (v is bool) return v;
+    if (v is int) return v != 0;
+    if (v is String) return v.toLowerCase() == 'true' || v == '1';
+    return fb;
+  }
+
+  void _goBack(int tab) {
+    final email = FirebaseAuth.instance.currentUser?.email ?? '';
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => HomeNavigator(
+          role: 'fundi',
+          email: email,
+          initialIndex: 2,
+          initialJobStatusTab: tab,
+        ),
+      ),
+      (r) => false,
+    );
+  }
+
+  Future<void> counterAsFundi(
+    DocumentReference bidRef,
+    String jobId,
+    double currentPrice,
+  ) async {
+    final ctrl = TextEditingController(text: currentPrice.toString());
+    final msgCtrl = TextEditingController();
+    final res = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(
+          'Counter Offer',
+          style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'New price KES'),
+            ),
+            TextField(
+              controller: msgCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Reason / breakdown',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+    if (res != true) return;
+    double newPrice = double.tryParse(ctrl.text) ?? currentPrice;
+    var uid = FirebaseAuth.instance.currentUser!.uid;
+    var userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    await bidRef.collection('counterOffers').add({
+      'price': newPrice,
+      'by': uid,
+      'byName': userDoc.data()?['username'] ?? 'Fundi',
+      'message': msgCtrl.text.trim(),
+      'at': FieldValue.serverTimestamp(),
+    });
+    await bidRef.update({
+      'status': 'countered',
+      'lastCounterPrice': newPrice,
+      'lastCounterAmount': newPrice,
+      'lastCounterBy': uid,
+      'counterBy': uid,
+      'lastCounterAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'status': 'negotiating',
+      'priceHistory': FieldValue.arrayUnion([
+        {
+          'price': newPrice,
+          'by': uid,
+          'type': 'counter_fundi',
+          'at': DateTime.now().toIso8601String(),
+        },
+      ]),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'customerHasUnread': true,
+    });
+  }
+
+  Widget _greenCard({
+    required String title,
+    required String message,
+    IconData icon = Icons.check_circle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.shade300, width: 1.2),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: Colors.green.shade800, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    color: Colors.green.shade800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(message, style: GoogleFonts.inter(fontSize: 11)),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      size: 12,
+                      color: Colors.green.shade700,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Done',
+                      style: GoogleFonts.inter(
+                        fontSize: 9,
+                        color: Colors.green.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+    var uid = FirebaseAuth.instance.currentUser!.uid;
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
           .collection('jobs')
-          .doc(jobId)
+          .doc(widget.jobId)
           .snapshots(),
-      builder: (context, snap) {
-        if (!snap.hasData)
+      builder: (context, jobSnap) {
+        if (!jobSnap.hasData) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
-        final job = (snap.data!.data() as Map<String, dynamic>?) ?? {};
-        final c = FundiTimelineContext.fromSnapshot(
-          context: context,
-          jobId: jobId,
-          clientName: clientName,
-          jobTitle: jobTitle,
-          job: job,
+        }
+        var job = jobSnap.data!.data() as Map<String, dynamic>;
+        var status = (job['status'] ?? '').toString();
+        var escrowStatus = (job['escrowStatus'] ?? 'pending').toString();
+        bool escrowDone =
+            escrowStatus == 'held' ||
+            escrowStatus == 'paid' ||
+            escrowStatus == 'released';
+        int labour = _toInt(
+          job['laborCost'] ?? job['agreedPrice'] ?? job['price'] ?? 0,
         );
+        int transport = _toInt(job['transportFee'] ?? 0);
+        int fundiSees = labour + transport;
+        bool siteDone =
+            _toBool(job['siteVisitDone']) || _toBool(job['siteVisited']);
+        bool travelling = _toBool(job['travelling']) || status == 'travelling';
+        bool isStarted =
+            status == 'in_progress' ||
+            status == 'job_completed' ||
+            status == 'pending_completion' ||
+            status == 'completed';
+        bool isCancelled = status.toLowerCase().contains('cancel');
 
-        return StreamBuilder<DocumentSnapshot>(
+        if (isCancelled) {
+          return Scaffold(
+            appBar: AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => _goBack(4),
+              ),
+              title: Text(
+                widget.clientName,
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+              ),
+              backgroundColor: FundipapColors.blackGray,
+              foregroundColor: Colors.white,
+            ),
+            body: ListView(
+              padding: const EdgeInsets.all(12),
+              children: [
+                _greenCard(
+                  title: 'Cancelled - $status',
+                  message:
+                      'Cancelled by ${job['cancelledBy'] ?? ''} Reason: ${job['cancelReason'] ?? ''}',
+                  icon: Icons.cancel,
+                ),
+              ],
+            ),
+          );
+        }
+
+        return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('jobs')
-              .doc(jobId)
+              .doc(widget.jobId)
               .collection('bids')
-              .doc(uid)
+              .where('fundiId', isEqualTo: uid)
               .snapshots(),
-          builder: (context, bidSnap) {
-            bool hasBid = bidSnap.hasData && (bidSnap.data?.exists ?? false);
-            int bidAmount = 0;
-            if (hasBid) {
-              var b = bidSnap.data!.data() as Map<String, dynamic>?;
-              bidAmount =
-                  int.tryParse(
-                    (b?['amount'] ?? b?['bidAmount'] ?? 0).toString(),
-                  ) ??
-                  0;
-            }
-            var bidData = bidSnap.data?.data() as Map<String, dynamic>?;
-            String bidStatus = (bidData?['status'] ?? '').toString();
-            int acceptedAmt =
-                int.tryParse(
-                  (bidData?['agreedPrice'] ?? bidData?['price'] ?? bidAmount)
-                      .toString(),
-                ) ??
-                bidAmount;
-
-            if (c.isCancelled) return buildCancelledView(context, c);
-            if (c.status == 'completed' && c.escrowReleased)
-              return buildCompletedReleasedView(context, c);
-
-            bool isBidSentState =
-                hasBid &&
-                !c.escrowDone &&
-                (c.status == 'open' ||
-                    c.status == 'pending' ||
-                    c.status == 'bidding' ||
-                    c.status == 'bid_sent' ||
-                    c.status == 'pending_client_response');
-            if (isBidSentState || c.isBidSent)
-              return buildBidSentView(context, c, bidAmount);
-
-            List<Widget> timeline = [];
-            bool isCounterAccepted =
-                bidStatus == 'counter_accepted_by_fundi' ||
-                c.status == 'counter_accepted';
-
-            if (isCounterAccepted) {
-              // THIS IS NOW A TIMELINE ROW, NOT A FULL SCREEN
-              timeline.add(
-                fundiCard(
-                  color: Colors.orange.shade50,
-                  border: Colors.orange,
-                  icon: Icons.hourglass_top,
-                  iconColor: Colors.orange.shade800,
-                  title: 'Accepted counter bid - KES $acceptedAmt',
-                  message:
-                      'You accepted KES $acceptedAmt. Waiting for client to confirm and lock escrow. You will receive KES ${c.fundiReceives}.',
-                  time: 'Waiting',
-                  isDone: false,
-                ),
-              );
-              timeline.add(
-                fundiCard(
-                  color: Colors.green.shade50,
-                  border: Colors.green,
-                  icon: Icons.check_circle,
-                  iconColor: Colors.green,
-                  title: 'Counter accepted KES $acceptedAmt - Done',
-                  message: 'Done',
-                  time: 'Just now',
-                  isDone: true,
-                ),
-              );
-              timeline.add(
-                fundiCard(
-                  color: Colors.green.shade50,
-                  border: Colors.green,
-                  icon: Icons.send,
-                  iconColor: Colors.green,
-                  title: 'Bid sent - Done KES $bidAmount',
-                  message: 'Original bid',
-                  time: 'Earlier',
-                  isDone: true,
-                ),
-              );
-            } else {
-              if (!c.escrowDone)
-                return buildEscrowWaitingView(
-                  context,
-                  c,
-                  timeline,
-                  bidAmount: bidAmount,
-                  hasBid: hasBid,
-                );
-              if (handleCounterStep(timeline, c)) {
-              } else if (handleExtraEscrowStep(timeline, c)) {
-              } else if (handlePartsSteps(timeline, c)) {
-              } else {
-                handleWorkSteps(timeline, c);
-                handleSiteVisitSteps(timeline, c);
-              }
-              addHistoryCards(
-                timeline,
-                c,
-                bidAmount: bidAmount,
-                hasBid: hasBid,
+          builder: (context, bidsSnap) {
+            if (!bidsSnap.hasData) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
               );
             }
-
-            Widget list = ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: timeline.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (_, i) => timeline[i],
-            );
-
-            return Scaffold(
-              appBar: AppBar(
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () =>
-                      FundiTimelineActions.goBackToMyJobs(context, tab: 2),
+            if (bidsSnap.data!.docs.isEmpty) {
+              // No bid found, fallback to job only
+              List<Widget> timeline = [];
+              timeline.add(
+                _greenCard(
+                  title: 'Bid sent - KES $labour - Done',
+                  message: '${widget.jobTitle} • ${widget.clientName}',
                 ),
-                title: Text(
-                  clientName,
-                  style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
-                ),
-                backgroundColor: FundipapColors.blackGray,
-                foregroundColor: Colors.white,
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.chat_bubble_outline),
-                    onPressed: () => openChatSheet(context, jobId, clientName),
+              );
+              if (escrowDone) {
+                timeline.add(
+                  _greenCard(
+                    title: 'Escrow locked - Done KES $fundiSees',
+                    message:
+                        'Labour KES $labour + Transport KES $transport = KES $fundiSees locked',
                   ),
-                ],
-              ),
-              body: c.canFundiCancel
-                  ? Column(
+                );
+              } else {
+                timeline.add(
+                  OrangeAnimatedWaitingCard(
+                    title: 'Waiting for client to pay KES $fundiSees to escrow',
+                    message:
+                        'Client ${widget.clientName} has not locked money yet',
+                  ),
+                );
+              }
+              return Scaffold(
+                appBar: AppBar(
+                  leading: IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => _goBack(2),
+                  ),
+                  title: Text(
+                    widget.clientName,
+                    style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+                  ),
+                  backgroundColor: FundipapColors.blackGray,
+                  foregroundColor: Colors.white,
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      onPressed: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.white,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(16),
+                            ),
+                          ),
+                          builder: (_) => DraggableScrollableSheet(
+                            expand: false,
+                            initialChildSize: 0.85,
+                            minChildSize: 0.5,
+                            maxChildSize: 0.95,
+                            builder: (context, scrollCtrl) => Padding(
+                              padding: EdgeInsets.only(
+                                bottom: MediaQuery.of(
+                                  context,
+                                ).viewInsets.bottom,
+                              ),
+                              child: Column(
+                                children: [
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    width: 40,
+                                    height: 4,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade300,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'Chat with ${widget.clientName}',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const Divider(),
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      controller: scrollCtrl,
+                                      padding: const EdgeInsets.all(12),
+                                      child: JobChatSection(
+                                        jobId: widget.jobId,
+                                        isClient: false,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                body: ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: timeline.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) => timeline[i],
+                ),
+              );
+            }
+
+            var bidDoc = bidsSnap.data!.docs.first;
+            var bid = bidDoc.data() as Map<String, dynamic>;
+            int myBidPrice = _toInt(bid['price'] ?? 0);
+            String bidStatus = (bid['status'] ?? '').toString();
+            String lastBy = (bid['lastCounterBy'] ?? bid['counterBy'] ?? '')
+                .toString();
+            bool isClientCounterPending =
+                (bidStatus == 'countered' && lastBy != uid) ||
+                bidStatus == 'client_counter';
+            bool isMyCounterPending = bidStatus == 'countered' && lastBy == uid;
+
+            // Counter offers history
+            return StreamBuilder<QuerySnapshot>(
+              stream: bidDoc.reference
+                  .collection('counterOffers')
+                  .orderBy('at', descending: false)
+                  .snapshots(),
+              builder: (context, coSnap) {
+                List<DocumentSnapshot> coDocs = coSnap.data?.docs ?? [];
+                List<Map<String, dynamic>> priceHistory =
+                    (job['priceHistory'] as List?)
+                        ?.cast<Map<String, dynamic>>() ??
+                    [];
+
+                List<Widget> doneHistory = [];
+                Widget? currentWaiting;
+
+                // 1. Bid sent - done history
+                bool bidIsDone =
+                    isClientCounterPending ||
+                    isMyCounterPending ||
+                    status == 'assigned' ||
+                    escrowDone ||
+                    isStarted;
+                if (bidIsDone) {
+                  doneHistory.add(
+                    _greenCard(
+                      title: 'Bid sent - KES $myBidPrice - Done',
+                      message:
+                          'You sent bid KES $myBidPrice for ${widget.jobTitle} • ${widget.clientName}',
+                    ),
+                  );
+                } else {
+                  currentWaiting = OrangeAnimatedWaitingCard(
+                    title:
+                        'Bid sent - KES $myBidPrice - Waiting for client to react',
+                    message:
+                        'You sent KES $myBidPrice. Waiting for ${widget.clientName} to accept or counter',
+                  );
+                }
+
+                // 2. Past counters -> done history only
+                for (int i = 0; i < coDocs.length; i++) {
+                  var co = coDocs[i].data() as Map<String, dynamic>;
+                  int price = _toInt(co['price'] ?? 0);
+                  String by = (co['by'] ?? '').toString();
+                  bool isLast = i == coDocs.length - 1;
+                  if (isLast &&
+                      ((by != uid && isClientCounterPending) ||
+                          (by == uid && isMyCounterPending)))
+                    continue;
+                  if (by != uid) {
+                    doneHistory.add(
+                      _greenCard(
+                        title: 'Client countered - KES $price - Done',
+                        message:
+                            'Client ${widget.clientName} countered KES $price • You reacted',
+                        icon: Icons.compare_arrows,
+                      ),
+                    );
+                  } else {
+                    doneHistory.add(
+                      _greenCard(
+                        title: 'You countered - KES $price - Done',
+                        message: 'You countered KES $price • Client reacted',
+                        icon: Icons.compare_arrows,
+                      ),
+                    );
+                  }
+                }
+
+                // 3. Accepted history -> done
+                for (var ph in priceHistory) {
+                  if ((ph['type'] ?? '') == 'accepted_client_counter') {
+                    doneHistory.add(
+                      _greenCard(
+                        title:
+                            'You accepted client counter KES ${_toInt(ph['price'])} - Done',
+                        message:
+                            'You accepted KES ${_toInt(ph['price'])} • Job assigned',
+                      ),
+                    );
+                  }
+                }
+
+                // 4. Escrow/site -> done or waiting
+                if (status == 'assigned' || escrowDone || isStarted) {
+                  if (escrowDone) {
+                    doneHistory.add(
+                      _greenCard(
+                        title: 'Escrow locked - Done KES $fundiSees',
+                        message:
+                            'Labour KES $labour + Transport KES $transport = KES $fundiSees locked',
+                      ),
+                    );
+                    if (siteDone) {
+                      doneHistory.add(
+                        _greenCard(
+                          title: 'Site visited - Done',
+                          message: 'You visited site • Done',
+                        ),
+                      );
+                      if (isStarted) {
+                        doneHistory.add(
+                          _greenCard(
+                            title: 'Site visit - Done',
+                            message: 'Done',
+                          ),
+                        );
+                      }
+                    } else if (travelling) {
+                      currentWaiting = OrangeAnimatedWaitingCard(
+                        title: 'You are on the way',
+                        message: 'Travelling to client',
+                      );
+                    } else {
+                      currentWaiting = OrangeAnimatedWaitingCard(
+                        title:
+                            'Escrow locked - KES $fundiSees - Start site visit now',
+                        message:
+                            'Client locked KES $fundiSees. Start travelling to site',
+                      );
+                    }
+                  } else {
+                    currentWaiting = OrangeAnimatedWaitingCard(
+                      title:
+                          'Waiting for client to lock KES $fundiSees to escrow',
+                      message:
+                          'You accepted KES $labour. Client ${widget.clientName} needs to lock KES $fundiSees to escrow before you start',
+                    );
+                  }
+                }
+
+                // 5. Current counter overrides any other waiting
+                if (isClientCounterPending) {
+                  int clientCounterAmt = _toInt(
+                    bid['lastCounterAmount'] ??
+                        bid['lastCounterPrice'] ??
+                        bid['clientCounterAmount'] ??
+                        0,
+                  );
+                  currentWaiting = Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.orange.shade300,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(child: list),
-                        fixedCancelBtn(context, jobId, job),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.compare_arrows,
+                              color: Colors.orange.shade800,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Client countered your labour charges',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                color: Colors.orange.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Client countered: KES $clientCounterAmt (Your bid KES $myBidPrice)',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.blue.shade800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () async {
+                                  await bidDoc.reference.update({
+                                    'status': 'rejected',
+                                    'rejectedBy': uid,
+                                    'rejectedAt': FieldValue.serverTimestamp(),
+                                  });
+                                },
+                                child: Text(
+                                  'Reject',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => counterAsFundi(
+                                  bidDoc.reference,
+                                  widget.jobId,
+                                  clientCounterAmt.toDouble(),
+                                ),
+                                child: Text(
+                                  'Counter',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: FundipapColors.greenSuccess,
+                                ),
+                                onPressed: () async {
+                                  await bidDoc.reference.update({
+                                    'status': 'accepted',
+                                    'agreedPrice': clientCounterAmt,
+                                    'price': clientCounterAmt,
+                                    'lastCounterPrice': clientCounterAmt,
+                                    'lastCounterAmount': clientCounterAmt,
+                                    'acceptedAt': FieldValue.serverTimestamp(),
+                                  });
+                                  await FirebaseFirestore.instance
+                                      .collection('jobs')
+                                      .doc(widget.jobId)
+                                      .update({
+                                        'status': 'assigned',
+                                        'assignedFundiId': uid,
+                                        'agreedPrice': clientCounterAmt,
+                                        'price': clientCounterAmt,
+                                        'renegotiation': {'requested': false},
+                                        'priceHistory': FieldValue.arrayUnion([
+                                          {
+                                            'price': clientCounterAmt,
+                                            'by': uid,
+                                            'type': 'accepted_client_counter',
+                                            'at': DateTime.now()
+                                                .toIso8601String(),
+                                          },
+                                        ]),
+                                        'updatedAt':
+                                            FieldValue.serverTimestamp(),
+                                      });
+                                },
+                                child: const Text(
+                                  'Accept',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
-                    )
-                  : list,
+                    ),
+                  );
+                } else if (isMyCounterPending) {
+                  int lastAmt = _toInt(
+                    bid['lastCounterAmount'] ??
+                        bid['lastCounterPrice'] ??
+                        myBidPrice,
+                  );
+                  currentWaiting = OrangeAnimatedWaitingCard(
+                    title:
+                        'You countered • KES $lastAmt - Waiting for client to react',
+                    message:
+                        'You countered KES $lastAmt. Waiting for ${widget.clientName} to accept, counter or reject...',
+                  );
+                }
+
+                // 6. Build final list: waiting ALWAYS first, then newest done first
+                List<Widget> timeline = [];
+                if (currentWaiting != null) timeline.add(currentWaiting);
+                timeline.addAll(doneHistory.reversed);
+                if (timeline.isEmpty) {
+                  timeline.add(
+                    _greenCard(
+                      title: 'Bid sent - KES $myBidPrice',
+                      message: 'Waiting',
+                    ),
+                  );
+                }
+
+                // Reverse? Keep chronological: oldest first, current waiting on top? Client does oldest first? User said client does well - keep oldest top, current pending top as well? We will keep current pending at top (insert 0), history below in order sent.
+                // Already current pending inserted at 0
+
+                return Scaffold(
+                  appBar: AppBar(
+                    leading: IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => _goBack(2),
+                    ),
+                    title: Text(
+                      widget.clientName,
+                      style: GoogleFonts.montserrat(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    backgroundColor: FundipapColors.blackGray,
+                    foregroundColor: Colors.white,
+                    actions: [
+                      IconButton(
+                        icon: const Icon(Icons.chat_bubble_outline),
+                        onPressed: () {
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.white,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.vertical(
+                                top: Radius.circular(16),
+                              ),
+                            ),
+                            builder: (_) => DraggableScrollableSheet(
+                              expand: false,
+                              initialChildSize: 0.85,
+                              minChildSize: 0.5,
+                              maxChildSize: 0.95,
+                              builder: (context, scrollCtrl) => Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: MediaQuery.of(
+                                    context,
+                                  ).viewInsets.bottom,
+                                ),
+                                child: Column(
+                                  children: [
+                                    const SizedBox(height: 12),
+                                    Container(
+                                      width: 40,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade300,
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'Chat with ${widget.clientName}',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    const Divider(),
+                                    Expanded(
+                                      child: SingleChildScrollView(
+                                        controller: scrollCtrl,
+                                        padding: const EdgeInsets.all(12),
+                                        child: JobChatSection(
+                                          jobId: widget.jobId,
+                                          isClient: false,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  body: ListView.separated(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: timeline.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, i) => timeline[i],
+                  ),
+                );
+              },
             );
           },
         );
