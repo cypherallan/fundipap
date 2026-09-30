@@ -35,18 +35,37 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     return int.tryParse(v.toString()) ?? fb;
   }
 
-  int _labour(Map<String, dynamic> j) => _toInt(
-    j['laborCost'] ??
-        j['agreedPrice'] ??
-        j['acceptedBidAmount'] ??
-        j['budget'] ??
-        0,
-  );
-  int _transport(Map<String, dynamic> j) =>
-      _toInt(j['transportFee'] ?? 100); // FIX: default 100 not 0
-  int _fundiFee(int labour) => (labour * 0.05).round();
   int _bidPrice(Map<String, dynamic> b) =>
       _toInt(b['price'] ?? b['amount'] ?? b['bidAmount'] ?? 0);
+
+  int _transport(Map<String, dynamic> j) => _toInt(j['transportFee'] ?? 100);
+
+  Widget _detailRow(String label, String value) {
+    if (value.isEmpty || value == 'null') return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: GoogleFonts.inter(fontSize: 11, color: Colors.black54),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.montserrat(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _accept(
     String jobId,
@@ -56,13 +75,12 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
   ) async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
     final ref = FirebaseFirestore.instance.collection('jobs').doc(jobId);
-    final int transport = _toInt(job['transportFee'] ?? 100);
+    final int transport = _transport(job);
     final int clientAppFee = (clientAmt * 0.05).round();
     final int fundiAppFee = (clientAmt * 0.05).round();
 
-    // FIX: fundi does NOT assign job, he just says "I accept your counter"
     await ref.collection('bids').doc(bidId).update({
-      'status': 'counter_accepted_by_fundi', // NEW STATUS
+      'status': 'counter_accepted_by_fundi',
       'agreedPrice': clientAmt,
       'price': clientAmt,
       'fundiAcceptedCounterAt': FieldValue.serverTimestamp(),
@@ -71,7 +89,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     });
 
     await ref.update({
-      'status': 'counter_accepted', // job still open, not assigned
+      'status': 'counter_accepted',
       'counterAcceptedBy': FieldValue.arrayUnion([uid]),
       'counterAcceptedBids': FieldValue.arrayUnion([bidId]),
       'lastCounterAcceptedBy': uid,
@@ -191,6 +209,175 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     );
   }
 
+  Widget _buildClientHeader(String clientId) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('users')
+          .doc(clientId)
+          .get(),
+      builder: (ctx, snap) {
+        if (!snap.hasData || !snap.data!.exists) {
+          return Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.black12),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: FundipapColors.blackGray,
+                  child: const Icon(Icons.person, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Client • $clientId',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+        var u = snap.data!.data() as Map<String, dynamic>;
+        String name =
+            (u['displayName'] ?? u['fullName'] ?? u['name'] ?? 'Client')
+                .toString();
+        String photo = (u['photoUrl'] ?? u['avatar'] ?? u['profilePhoto'] ?? '')
+            .toString();
+        String location = (u['location'] ?? u['address'] ?? u['estate'] ?? '')
+            .toString();
+        int completed = _toInt(u['completedJobs'] ?? u['jobsCompleted'] ?? 0);
+        double rating =
+            double.tryParse((u['rating'] ?? u['avgRating'] ?? 0).toString()) ??
+            0;
+
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.black12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: FundipapColors.blackGray,
+                backgroundImage: photo.isNotEmpty ? NetworkImage(photo) : null,
+                child: photo.isEmpty
+                    ? Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : 'C',
+                        style: GoogleFonts.montserrat(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (rating > 0) ...[
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.star,
+                            size: 14,
+                            color: FundipapColors.primaryYellow,
+                          ),
+                          Text(
+                            rating.toStringAsFixed(1),
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Posted by • Client',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (location.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            size: 12,
+                            color: Colors.black38,
+                          ),
+                          const SizedBox(width: 2),
+                          Expanded(
+                            child: Text(
+                              location,
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                color: Colors.black54,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: FundipapColors.greenSuccess.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$completed jobs',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: FundipapColors.greenSuccess,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final jobId = (widget.job['id'] ?? widget.job['jobId'] ?? '').toString();
@@ -207,6 +394,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        backgroundColor: FundipapColors.blackGray,
+        foregroundColor: Colors.white,
         title: Text(
           'Job Details',
           style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
@@ -222,18 +411,45 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
               (jobSnap.data?.data() as Map<String, dynamic>?) ?? widget.job;
           final String realTitle =
               (jData['title'] ?? jData['jobTitle'] ?? 'Job').toString();
-          final String realCategory =
-              (jData['category'] ?? jData['trade'] ?? '').toString();
-          final photos = (jData['photos'] ?? jData['images'] ?? []) as List;
-          final int labour = _labour(jData);
-          final int trans = _transport(jData);
-          final int rec = labour - _fundiFee(labour) + trans;
+          final String realDesc = (jData['description'] ?? jData['desc'] ?? '')
+              .toString();
+          final String categoryName =
+              (jData['categoryName'] ??
+                      jData['category'] ??
+                      jData['categorySlug'] ??
+                      '')
+                  .toString();
+          final String subcategoryName =
+              (jData['subcategoryName'] ?? jData['subcategoryId'] ?? '')
+                  .toString();
+          final String faultName =
+              (jData['faultName'] ?? jData['faultId'] ?? '').toString();
+          final String serviceFilter = (jData['serviceFilter'] ?? '')
+              .toString();
+          final bool isInstallation = jData['isInstallation'] == true;
+          final String address =
+              (jData['location'] ?? jData['address'] ?? jData['area'] ?? '')
+                  .toString();
+          final String clientId =
+              (jData['customerId'] ??
+                      jData['clientId'] ??
+                      jData['userId'] ??
+                      '')
+                  .toString();
+          final photos =
+              (jData['photos'] ?? jData['images'] ?? jData['photoUrls'] ?? [])
+                  as List;
+          final Timestamp? createdAt = jData['createdAt'] is Timestamp
+              ? jData['createdAt']
+              : null;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (clientId.isNotEmpty) _buildClientHeader(clientId),
+                const SizedBox(height: 14),
                 Text(
                   realTitle,
                   style: GoogleFonts.montserrat(
@@ -241,33 +457,204 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                     fontSize: 20,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Row(
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    if (realCategory.isNotEmpty)
-                      Chip(
-                        label: Text(
-                          realCategory.toUpperCase(),
+                    if (categoryName.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: FundipapColors.blackGray,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          categoryName.toUpperCase(),
+                          style: GoogleFonts.montserrat(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    if (subcategoryName.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          subcategoryName,
+                          style: GoogleFonts.montserrat(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    if (faultName.isNotEmpty && faultName != 'null')
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Text(
+                          faultName,
+                          style: GoogleFonts.montserrat(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.blue.shade800,
+                          ),
+                        ),
+                      ),
+                    if (serviceFilter.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: serviceFilter == 'install'
+                              ? Colors.green.shade50
+                              : Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: serviceFilter == 'install'
+                                ? Colors.green.shade200
+                                : Colors.orange.shade200,
+                          ),
+                        ),
+                        child: Text(
+                          serviceFilter.toUpperCase(),
                           style: GoogleFonts.montserrat(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
-                    if (realCategory.isNotEmpty) const SizedBox(width: 8),
-                    if (widget.distanceKm != null)
-                      Chip(
-                        label: Text(
-                          '${widget.distanceKm!.toStringAsFixed(1)} km away',
-                          style: GoogleFonts.inter(fontSize: 10),
+                    if (isInstallation)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
                         ),
-                        backgroundColor: FundipapColors.primaryYellow,
+                        decoration: BoxDecoration(
+                          color: FundipapColors.primaryYellow,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          'INSTALLATION',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
-                    const Spacer(),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (focusedClientAmt > 0) ...[
+                    if (widget.distanceKm != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: FundipapColors.primaryYellow,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${widget.distanceKm!.toStringAsFixed(1)} km away',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    if (createdAt != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${createdAt.toDate().day}/${createdAt.toDate().month}/${createdAt.toDate().year}',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.black12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Service Details',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _detailRow('Category', categoryName),
+                      _detailRow('Service Type', subcategoryName),
+                      if (faultName.isNotEmpty && faultName != 'null')
+                        _detailRow('Specific Fault', faultName),
+                      _detailRow(
+                        'Job Type',
+                        serviceFilter == 'install'
+                            ? 'Installation'
+                            : serviceFilter == 'repair'
+                            ? 'Repair'
+                            : 'All',
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                if (focusedClientAmt > 0) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
                             'You bid: KES $focusedOriginal',
                             style: GoogleFonts.montserrat(
@@ -275,6 +662,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                               fontSize: 12,
                             ),
                           ),
+                          const SizedBox(height: 4),
                           Text(
                             'Client countered: KES $focusedClientAmt',
                             style: GoogleFonts.montserrat(
@@ -283,54 +671,113 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                               color: Colors.orange.shade800,
                             ),
                           ),
-                        ] else ...[
-                          Text(
-                            'KES ${jData['budget'] ?? ''} OFFERED',
-                            style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
-                            ),
-                          ),
-                          if (labour > 0)
-                            Text(
-                              'You receive: KES $rec',
-                              style: GoogleFonts.montserrat(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 11,
-                                color: Colors.green.shade700,
-                              ),
-                            ),
                         ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+                if (realDesc.isNotEmpty) ...[
+                  Text(
+                    'Job Description',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    child: Text(
+                      realDesc,
+                      style: GoogleFonts.inter(fontSize: 13, height: 1.5),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+                if (address.isNotEmpty) ...[
+                  Text(
+                    'Location',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.location_on,
+                          size: 18,
+                          color: FundipapColors.blackGray,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            address,
+                            style: GoogleFonts.inter(fontSize: 12),
+                          ),
+                        ),
                       ],
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
+                  ),
+                  const SizedBox(height: 14),
+                ],
                 if (photos.isNotEmpty) ...[
                   Text(
-                    'Photos from client',
-                    style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+                    'Photos from client (${photos.length})',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   SizedBox(
-                    height: 100,
+                    height: 110,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       itemCount: photos.length,
-                      itemBuilder: (_, i) => Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        width: 100,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          image: DecorationImage(
-                            image: NetworkImage(photos[i]),
-                            fit: BoxFit.cover,
+                      itemBuilder: (_, i) => GestureDetector(
+                        onTap: () => showDialog(
+                          context: context,
+                          builder: (_) => Dialog(
+                            backgroundColor: Colors.black,
+                            child: InteractiveViewer(
+                              child: Image.network(photos[i].toString()),
+                            ),
+                          ),
+                        ),
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 10),
+                          width: 110,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            image: DecorationImage(
+                              image: NetworkImage(photos[i].toString()),
+                              fit: BoxFit.cover,
+                            ),
+                            border: Border.all(color: Colors.black12),
                           ),
                         ),
                       ),
                     ),
                   ),
+                  const SizedBox(height: 14),
                 ],
+                const SizedBox(height: 80),
               ],
             ),
           );
@@ -380,7 +827,6 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                     int myCounterAmt = _toInt(
                       bidData['fundiCounterAmount'] ?? 0,
                     );
-
                     bool isClientCounter =
                         (bStatus == 'countered' &&
                             lastBy != FirebaseAuth.instance.currentUser!.uid) ||
@@ -392,41 +838,34 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                         bStatus == 'counter_accepted_by_fundi';
 
                     if (isCounterAccepted) {
-                      // NEW - This fixes the full-screen issue - compact card in bottom nav, not full page
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.blue.shade300),
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.blue.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.check_circle,
+                              color: Colors.blue.shade700,
+                              size: 18,
                             ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.check_circle,
-                                  color: Colors.blue.shade700,
-                                  size: 18,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Accepted counter KES $clientAmt - Waiting for client to confirm',
+                                style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Accepted counter KES $clientAmt - Waiting for client to confirm',
-                                    style: GoogleFonts.montserrat(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       );
                     }
-
                     if (isClientCounter) {
                       return Column(
                         mainAxisSize: MainAxisSize.min,
@@ -518,9 +957,6 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                     }
                   }
                   if (alreadyBid) {
-                    final int labour = _labour(jData);
-                    final int trans = _transport(jData);
-                    final int rec = labour - _fundiFee(labour) + trans;
                     return Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -528,7 +964,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Text(
-                        'You have placed a bid. Wait for client feedback - You will receive KES $rec if accepted',
+                        'You have placed a bid. Wait for client feedback',
                         textAlign: TextAlign.center,
                         style: GoogleFonts.montserrat(
                           fontWeight: FontWeight.w700,

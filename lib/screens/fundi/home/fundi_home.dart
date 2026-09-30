@@ -11,6 +11,7 @@ import 'fundi_home_jobs_tab.dart';
 import 'timeline/fundi_customer_timeline_page.dart';
 import 'job_details_screen.dart';
 import 'fundi_home_logic.dart';
+import 'package:fundipap/widgets/animated_waiting_card.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});
@@ -284,6 +285,9 @@ class _FundiHomeState extends State<FundiHome> {
             (b['latestAt'] as DateTime).compareTo(a['latestAt'] as DateTime),
       );
     int totalUnread = notifList.where((g) => g['isRead'] == false).length;
+    int displayCount = totalUnread > 0
+        ? totalUnread
+        : notifList.length; // shows unread if any, otherwise total like client
 
     return Scaffold(
       backgroundColor: FundipapColors.blackGray,
@@ -470,7 +474,7 @@ class _FundiHomeState extends State<FundiHome> {
                 ),
               ),
 
-            // 2. NOTIFICATIONS - below header like client
+            // 2. NOTIFICATIONS
             SliverToBoxAdapter(
               child: Container(
                 color: FundipapColors.blackGray,
@@ -484,7 +488,7 @@ class _FundiHomeState extends State<FundiHome> {
                     Row(
                       children: [
                         Icon(
-                          totalUnread > 0
+                          displayCount > 0
                               ? Icons.notifications_active
                               : Icons.notifications_none,
                           color: Colors.white70,
@@ -492,29 +496,29 @@ class _FundiHomeState extends State<FundiHome> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          totalUnread > 0
-                              ? '$totalUnread new'
-                              : 'Notifications',
+                          'Notifications',
                           style: GoogleFonts.montserrat(
                             color: Colors.white,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w800,
                             fontSize: 13,
                           ),
                         ),
-                        const Spacer(),
-                        if (totalUnread > 0)
+                        const SizedBox(width: 8),
+                        // RED BOX - THIS IS THE "X NEW" BOX
+                        if (displayCount > 0)
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
-                              vertical: 2,
+                              vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: FundipapColors.primaryYellow,
-                              borderRadius: BorderRadius.circular(10),
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              '$totalUnread',
+                              '$displayCount new',
                               style: GoogleFonts.montserrat(
+                                color: Colors.white,
                                 fontWeight: FontWeight.w800,
                                 fontSize: 10,
                               ),
@@ -542,29 +546,80 @@ class _FundiHomeState extends State<FundiHome> {
                       ),
                     ...notifList.take(5).map((g) {
                       bool isCounter = g['type'] == 'counter';
+                      bool isBidSent = g['type'] == 'bid_sent';
+                      bool isWaiting = isBidSent || isCounter;
+                      if (isWaiting) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              OrangeAnimatedWaitingCard(
+                                title: g['category'],
+                                message:
+                                    "${g['clientName']} • Tap to view • ${isCounter ? 'Client countered!' : 'Waiting'}",
+                                onTap: () async {
+                                  await _markRead(g['clientId'], g['jobId']);
+                                  if (!context.mounted) return;
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => FundiCustomerTimelinePage(
+                                        jobId: g['jobId'],
+                                        clientName: g['clientName'],
+                                        jobTitle: g['category'],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              Positioned(
+                                top: -6,
+                                left: 30,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: FundipapColors.blackGray,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '$displayCount',
+                                    style: GoogleFonts.montserrat(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 9,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
-                          color: isCounter
-                              ? Colors.orange.shade50
-                              : Colors.white,
+                          color: Colors.green.shade50,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: isCounter
-                                ? Colors.orange.shade300
-                                : Colors.transparent,
-                            width: isCounter ? 1.2 : 0,
+                            color: Colors.green.shade300,
+                            width: 1.2,
                           ),
                         ),
                         child: ListTile(
                           dense: true,
                           leading: CircleAvatar(
                             radius: 18,
-                            backgroundColor: isCounter
-                                ? Colors.orange.shade700
-                                : FundipapColors.blackGray,
-                            child: Icon(
-                              isCounter ? Icons.compare_arrows : Icons.send,
+                            backgroundColor: Colors.green.shade700,
+                            child: const Icon(
+                              Icons.check_circle,
                               color: Colors.white,
                               size: 16,
                             ),
@@ -580,13 +635,7 @@ class _FundiHomeState extends State<FundiHome> {
                             '${g['clientName']} • Tap to view',
                             style: GoogleFonts.inter(fontSize: 10),
                           ),
-                          trailing: g['isRead'] == false
-                              ? const Icon(
-                                  Icons.circle,
-                                  color: Colors.red,
-                                  size: 8,
-                                )
-                              : const Icon(Icons.chevron_right, size: 16),
+                          trailing: const Icon(Icons.chevron_right, size: 16),
                           onTap: () async {
                             await _markRead(g['clientId'], g['jobId']);
                             if (!context.mounted) return;
