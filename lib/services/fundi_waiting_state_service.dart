@@ -55,6 +55,7 @@ FundiWaitingState? getFundiWaitingState({
       .toLowerCase();
   bool escrowDone = ['held', 'paid', 'released'].contains(escrowStatus);
 
+  // First agreed price already includes transport and is already locked
   int labour = _toInt(
     job['laborCost'] ??
         job['agreedPrice'] ??
@@ -83,14 +84,13 @@ FundiWaitingState? getFundiWaitingState({
       renego != null &&
       renego['requested'] == true &&
       (renego['status'] ?? 'pending') == 'pending';
-  bool isCancelled = jobStatus.contains('cancel');
 
-  if (isCancelled) return null;
+  if (jobStatus.contains('cancel')) return null;
 
   String bidStatus = (bid['status'] ?? '').toString();
   String lastBy = (bid['lastCounterBy'] ?? bid['counterBy'] ?? '').toString();
 
-  // 1. Client counter pending - fundi must react
+  // 1. Client counter
   if ((bidStatus == 'countered' && lastBy != uid) ||
       bidStatus == 'client_counter') {
     int amt = _toInt(
@@ -107,68 +107,53 @@ FundiWaitingState? getFundiWaitingState({
     );
   }
 
-  // 2. My counter pending - waiting client
+  // 2. My counter
   if (bidStatus == 'countered' && lastBy == uid) {
     int amt = _toInt(bid['lastCounterAmount'] ?? bid['lastCounterPrice'] ?? 0);
     return FundiWaitingState(
       type: FundiWaitingType.myCounter,
       title: 'You countered • KES $amt - Waiting for client to react',
-      message:
-          'You countered KES $amt. Waiting for client to accept, counter or reject...',
+      message: 'You countered KES $amt. Waiting for client',
       price: amt,
     );
   }
 
-  // 3. Renegotiation new price pending - FIX 0 bug
+  // 3. NEW PRICE - transport already locked, show ONLY extra labour fundi asked for, no 5% fee
   if (renegoPending) {
-    // You save as extraToLock / pendingLabor / extraLabor / newLabor after site visit
     int extra = _toInt(
-      renego['extraToLock'] ??
+      renego['extraLabor'] ??
           renego['pendingLabor'] ??
-          renego['extraLabor'] ??
-          renego['newLabor'] ??
-          0,
-    );
-    int total = _toInt(
-      renego['newPrice'] ??
-          renego['newTotal'] ??
-          renego['totalPrice'] ??
-          renego['amount'] ??
-          renego['newAmount'] ??
+          renego['newLaborExtra'] ??
+          renego['requestedExtra'] ??
+          renego['extra'] ??
+          renego['counterExtraLabor'] ??
           0,
     );
 
-    // display total if you have it, otherwise extra, otherwise fallback to fundiSees
-    int displayPrice = total > 0 ? total : (extra > 0 ? extra : fundiSees);
-    // if extra is the diff, show total = fundiSees + extra for clarity
-    int priceForState = total > 0
-        ? total
-        : (extra > 0 ? fundiSees + extra : fundiSees);
+    // fallback: if only extraToLock exists (2100), strip 5% fee -> 2000
+    if (extra == 0) {
+      int extraToLock = _toInt(renego['extraToLock'] ?? 0);
+      if (extraToLock > 0) {
+        extra = (extraToLock / 1.05).round(); // 2100 -> 2000
+      } else {
+        int newLabour = _toInt(
+          renego['newPrice'] ?? renego['newTotal'] ?? renego['newLabor'] ?? 0,
+        );
+        if (newLabour > labour) extra = newLabour - labour;
+      }
+    }
 
     return FundiWaitingState(
       type: FundiWaitingType.waitingNewPriceApproval,
-      title: extra > 0 && total == 0
-          ? 'Waiting for client to approve extra KES $extra (Total KES $priceForState)'
-          : 'Waiting for client to approve new price KES $displayPrice',
-      message: extra > 0 && total == 0
-          ? 'You requested extra KES $extra on top of KES $fundiSees'
-          : 'You requested new price KES $displayPrice',
-      price: priceForState,
+      title: 'Waiting for client to approve extra KES $extra',
+      message: 'You requested extra KES $extra',
+      price: extra,
     );
   }
 
   // 4. Bid sent
   if (bidStatus == 'pending' || bidStatus == 'sent' || bidStatus == '') {
-    int p = _toInt(
-      bid['price'] ??
-          bid['amount'] ??
-          bid['bidPrice'] ??
-          bid['proposedPrice'] ??
-          job['laborCost'] ??
-          job['agreedPrice'] ??
-          job['price'] ??
-          0,
-    );
+    int p = _toInt(bid['price'] ?? bid['amount'] ?? bid['bidPrice'] ?? labour);
     return FundiWaitingState(
       type: FundiWaitingType.bidSent,
       title: 'Bid sent - KES $p - Waiting for client to react',
@@ -177,7 +162,7 @@ FundiWaitingState? getFundiWaitingState({
     );
   }
 
-  // FIX: check locked amount vs needed - stops green showing before escrow
+  // FIX: locked amount already includes transport from first price
   int lockedAmount = _toInt(
     job['escrowAmount'] ??
         job['lockedEscrow'] ??
@@ -186,33 +171,47 @@ FundiWaitingState? getFundiWaitingState({
   );
   bool hasLockedAmount = lockedAmount > 0;
   bool needsTopup = hasLockedAmount && fundiSees > lockedAmount;
-  bool shouldWaitEscrow =
-      (!escrowDone || needsTopup) &&
+  int needExtra = needsTopup ? fundiSees - lockedAmount : 0;
+
+  // if needExtra is 2100 due to 5% leakage, fundi sees 2000
+  int needExtraForFundi = needExtra > 0 ? (needExtra / 1.05).round() : 0;
+  if (needExtra % 100 != 0 && needExtraForFundi * 1.05 == needExtra) {
+    needExtra = needExtraForFundi;
+  } else if (hasLockedAmount) {
+    // prefer pure extraLabor if available
+    int pureExtra = _toInt(
+      renego?['extraLabor'] ?? renego?['pendingLabor'] ?? 0,
+    );
+    if (pureExtra > 0) needExtra = pureExtra;
+  }
+
+  bool isInitialEscrowWait =
+      !escrowDone &&
       !siteDone &&
       !travelling &&
       ['assigned', 'confirmed', 'negotiating', 'accepted'].contains(jobStatus);
+  bool isTopupWait = needsTopup && !travelling && !renegoPending;
 
-  // 5. WAITING FOR ESCROW - ORANGE
-  if (shouldWaitEscrow) {
-    int need = needsTopup ? fundiSees - lockedAmount : fundiSees;
+  // 5. WAITING FOR ESCROW - transport already included, extra is labour only
+  if (isInitialEscrowWait || isTopupWait) {
     return FundiWaitingState(
       type: FundiWaitingType.waitingEscrow,
-      title: needsTopup
-          ? 'Waiting for client to lock extra KES $need to escrow'
+      title: isTopupWait
+          ? 'Waiting for client to lock extra KES $needExtra to escrow'
           : 'Waiting for client to lock KES $fundiSees to escrow',
-      message: needsTopup
-          ? 'Client locked KES $lockedAmount, needs extra KES $need (Total KES $fundiSees)'
-          : 'Client needs to lock KES $fundiSees',
-      price: need,
+      message: isTopupWait
+          ? 'Waiting for client to lock extra KES $needExtra'
+          : 'Waiting for client to lock KES $fundiSees',
+      price: isTopupWait ? needExtra : fundiSees,
     );
   }
 
-  // 6. Site visited -> WAITING FOR YOU TO START WORK - MUST BE BEFORE escrowLocked
+  // 6. SITE VISITED - transport already included in KES
   if (siteDone && !renegoPending) {
     return FundiWaitingState(
       type: FundiWaitingType.siteVisited,
       title: 'Waiting for you to start work - KES $fundiSees',
-      message: 'You visited site. Tap START JOB to begin work',
+      message: 'You visited site. Tap START JOB',
       price: fundiSees,
     );
   }
@@ -227,7 +226,7 @@ FundiWaitingState? getFundiWaitingState({
     );
   }
 
-  // 8. ESCROW LOCKED - GREEN + START SITE VISIT
+  // 8. Escrow locked - first price incl transport already locked
   if (escrowDone && !needsTopup && !siteDone && !travelling && !renegoPending) {
     return FundiWaitingState(
       type: FundiWaitingType.escrowLocked,
