@@ -466,6 +466,36 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                     );
                   }
                 }
+
+                // FIX 1: Turn "You are on the way" to green Done after site visited
+                String curStatus2 = (job['status'] ?? '')
+                    .toString()
+                    .toLowerCase();
+                bool isSiteDone =
+                    (job['siteVisitDone'] == true) ||
+                    (job['siteVisited'] == true) ||
+                    job['siteVisitedAt'] != null ||
+                    [
+                      'site_visit',
+                      'site_visit_done',
+                      'site_visited',
+                      'in_progress',
+                      'pending_completion',
+                      'job_completed',
+                    ].contains(curStatus2);
+
+                if (isSiteDone) {
+                  if (waitingState?.type != FundiWaitingType.travelling) {
+                    doneHistory.add(
+                      _greenCard(
+                        title: 'You arrived on site - Done',
+                        message: 'You marked site as visited - Done',
+                        icon: Icons.location_on,
+                      ),
+                    );
+                  }
+                }
+
                 // Only show green "Site visited - Done" AFTER job started, not while waiting to start work
                 if (siteDone &&
                     waitingState?.type != FundiWaitingType.siteVisited) {
