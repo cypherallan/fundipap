@@ -157,6 +157,21 @@ FundiWaitingState? getFundiWaitingState({
       price: amt,
     );
   }
+
+  // FIX: after fundi accepts client counter - waiting for client to confirm
+  if (bidStatus == 'counter_accepted_by_fundi' ||
+      jobStatus == 'counter_accepted' ||
+      jobStatus == 'counter_accepted_by_fundi') {
+    return FundiWaitingState(
+      type: FundiWaitingType.waitingEscrow,
+      title:
+          'Counter offer accepted - Waiting for client to confirm KES $fundiSees',
+      message:
+          'You accepted KES $fundiSees - waiting for client to confirm and lock escrow',
+      price: fundiSees,
+    );
+  }
+
   if (bidStatus == 'countered' && lastBy == uid) {
     int amt = _toInt(bid['lastCounterAmount'] ?? bid['lastCounterPrice'] ?? 0);
     return FundiWaitingState(
