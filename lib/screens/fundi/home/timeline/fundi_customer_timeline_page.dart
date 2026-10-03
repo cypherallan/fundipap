@@ -648,32 +648,64 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                                               });
                                         }
                                       } else {
+                                        var myUid = FirebaseAuth
+                                            .instance
+                                            .currentUser!
+                                            .uid;
+                                        var userSnap = await FirebaseFirestore
+                                            .instance
+                                            .collection('users')
+                                            .doc(myUid)
+                                            .get();
+                                        String fundiName =
+                                            (userSnap.data()?['username'] ??
+                                                    'Fundi')
+                                                .toString();
+
                                         await bidDoc.reference.update({
-                                          'status': 'accepted',
+                                          'status': 'counter_accepted_by_fundi',
                                           'agreedPrice': clientCounterAmt,
                                           'price': clientCounterAmt,
                                           'acceptedAt':
                                               FieldValue.serverTimestamp(),
                                         });
+
                                         await FirebaseFirestore.instance
                                             .collection('jobs')
                                             .doc(widget.jobId)
                                             .update({
-                                              'status': 'assigned',
-                                              'assignedFundiId': uid,
+                                              'status': 'counter_accepted',
+                                              'counterAcceptedBy':
+                                                  FieldValue.arrayUnion([
+                                                    myUid,
+                                                  ]),
+                                              'lastCounterAcceptedBy': myUid,
+                                              'lastCounterAcceptedByName':
+                                                  fundiName,
                                               'agreedPrice': clientCounterAmt,
-                                              'price': clientCounterAmt,
-                                              'escrowStatus': 'pending',
-                                              'escrowAmount':
-                                                  FieldValue.delete(),
-                                              'travelling': false,
-                                              'siteVisitDone': false,
-                                              'siteVisited': false,
-                                              'renegotiation': {
-                                                'requested': false,
-                                              },
+                                              'lastCounterAmount':
+                                                  clientCounterAmt,
+                                              'counterAcceptedBids':
+                                                  FieldValue.arrayUnion([
+                                                    bidDoc.id,
+                                                  ]),
+                                              'customerHasUnread': true,
+                                              'clientHasUnread': true,
+                                              'customerUnreadType':
+                                                  'counter_accepted',
                                               'updatedAt':
                                                   FieldValue.serverTimestamp(),
+                                              'priceHistory':
+                                                  FieldValue.arrayUnion([
+                                                    {
+                                                      'price': clientCounterAmt,
+                                                      'by': myUid,
+                                                      'type':
+                                                          'accepted_client_counter',
+                                                      'at': DateTime.now()
+                                                          .toIso8601String(),
+                                                    },
+                                                  ]),
                                             });
                                       }
                                     },
