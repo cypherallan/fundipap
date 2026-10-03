@@ -518,9 +518,8 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                     int currentTotal = _toInt(
                       job['agreedPrice'] ?? job['laborCost'] ?? 6000,
                     );
-                    int oldLab = currentTotal - accepted; // 5000
+                    int oldLab = currentTotal - accepted;
                     if (oldLab < 0) oldLab = 5000;
-
                     doneHistory.add(
                       _greenCard(
                         title:
@@ -531,10 +530,37 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                       ),
                     );
                   }
+                  // EXTRA LOCKED GREEN - after client locks 1000
+                  bool locked =
+                      _toBool(renego['extraLocked']) ||
+                      _toInt(job['extraTopupAmount']) == 0 &&
+                          (job['status'] == 'waiting_for_client_to_buy_parts' ||
+                              renego['status'] == 'accepted_client_buys_parts');
+                  if (locked &&
+                      _toInt(renego['acceptedCounterExtraLabor'] ?? 0) > 0) {
+                    int extra = _toInt(renego['acceptedCounterExtraLabor']);
+                    doneHistory.add(
+                      _greenCard(
+                        title: 'Client locked extra KES $extra - Done',
+                        message:
+                            'Client locked extra KES $extra • New labour KES ${_toInt(job['agreedPrice'])} • Done',
+                        icon: Icons.lock,
+                      ),
+                    );
+                  }
                 }
 
-                // BUILD CURRENT WAITING BASED ON SERVICE - ORDER MATTERS
-                if (waitingState != null) {
+                // OVERRIDE WAITING STATE IF NEXT PHASE IS BUY PARTS
+                if (status == 'waiting_for_client_to_buy_parts' ||
+                    renego?['currentPhase'] ==
+                        'waiting_for_client_to_buy_parts') {
+                  currentWaiting = OrangeAnimatedWaitingCard(
+                    title: 'Waiting for client to buy materials',
+                    message:
+                        'Client locked extra labour KES ${_toInt(renego?['acceptedCounterExtraLabor'] ?? 1000)} (counter ${_toInt(renego?['counterExtraLabor'] ?? 1000)} accepted). Total locked KES ${_toInt(job['agreedPrice'] ?? 6000)} labour. Waiting for materials.',
+                  );
+                } else if (waitingState != null) {
+                  // your existing switch case for waitingState...
                   switch (waitingState.type) {
                     case FundiWaitingType.clientCounter:
                       int clientCounterAmt = waitingState.price;

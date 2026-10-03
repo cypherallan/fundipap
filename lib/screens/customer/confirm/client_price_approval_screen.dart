@@ -154,6 +154,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
   }
 
   Future<void> _payExtraEscrow(
+    Map<String, dynamic> job, // <-- pass job from StreamBuilder
     int alreadyLocked,
     int extraToLock,
     String whoBuysVal,
@@ -161,13 +162,29 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
     setState(() => loading = true);
     try {
       int newTotal = alreadyLocked + extraToLock;
+      String fundiId =
+          (job['assignedFundiId'] ??
+                  job['fundiId'] ??
+                  widget.job['assignedFundiId'] ??
+                  '')
+              .toString();
+
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
           .update({
             'escrowAmount': newTotal,
+            'totalClientPays': newTotal,
+            'totalCost': newTotal,
             'extraEscrowStatus': 'paid',
             'escrowStatus': 'held',
+            'extraTopupAmount': 0,
+            'extraTopupToLock': 0,
+            'extraToLock': 0,
+            'clientNeedsToTopup': false,
+            'renegotiation.extraLocked': true,
+            'renegotiation.extraLockedAt': FieldValue.serverTimestamp(),
+            'renegotiation.extraEscrowPaidAt': FieldValue.serverTimestamp(),
             'status': whoBuysVal == 'client'
                 ? 'waiting_for_client_to_buy_parts'
                 : 'fundi_buying_parts',
@@ -177,13 +194,42 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
             'renegotiation.currentPhase': whoBuysVal == 'client'
                 ? 'waiting_for_client_to_buy_parts'
                 : 'fundi_buying_parts',
-            'renegotiation.whoBuysParts': whoBuysVal, // FIX: keep who buys
-            'renegotiation.extraToLock': extraToLock,
-            'renegotiation.extraEscrowPaidAt': FieldValue.serverTimestamp(),
+            'renegotiation.whoBuysParts': whoBuysVal,
             'fundiHasUnread': true,
             'customerHasUnread': false,
             'updatedAt': FieldValue.serverTimestamp(),
           });
+
+      if (fundiId.isNotEmpty) {
+        try {
+          var q = await FirebaseFirestore.instance
+              .collection('fundis')
+              .doc(fundiId)
+              .collection('notifications')
+              .where('jobId', isEqualTo: widget.jobId)
+              .get();
+          for (var d in q.docs) {
+            var t = (d.data()['type'] ?? '').toString();
+            if (t == 'awaiting_extra_escrow' ||
+                t == 'renegotiation_counter' ||
+                t == 'renegotiation_approved') {
+              await d.reference.update({'isRead': true});
+            }
+          }
+          await FirebaseFirestore.instance
+              .collection('fundis')
+              .doc(fundiId)
+              .collection('notifications')
+              .add({
+                'jobId': widget.jobId,
+                'type': 'extra_escrow_locked',
+                'title': 'Client locked extra KES $extraToLock',
+                'isRead': false,
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+        } catch (_) {}
+      }
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -672,6 +718,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                             onPressed: loading
                                 ? null
                                 : () => _payExtraEscrow(
+                                    job,
                                     alreadyLockedCorrect,
                                     extraToLock,
                                     whoBuys,
