@@ -66,8 +66,8 @@ class _FundiRequestNewPriceScreenState
   }
 
   int get oldLabor => _toInt(
-    widget.job['laborCost'] ??
-        widget.job['agreedPrice'] ??
+    widget.job['agreedPrice'] ?? // 5000 correct first
+        widget.job['laborCost'] ??
         widget.job['budget'] ??
         0,
   );

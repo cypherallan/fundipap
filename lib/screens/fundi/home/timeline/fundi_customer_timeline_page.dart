@@ -507,6 +507,47 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                   );
                 }
 
+                // FIX 2 - NO STATUS FILTER
+                final renego = job['renegotiation'] as Map<String, dynamic>?;
+                if (renego != null) {
+                  int toInt(dynamic v) =>
+                      (v is int ? v : int.tryParse(v.toString()) ?? 0);
+
+                  int counteredTo = toInt(renego['counterExtraLabor']);
+                  int accepted = toInt(renego['acceptedCounterExtraLabor']);
+                  int extraToLock = toInt(
+                    renego['acceptedCounterExtraToLock'] ??
+                        renego['extraToLock'],
+                  );
+                  int newLabTotal = toInt(
+                    renego['newLaborTotal'] ?? job['agreedPrice'],
+                  );
+                  int newTotalClient = toInt(renego['newTotalClientPays']);
+
+                  if (accepted > 0) {
+                    if (counteredTo > 0) {
+                      doneHistory.add(
+                        _greenCard(
+                          title:
+                              'Client countered extra to KES $counteredTo - Done',
+                          message:
+                              'Client countered to KES $counteredTo - Done',
+                          icon: Icons.swap_horiz,
+                        ),
+                      );
+                    }
+                    doneHistory.add(
+                      _greenCard(
+                        title:
+                            'You accepted client counter extra KES $accepted - Done',
+                        message:
+                            'You accepted KES $accepted - new total KES $newLabTotal (pay KES $newTotalClient) - waiting for extra lock KES $extraToLock - Done',
+                        icon: Icons.check_circle,
+                      ),
+                    );
+                  }
+                }
+
                 // BUILD CURRENT WAITING BASED ON SERVICE - ORDER MATTERS
                 if (waitingState != null) {
                   switch (waitingState.type) {
@@ -648,6 +689,31 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                                     ),
                                     onPressed: () async {
                                       if (isRenegoCounter) {
+                                        int currentAgreed = _toInt(
+                                          job['agreedPrice'] ??
+                                              job['laborCost'] ??
+                                              job['price'] ??
+                                              5000,
+                                        );
+                                        // if currentAgreed is already inflated to 7000 because of previous bug, fix it from escrow history
+                                        if (currentAgreed > 6000) {
+                                          // last correct lock was 5350 = 5000+100+250, so back-calc
+                                          int lastCorrectLock = _toInt(
+                                            job['renegotiation']?['oldTotalClientPays'] ??
+                                                5350,
+                                          );
+                                          int lastTrans = _toInt(
+                                            job['transportFee'] ?? 100,
+                                          );
+                                          // oldLab = (totalPay - trans) / 1.05
+                                          int calcOldLab =
+                                              ((lastCorrectLock - lastTrans) /
+                                                      1.05)
+                                                  .round();
+                                          if (calcOldLab > 0 &&
+                                              calcOldLab < currentAgreed)
+                                            currentAgreed = calcOldLab;
+                                        }
                                         int approvedExtra = _toInt(
                                           renego['counterExtraLabor'] ?? 0,
                                         ); // 1000
@@ -655,10 +721,23 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                                           renego['counterExtraToLock'] ??
                                               (approvedExtra * 1.05).round(),
                                         ); // 1050
-                                        int newLabour = _toInt(
-                                          renego['counterLabor'] ??
-                                              renego['counterPrice'] ??
-                                              6000,
+                                        int oldTrans = _toInt(
+                                          job['transportFee'] ??
+                                              renego['oldTransportFee'] ??
+                                              100,
+                                        );
+                                        int newLabour =
+                                            currentAgreed +
+                                            approvedExtra; // 5000+1000=6000
+                                        int newTotalPay =
+                                            newLabour +
+                                            oldTrans +
+                                            (newLabour * 0.05)
+                                                .round(); // 6000+100+300=6400
+                                        _toInt(
+                                          job['totalClientPays'] ??
+                                              job['renegotiation']?['oldTotalClientPays'] ??
+                                              5350,
                                         );
 
                                         await FirebaseFirestore.instance
@@ -666,29 +745,38 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                                             .doc(widget.jobId)
                                             .update({
                                               'renegotiation.status':
-                                                  'approved_pending_extra_escrow', // <- contains pending_extra_escrow so ClientPriceApprovalScreen shows LOCK UI
+                                                  'approved_pending_extra_escrow',
                                               'renegotiation.approvedAt':
                                                   FieldValue.serverTimestamp(),
                                               'renegotiation.approvedExtra':
-                                                  approvedExtra, // 1000
+                                                  approvedExtra,
                                               'renegotiation.approvedExtraToLock':
-                                                  approvedExtraToLock, // 1050
+                                                  approvedExtraToLock,
                                               'renegotiation.acceptedCounterExtraLabor':
-                                                  approvedExtra, // <- for ClientPriceApprovalScreen compatibility
+                                                  approvedExtra,
                                               'renegotiation.acceptedCounterExtraToLock':
                                                   approvedExtraToLock,
                                               'renegotiation.acceptedCounterExtraAppFee':
                                                   (approvedExtra * 0.05)
                                                       .round(),
                                               'renegotiation.requested': false,
-                                              'laborCost': newLabour, // 6000
-                                              'status':
-                                                  'awaiting_extra_escrow', // <- in _activeSub whereIn
-                                              'escrowStatus': 'pending_topup',
-                                              'clientNeedsToTopup': true,
+                                              'renegotiation.oldLabor':
+                                                  currentAgreed, // 5000 not 6000
+                                              'renegotiation.newLaborTotal':
+                                                  newLabour, // 6000
+                                              'renegotiation.newTotalClientPays':
+                                                  newTotalPay, // 6400
+                                              'laborCost':
+                                                  newLabour, // 6000 not 7000
+                                              'agreedPrice': newLabour, // 6000
+                                              'totalClientPays':
+                                                  newTotalPay, // 6400
                                               'extraTopupAmount': approvedExtra,
                                               'extraTopupToLock':
                                                   approvedExtraToLock,
+                                              'status': 'awaiting_extra_escrow',
+                                              'escrowStatus': 'pending_topup',
+                                              'clientNeedsToTopup': true,
                                               'customerHasUnread': true,
                                               'fundiHasUnread': false,
                                               'updatedAt':
