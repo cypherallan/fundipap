@@ -412,6 +412,48 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                     );
                   }
                 }
+
+                // FIX: never delete waiting state - turn counter_accepted waiting to green Done after client confirms
+                String curStatus = (job['status'] ?? '')
+                    .toString()
+                    .toLowerCase();
+                bool hasCounterAccepted =
+                    priceHistory.any(
+                      (e) => (e['type'] ?? '') == 'accepted_client_counter',
+                    ) ||
+                    (bid['status'] ?? '').toString() ==
+                        'counter_accepted_by_fundi' ||
+                    (job['counterAcceptedBy'] as List?)?.isNotEmpty == true;
+
+                bool beyondCounterAccepted =
+                    [
+                      'assigned',
+                      'confirmed',
+                      'travelling',
+                      'on_the_way',
+                      'site_visit',
+                      'site_visit_done',
+                      'site_visited',
+                      'in_progress',
+                      'pending_completion',
+                      'job_completed',
+                      'completed',
+                    ].contains(curStatus) ||
+                    (job['escrowStatus'] ?? '').toString().toLowerCase() ==
+                        'held' ||
+                    (job['escrowStatus'] ?? '').toString().toLowerCase() ==
+                        'paid';
+
+                if (hasCounterAccepted && beyondCounterAccepted) {
+                  doneHistory.add(
+                    _greenCard(
+                      title: 'Counter offer accepted - KES $fundiSees - Done',
+                      message:
+                          'Client confirmed your counter KES $fundiSees - waiting for escrow lock',
+                      icon: Icons.check_circle,
+                    ),
+                  );
+                }
                 if (escrowDone && !siteDone) {
                   // Don't add green escrow here if waitingState says waiting - waiting card will show orange
                   if (waitingState?.type != FundiWaitingType.waitingEscrow) {
