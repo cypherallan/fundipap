@@ -507,41 +507,26 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                   );
                 }
 
-                // FIX 2 - NO STATUS FILTER
+                // FIX 2 - FUNDI ONLY SEES LABOUR, NOT CLIENT TOTAL
                 final renego = job['renegotiation'] as Map<String, dynamic>?;
                 if (renego != null) {
-                  int toInt(dynamic v) =>
-                      (v is int ? v : int.tryParse(v.toString()) ?? 0);
-
-                  int counteredTo = toInt(renego['counterExtraLabor']);
-                  int accepted = toInt(renego['acceptedCounterExtraLabor']);
-                  int extraToLock = toInt(
-                    renego['acceptedCounterExtraToLock'] ??
-                        renego['extraToLock'],
+                  int accepted = _toInt(
+                    renego['acceptedCounterExtraLabor'] ??
+                        renego['counterExtraLabor'],
                   );
-                  int newLabTotal = toInt(
-                    renego['newLaborTotal'] ?? job['agreedPrice'],
-                  );
-                  int newTotalClient = toInt(renego['newTotalClientPays']);
-
                   if (accepted > 0) {
-                    if (counteredTo > 0) {
-                      doneHistory.add(
-                        _greenCard(
-                          title:
-                              'Client countered extra to KES $counteredTo - Done',
-                          message:
-                              'Client countered to KES $counteredTo - Done',
-                          icon: Icons.swap_horiz,
-                        ),
-                      );
-                    }
+                    int currentTotal = _toInt(
+                      job['agreedPrice'] ?? job['laborCost'] ?? 6000,
+                    );
+                    int oldLab = currentTotal - accepted; // 5000
+                    if (oldLab < 0) oldLab = 5000;
+
                     doneHistory.add(
                       _greenCard(
                         title:
                             'You accepted client counter extra KES $accepted - Done',
                         message:
-                            'You accepted KES $accepted - new total KES $newLabTotal (pay KES $newTotalClient) - waiting for extra lock KES $extraToLock - Done',
+                            'Old KES $oldLab + Extra KES $accepted = New labour KES $currentTotal - Done',
                         icon: Icons.check_circle,
                       ),
                     );
