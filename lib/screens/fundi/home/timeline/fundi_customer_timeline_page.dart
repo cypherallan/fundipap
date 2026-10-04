@@ -11,6 +11,8 @@ import '../timeline/fundi_timeline_actions.dart';
 import 'widgets/timeline_card.dart';
 import '../../my_jobs/fundi_request_new_price_screen.dart';
 import '../fundi_visit_customer_tab.dart';
+import '../timeline/fundi_timeline_context.dart';
+import '../timeline/steps/completed_released_view.dart';
 
 class FundiCustomerTimelinePage extends StatefulWidget {
   final String jobId;
@@ -212,7 +214,21 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
           );
         }
         var job = jobSnap.data!.data() as Map<String, dynamic>;
-        var status = (job['status'] ?? '').toString().toLowerCase();
+        var c = FundiTimelineContext.fromSnapshot(
+          context: context,
+          jobId: widget.jobId,
+          clientName: widget.clientName,
+          jobTitle: widget.jobTitle,
+          job: job,
+        );
+        var status = c.status.toLowerCase();
+
+        // NEW - if escrow released, go to YES I HAVE RECEIVED flow
+        if (c.escrowReleased) {
+          if (!c.fundiConfirmedPayment || !c.fundiRatedClient) {
+            return buildCompletedReleasedView(context, c);
+          }
+        }
         var escrowStatus = (job['escrowStatus'] ?? 'pending')
             .toString()
             .toLowerCase();
