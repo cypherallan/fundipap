@@ -9,6 +9,8 @@ enum FundiWaitingType {
   travelling,
   siteVisited,
   waitingNewPriceApproval,
+  working,
+  jobCompleted,
 }
 
 class FundiWaitingState {
@@ -156,6 +158,31 @@ FundiWaitingState? getFundiWaitingState({
   }
 
   // --- ORIGINAL LOGIC ---
+  // NOTIFICATION - WORKING / COMPLETED
+  if (lowStatus == 'in_progress' ||
+      lowStatus == 'fundi_working' ||
+      lowPhase == 'fundi_working' ||
+      lowPhase == 'in_progress') {
+    int totalLab = _toInt(job['agreedPrice'] ?? labour);
+    return FundiWaitingState(
+      type: FundiWaitingType.working,
+      title: 'You are working - KES $totalLab',
+      message: 'You are working on this job',
+      price: totalLab,
+    );
+  }
+  if (lowStatus == 'pending_completion' ||
+      lowStatus == 'job_completed' ||
+      lowPhase == 'completed_by_fundi' ||
+      lowPhase == 'pending_completion') {
+    int totalLab = _toInt(job['agreedPrice'] ?? labour);
+    return FundiWaitingState(
+      type: FundiWaitingType.jobCompleted,
+      title: 'Job Completed - Waiting for client to confirm',
+      message: 'Waiting for client to confirm and release payment',
+      price: totalLab,
+    );
+  }
   bool renegoRequested = _toBool(renego?['requested']);
   bool renegoPending =
       renego != null && renegoRequested && renegoStatus == 'pending';

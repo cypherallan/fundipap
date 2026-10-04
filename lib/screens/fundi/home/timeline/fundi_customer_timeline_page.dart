@@ -588,8 +588,8 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                   }
                 }
 
-                // OVERRIDE - CLIENT BOUGHT MUST SHOW CONFIRM BUTTON FIRST
-                String lowStat = status.toLowerCase();
+                // OVERRIDE - WORKING / COMPLETED / BOUGHT / WAITING BUY - ORDER MATTERS
+                String lowStat = (job['status'] ?? '').toString().toLowerCase();
                 String lowPhase = (renego?['currentPhase'] ?? '')
                     .toString()
                     .toLowerCase();
@@ -603,7 +603,81 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                     lowPhase == 'client_claims_parts_bought' ||
                     lowPhase == 'awaiting_fundi_confirmation';
 
-                if (isClientBoughtPhase) {
+                if (lowStat == 'pending_completion' ||
+                    lowStat == 'job_completed' ||
+                    lowPhase == 'completed_by_fundi' ||
+                    lowPhase == 'pending_completion') {
+                  currentWaiting = OrangeAnimatedWaitingCard(
+                    title:
+                        'Job Completed - Waiting for ${widget.clientName} to confirm',
+                    message:
+                        'You marked ${widget.jobTitle} as completed. Waiting for ${widget.clientName} to confirm and release payment.',
+                  );
+                } else if (lowStat == 'in_progress' ||
+                    lowStat == 'fundi_working' ||
+                    lowPhase == 'fundi_working' ||
+                    lowPhase == 'in_progress') {
+                  currentWaiting = Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.orange.shade400,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.construction,
+                              color: Colors.orange.shade800,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'You are working - KES ${_toInt(job['agreedPrice'] ?? 6000)}',
+                                style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12,
+                                  color: Colors.orange.shade800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'You are working on ${widget.jobTitle}.',
+                          style: GoogleFonts.inter(fontSize: 11),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: FundipapColors.greenSuccess,
+                              minimumSize: const Size(double.infinity, 52),
+                            ),
+                            onPressed: () =>
+                                FundiTimelineActions.completeJob(widget.jobId),
+                            child: const Text(
+                              'MARK JOB AS COMPLETED',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                } else if (isClientBoughtPhase) {
                   currentWaiting = fundiCard(
                     color: Colors.blue.shade50,
                     border: Colors.blue,
@@ -637,7 +711,6 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                         'Client locked extra labour KES ${_toInt(renego?['acceptedCounterExtraLabor'] ?? 1000)} (counter ${_toInt(renego?['counterExtraLabor'] ?? 1000)} accepted). Total locked KES ${_toInt(job['agreedPrice'] ?? 6000)} labour. Waiting for materials.',
                   );
                 } else if (waitingState != null) {
-                  // your existing switch case for waitingState...
                   switch (waitingState.type) {
                     case FundiWaitingType.clientCounter:
                       int clientCounterAmt = waitingState.price;
@@ -1139,6 +1212,77 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                             ),
                           ],
                         ),
+                      );
+                      break;
+                    case FundiWaitingType.working:
+                      currentWaiting = Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.orange.shade400,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.construction,
+                                  color: Colors.orange.shade800,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'You are working - KES ${waitingState.price}',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12,
+                                      color: Colors.orange.shade800,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'You are working on ${widget.jobTitle}. Tap to mark completed.',
+                              style: GoogleFonts.inter(fontSize: 11),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: FundipapColors.greenSuccess,
+                                  minimumSize: const Size(double.infinity, 52),
+                                ),
+                                onPressed: () =>
+                                    FundiTimelineActions.completeJob(
+                                      widget.jobId,
+                                    ),
+                                child: const Text(
+                                  'MARK JOB AS COMPLETED',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                      break;
+                    case FundiWaitingType.jobCompleted:
+                      currentWaiting = OrangeAnimatedWaitingCard(
+                        title:
+                            'Job Completed - Waiting for ${widget.clientName} to confirm',
+                        message:
+                            'You marked ${widget.jobTitle} as completed. Waiting for ${widget.clientName} to confirm and release payment.',
                       );
                       break;
                   }
