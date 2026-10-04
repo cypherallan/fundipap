@@ -90,30 +90,72 @@ FundiWaitingState? getFundiWaitingState({
   String renegoStatus = (renego?['status'] ?? '').toString().toLowerCase();
   bool extraLocked = _toBool(renego?['extraLocked']);
 
-  // FIX 1: NEW PHASE - MUST SHOW IN NOTIFICATIONS AS ORANGE
-  if (jobStatus == 'waiting_for_client_to_buy_parts' ||
-      renegoPhase == 'waiting_for_client_to_buy_parts' ||
-      renegoStatus == 'accepted_client_buys_parts') {
-    int extra = _toInt(
-      renego?['acceptedCounterExtraLabor'] ??
-          renego?['counterExtraLabor'] ??
-          1000,
-    );
-    int totalLab = _toInt(job['agreedPrice'] ?? labour);
-    return FundiWaitingState(
-      type: FundiWaitingType.waitingNewPriceApproval,
-      title: 'Waiting for client to buy materials - KES $totalLab',
-      message:
-          'Client locked extra KES $extra • Total KES $totalLab • Waiting for receipt',
-      price: totalLab,
-    );
+  // --- MATERIAL FLOW DETECTION (robust) ---
+  String lowStatus = jobStatus.toLowerCase();
+  String lowPhase = renegoPhase.toLowerCase();
+
+  bool hasAcceptedExtra =
+      _toInt(
+        renego?['acceptedCounterExtraLabor'] ??
+            renego?['counterExtraLabor'] ??
+            renego?['acceptedExtra'] ??
+            0,
+      ) >
+      0;
+  bool isInMaterialFlow =
+      hasAcceptedExtra ||
+      extraLocked ||
+      renegoStatus.contains('accepted_client_buys') ||
+      lowPhase.contains('buy_parts') ||
+      lowPhase.contains('bought') ||
+      lowStatus.contains('buy_parts') ||
+      lowStatus.contains('bought') ||
+      lowStatus.contains('fundi_buying') ||
+      lowPhase.contains('fundi_buying');
+
+  bool isWaitingBuy =
+      lowStatus.contains('waiting_for_client_to_buy') ||
+      lowPhase.contains('waiting_for_client_to_buy');
+  bool isClientBought =
+      lowStatus.contains('bought') ||
+      lowPhase.contains('bought') ||
+      lowStatus.contains('fundi_buying') ||
+      lowPhase.contains('fundi_buying') ||
+      lowStatus.contains('parts_bought') ||
+      lowStatus.contains('awaiting_fundi');
+
+  // 1. MATERIAL FLOW HAS PRIORITY - NEVER GO BACK TO EXTRA 1000
+  if (isInMaterialFlow) {
+    if (isClientBought) {
+      int totalLab = _toInt(job['agreedPrice'] ?? labour);
+      return FundiWaitingState(
+        type: FundiWaitingType.siteVisited,
+        title: 'Client bought materials - Confirm receipt',
+        message:
+            'Client uploaded receipt • Tap to confirm materials and start job • KES $totalLab',
+        price: totalLab,
+      );
+    }
+    if (isWaitingBuy) {
+      int totalLab = _toInt(job['agreedPrice'] ?? labour);
+      int extra = _toInt(
+        renego?['acceptedCounterExtraLabor'] ??
+            renego?['counterExtraLabor'] ??
+            1000,
+      );
+      return FundiWaitingState(
+        type: FundiWaitingType.waitingNewPriceApproval,
+        title: 'Waiting for client to buy materials - KES $totalLab',
+        message:
+            'Client locked extra KES $extra • Total KES $totalLab • Waiting for receipt',
+        price: totalLab,
+      );
+    }
+    // If we are in material flow but status is still awaiting_extra_escrow, kill it - don't show extra 1000
+    if (lowStatus == 'awaiting_extra_escrow') return null;
   }
 
-  // FIX 2: KILL OLD STALE EXTRA ESCROW NOTIFICATION
-  if (extraLocked && jobStatus == 'awaiting_extra_escrow') {
-    return null;
-  }
-
+  // --- ORIGINAL LOGIC ---
   bool renegoRequested = _toBool(renego?['requested']);
   bool renegoPending =
       renego != null && renegoRequested && renegoStatus == 'pending';
@@ -217,7 +259,7 @@ FundiWaitingState? getFundiWaitingState({
   );
   bool hasLockedAmount = lockedAmount > 0;
   bool needsTopup = hasLockedAmount && fundiSees > lockedAmount;
-  if (extraLocked) needsTopup = false;
+  if (extraLocked || isInMaterialFlow) needsTopup = false;
 
   int needExtra = needsTopup ? fundiSees - lockedAmount : 0;
   if (needExtra > 0) {
@@ -238,13 +280,15 @@ FundiWaitingState? getFundiWaitingState({
   bool isAwaitingExtra =
       jobStatus == 'awaiting_extra_escrow' &&
       !extraLocked &&
-      _toBool(job['clientNeedsToTopup']);
+      _toBool(job['clientNeedsToTopup']) &&
+      !isInMaterialFlow;
   bool isTopupWait =
       needsTopup &&
       !travelling &&
       !renegoPending &&
       !renegoCountered &&
-      !extraLocked;
+      !extraLocked &&
+      !isInMaterialFlow;
 
   if (isInitialEscrowWait || isTopupWait || isAwaitingExtra) {
     return FundiWaitingState(

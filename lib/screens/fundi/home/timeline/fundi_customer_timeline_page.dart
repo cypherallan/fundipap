@@ -550,8 +550,47 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                   }
                 }
 
-                // OVERRIDE WAITING STATE IF NEXT PHASE IS BUY PARTS
-                if (status == 'waiting_for_client_to_buy_parts' ||
+                // OVERRIDE - CLIENT BOUGHT MUST SHOW CONFIRM BUTTON FIRST
+                String lowStat = status.toLowerCase();
+                String lowPhase = (renego?['currentPhase'] ?? '')
+                    .toString()
+                    .toLowerCase();
+                bool isClientBoughtPhase =
+                    lowStat.contains('bought') ||
+                    lowPhase.contains('bought') ||
+                    lowStat == 'fundi_buying_parts' ||
+                    lowPhase == 'fundi_buying_parts' ||
+                    lowPhase == 'client_bought_materials' ||
+                    lowStat == 'client_claims_parts_bought' ||
+                    lowPhase == 'client_claims_parts_bought' ||
+                    lowPhase == 'awaiting_fundi_confirmation';
+
+                if (isClientBoughtPhase) {
+                  currentWaiting = fundiCard(
+                    color: Colors.blue.shade50,
+                    border: Colors.blue,
+                    icon: Icons.inventory,
+                    iconColor: Colors.blue.shade800,
+                    title: 'Client says materials bought',
+                    message: 'Client bought parts. Confirm to show START WORK.',
+                    time: 'Now',
+                    isCurrent: true,
+                    action: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        minimumSize: const Size(double.infinity, 52),
+                      ),
+                      onPressed: () =>
+                          FundiTimelineActions.confirmPartsAvailable(
+                            widget.jobId,
+                          ),
+                      child: const Text(
+                        'CONFIRM MATERIALS AVAILABLE',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  );
+                } else if (status == 'waiting_for_client_to_buy_parts' ||
                     renego?['currentPhase'] ==
                         'waiting_for_client_to_buy_parts') {
                   currentWaiting = OrangeAnimatedWaitingCard(
