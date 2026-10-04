@@ -617,65 +617,34 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                     lowStat == 'fundi_working' ||
                     lowPhase == 'fundi_working' ||
                     lowPhase == 'in_progress') {
-                  currentWaiting = Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.orange.shade400,
-                        width: 1.5,
+                  currentWaiting = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      OrangeAnimatedWaitingCard(
+                        title:
+                            'You are working - KES ${_toInt(job['agreedPrice'] ?? job['laborCost'] ?? 6000)}',
+                        message: 'You are working on ${widget.jobTitle}.',
                       ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.construction,
-                              color: Colors.orange.shade800,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'You are working - KES ${_toInt(job['agreedPrice'] ?? 6000)}',
-                                style: GoogleFonts.montserrat(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12,
-                                  color: Colors.orange.shade800,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'You are working on ${widget.jobTitle}.',
-                          style: GoogleFonts.inter(fontSize: 11),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: FundipapColors.greenSuccess,
-                              minimumSize: const Size(double.infinity, 52),
-                            ),
-                            onPressed: () =>
-                                FundiTimelineActions.completeJob(widget.jobId),
-                            child: const Text(
-                              'MARK JOB AS COMPLETED',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                              ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: FundipapColors.greenSuccess,
+                            minimumSize: const Size(double.infinity, 52),
+                          ),
+                          onPressed: () =>
+                              FundiTimelineActions.completeJob(widget.jobId),
+                          child: const Text(
+                            'MARK JOB AS COMPLETED',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   );
                 } else if (isClientBoughtPhase) {
                   currentWaiting = fundiCard(
