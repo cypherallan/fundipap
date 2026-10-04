@@ -149,9 +149,16 @@ class FundiConfirmedTab extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: job['status'] == 'in_progress'
+                    ? Colors.orange.shade50
+                    : Colors.white,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: FundipapColors.greenSuccess),
+                border: Border.all(
+                  color: job['status'] == 'in_progress'
+                      ? Colors.orange.shade400
+                      : FundipapColors.greenSuccess,
+                  width: 1.5,
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
