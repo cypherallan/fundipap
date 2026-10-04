@@ -76,22 +76,44 @@ FundiWaitingState? getFundiWaitingState({
       _toBool(job['siteVisited']) ||
       job['siteVisitedAt'] != null ||
       ['site_visit', 'site_visit_done', 'site_visited'].contains(jobStatus);
-
   bool travelling =
       !siteDone &&
       (_toBool(job['travelling']) ||
           jobStatus == 'travelling' ||
           jobStatus == 'on_the_way');
 
-  // SAFE CAST - renegotiation can be null or map
   Map<String, dynamic>? renego;
   var rawRenego = job['renegotiation'];
-  if (rawRenego is Map) {
-    renego = Map<String, dynamic>.from(rawRenego);
+  if (rawRenego is Map) renego = Map<String, dynamic>.from(rawRenego);
+
+  String renegoPhase = (renego?['currentPhase'] ?? '').toString().toLowerCase();
+  String renegoStatus = (renego?['status'] ?? '').toString().toLowerCase();
+  bool extraLocked = _toBool(renego?['extraLocked']);
+
+  // FIX 1: NEW PHASE - MUST SHOW IN NOTIFICATIONS AS ORANGE
+  if (jobStatus == 'waiting_for_client_to_buy_parts' ||
+      renegoPhase == 'waiting_for_client_to_buy_parts' ||
+      renegoStatus == 'accepted_client_buys_parts') {
+    int extra = _toInt(
+      renego?['acceptedCounterExtraLabor'] ??
+          renego?['counterExtraLabor'] ??
+          1000,
+    );
+    int totalLab = _toInt(job['agreedPrice'] ?? labour);
+    return FundiWaitingState(
+      type: FundiWaitingType.waitingNewPriceApproval,
+      title: 'Waiting for client to buy materials - KES $totalLab',
+      message:
+          'Client locked extra KES $extra • Total KES $totalLab • Waiting for receipt',
+      price: totalLab,
+    );
   }
 
-  String renegoStatus = (renego?['status'] ?? '').toString().toLowerCase();
-  // FIX: use _toBool - handles true/false/1/0
+  // FIX 2: KILL OLD STALE EXTRA ESCROW NOTIFICATION
+  if (extraLocked && jobStatus == 'awaiting_extra_escrow') {
+    return null;
+  }
+
   bool renegoRequested = _toBool(renego?['requested']);
   bool renegoPending =
       renego != null && renegoRequested && renegoStatus == 'pending';
@@ -100,10 +122,7 @@ FundiWaitingState? getFundiWaitingState({
 
   if (renegoCountered) {
     int requestedExtra = _toInt(
-      renego?['counteredExtraRequested'] ??
-          renego?['extraLabor'] ??
-          renego?['pendingLabor'] ??
-          0,
+      renego?['counteredExtraRequested'] ?? renego?['extraLabor'] ?? 0,
     );
     int counterExtra = _toInt(renego?['counterExtraLabor'] ?? 0);
     if (counterExtra == 0) {
@@ -158,7 +177,6 @@ FundiWaitingState? getFundiWaitingState({
     );
   }
 
-  // FIX: after fundi accepts client counter - waiting for client to confirm
   if (bidStatus == 'counter_accepted_by_fundi' ||
       jobStatus == 'counter_accepted' ||
       jobStatus == 'counter_accepted_by_fundi') {
@@ -199,13 +217,14 @@ FundiWaitingState? getFundiWaitingState({
   );
   bool hasLockedAmount = lockedAmount > 0;
   bool needsTopup = hasLockedAmount && fundiSees > lockedAmount;
+  if (extraLocked) needsTopup = false;
+
   int needExtra = needsTopup ? fundiSees - lockedAmount : 0;
   if (needExtra > 0) {
     int pureExtra = _toInt(
       renego?['approvedExtra'] ??
-          renego?['counterExtraLabor'] ?? // 1000 - client counter - USE THIS FIRST
+          renego?['counterExtraLabor'] ??
           renego?['extraLabor'] ??
-          renego?['pendingLabor'] ??
           0,
     );
     if (pureExtra > 0) needExtra = pureExtra;
@@ -215,26 +234,28 @@ FundiWaitingState? getFundiWaitingState({
       !escrowDone &&
       !siteDone &&
       !travelling &&
-      [
-        'assigned',
-        'confirmed',
-        'negotiating',
-        'accepted',
-        'awaiting_extra_escrow',
-      ].contains(jobStatus);
+      ['assigned', 'confirmed', 'negotiating', 'accepted'].contains(jobStatus);
+  bool isAwaitingExtra =
+      jobStatus == 'awaiting_extra_escrow' &&
+      !extraLocked &&
+      _toBool(job['clientNeedsToTopup']);
   bool isTopupWait =
-      needsTopup && !travelling && !renegoPending && !renegoCountered;
+      needsTopup &&
+      !travelling &&
+      !renegoPending &&
+      !renegoCountered &&
+      !extraLocked;
 
-  if (isInitialEscrowWait || isTopupWait) {
+  if (isInitialEscrowWait || isTopupWait || isAwaitingExtra) {
     return FundiWaitingState(
       type: FundiWaitingType.waitingEscrow,
-      title: isTopupWait
+      title: isTopupWait || isAwaitingExtra
           ? 'Waiting for client to lock extra KES $needExtra to escrow'
           : 'Waiting for client to lock KES $fundiSees to escrow',
-      message: isTopupWait
+      message: isTopupWait || isAwaitingExtra
           ? 'Waiting for client to lock extra KES $needExtra'
           : 'Waiting for client to lock KES $fundiSees',
-      price: isTopupWait ? needExtra : fundiSees,
+      price: isTopupWait || isAwaitingExtra ? needExtra : fundiSees,
     );
   }
 
