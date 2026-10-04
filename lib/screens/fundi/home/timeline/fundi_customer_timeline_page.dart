@@ -548,6 +548,44 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                       ),
                     );
                   }
+                  // MATERIALS CONFIRMED GREEN - keep after confirm
+                  bool materialsConfirmed =
+                      _toBool(renego['materialsConfirmed']) ||
+                      _toBool(renego['partsConfirmed']) ||
+                      _toBool(job['materialsConfirmed']) ||
+                      (renego['currentPhase'] ?? '')
+                          .toString()
+                          .toLowerCase()
+                          .contains('materials_confirmed') ||
+                      (renego['currentPhase'] ?? '')
+                          .toString()
+                          .toLowerCase()
+                          .contains('parts_confirmed') ||
+                      (job['status'] ?? '').toString().toLowerCase().contains(
+                        'materials_confirmed',
+                      );
+
+                  // also if client bought phase is past and status is beyond
+                  bool pastBoughtPhase =
+                      [
+                        'in_progress',
+                        'site_visit',
+                        'site_visit_done',
+                        'site_visited',
+                        'pending_completion',
+                      ].contains(status) &&
+                      _toInt(renego['acceptedCounterExtraLabor'] ?? 0) > 0;
+
+                  if (materialsConfirmed || pastBoughtPhase) {
+                    doneHistory.add(
+                      _greenCard(
+                        title: 'You confirmed materials bought - Done',
+                        message:
+                            'You confirmed client bought materials • Ready to start work • Done',
+                        icon: Icons.inventory_2_outlined,
+                      ),
+                    );
+                  }
                 }
 
                 // OVERRIDE - CLIENT BOUGHT MUST SHOW CONFIRM BUTTON FIRST
