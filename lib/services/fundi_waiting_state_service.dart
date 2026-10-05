@@ -50,6 +50,17 @@ bool _toBool(dynamic v, [bool fb = false]) {
   return fb;
 }
 
+// Checks if materials were checked during extra price request
+bool _hasParts(Map<String, dynamic>? renego) {
+  if (renego == null) return false;
+  var list = renego['partsNeeded'] as List?;
+  if (list != null && list.isNotEmpty) return true;
+  int est = _toInt(renego['partsEstimateTotal']);
+  int total = _toInt(renego['totalPartsEstimate']);
+  String till = (renego['tillNumber'] ?? '').toString().trim();
+  return est > 0 || total > 0 || till.isNotEmpty;
+}
+
 FundiWaitingState? getFundiWaitingState({
   required Map<String, dynamic> job,
   required Map<String, dynamic> bid,
@@ -136,6 +147,36 @@ FundiWaitingState? getFundiWaitingState({
   String lowStatus = jobStatus.toLowerCase();
   String lowPhase = renegoPhase.toLowerCase();
 
+  // FIX: Check if materials/parts were actually requested
+  bool hasParts = _hasParts(renego);
+
+  // FIXED: If no parts, go to siteVisited (START JOB) not working
+  if ((lowStatus.contains('waiting_for_client_to_buy') ||
+          lowPhase.contains('waiting_for_client_to_buy')) &&
+      !hasParts) {
+    return FundiWaitingState(
+      type: FundiWaitingType.siteVisited,
+      title: 'Waiting for you to start work - KES $fundiSees',
+      message:
+          'Extra labour KES ${_toInt(renego?['acceptedCounterExtraLabor'] ?? 0)} locked, no materials needed. Tap START JOB',
+      price: fundiSees,
+    );
+  }
+
+  // FIXED: If no parts, go to siteVisited not working
+  if ((lowStatus.contains('bought') ||
+          lowPhase.contains('bought') ||
+          lowStatus.contains('fundi_buying') ||
+          lowPhase.contains('fundi_buying')) &&
+      !hasParts) {
+    return FundiWaitingState(
+      type: FundiWaitingType.siteVisited,
+      title: 'Waiting for you to start work - KES $fundiSees',
+      message: 'No materials flow, ready to start work',
+      price: fundiSees,
+    );
+  }
+
   bool hasAcceptedExtra =
       _toInt(
         renego?['acceptedCounterExtraLabor'] ??
@@ -145,15 +186,16 @@ FundiWaitingState? getFundiWaitingState({
       ) >
       0;
   bool isInMaterialFlow =
-      hasAcceptedExtra ||
-      extraLocked ||
-      renegoStatus.contains('accepted_client_buys') ||
-      lowPhase.contains('buy_parts') ||
-      lowPhase.contains('bought') ||
-      lowStatus.contains('buy_parts') ||
-      lowStatus.contains('bought') ||
-      lowStatus.contains('fundi_buying') ||
-      lowPhase.contains('fundi_buying');
+      hasParts &&
+      (hasAcceptedExtra ||
+          extraLocked ||
+          renegoStatus.contains('accepted_client_buys') ||
+          lowPhase.contains('buy_parts') ||
+          lowPhase.contains('bought') ||
+          lowStatus.contains('buy_parts') ||
+          lowStatus.contains('bought') ||
+          lowStatus.contains('fundi_buying') ||
+          lowPhase.contains('fundi_buying'));
 
   bool isWaitingBuy =
       lowStatus.contains('waiting_for_client_to_buy') ||

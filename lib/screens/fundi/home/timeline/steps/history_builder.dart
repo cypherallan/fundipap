@@ -22,7 +22,6 @@ List<Widget> buildDoneHistory({
 }) {
   List<Widget> doneHistory = [];
 
-  // Counter offers history - ORIGINAL LOGIC
   for (int i = 0; i < coDocs.length; i++) {
     var co = coDocs[i].data() as Map<String, dynamic>;
     int price = toInt(co['price'] ?? 0);
@@ -147,6 +146,8 @@ List<Widget> buildDoneHistory({
   }
 
   final renego = job['renegotiation'] as Map<String, dynamic>?;
+  bool hasParts = hasPartsInRenego(renego);
+
   if (renego != null) {
     int accepted = toInt(
       renego['acceptedCounterExtraLabor'] ?? renego['counterExtraLabor'],
@@ -180,37 +181,40 @@ List<Widget> buildDoneHistory({
         ),
       );
     }
-    bool materialsConfirmed =
-        toBool(renego['materialsConfirmed']) ||
-        toBool(renego['partsConfirmed']) ||
-        toBool(job['materialsConfirmed']) ||
-        (renego['currentPhase'] ?? '').toString().toLowerCase().contains(
-          'materials_confirmed',
-        ) ||
-        (renego['currentPhase'] ?? '').toString().toLowerCase().contains(
-          'parts_confirmed',
-        ) ||
-        (job['status'] ?? '').toString().toLowerCase().contains(
-          'materials_confirmed',
+    // FIX: Only show materials confirmed if parts were actually requested
+    if (hasParts) {
+      bool materialsConfirmed =
+          toBool(renego['materialsConfirmed']) ||
+          toBool(renego['partsConfirmed']) ||
+          toBool(job['materialsConfirmed']) ||
+          (renego['currentPhase'] ?? '').toString().toLowerCase().contains(
+            'materials_confirmed',
+          ) ||
+          (renego['currentPhase'] ?? '').toString().toLowerCase().contains(
+            'parts_confirmed',
+          ) ||
+          (job['status'] ?? '').toString().toLowerCase().contains(
+            'materials_confirmed',
+          );
+      bool pastBoughtPhase =
+          [
+            'in_progress',
+            'site_visit',
+            'site_visit_done',
+            'site_visited',
+            'pending_completion',
+          ].contains(status) &&
+          toInt(renego['acceptedCounterExtraLabor'] ?? 0) > 0;
+      if (materialsConfirmed || pastBoughtPhase) {
+        doneHistory.add(
+          greenDoneCard(
+            title: 'You confirmed materials bought - Done',
+            message:
+                'You confirmed client bought materials • Ready to start work • Done',
+            icon: Icons.inventory_2_outlined,
+          ),
         );
-    bool pastBoughtPhase =
-        [
-          'in_progress',
-          'site_visit',
-          'site_visit_done',
-          'site_visited',
-          'pending_completion',
-        ].contains(status) &&
-        toInt(renego['acceptedCounterExtraLabor'] ?? 0) > 0;
-    if (materialsConfirmed || pastBoughtPhase) {
-      doneHistory.add(
-        greenDoneCard(
-          title: 'You confirmed materials bought - Done',
-          message:
-              'You confirmed client bought materials • Ready to start work • Done',
-          icon: Icons.inventory_2_outlined,
-        ),
-      );
+      }
     }
   }
 

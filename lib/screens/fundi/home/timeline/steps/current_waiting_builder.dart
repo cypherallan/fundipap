@@ -33,17 +33,94 @@ Widget? buildCurrentWaiting({
   final renego = job['renegotiation'] as Map<String, dynamic>?;
   String lowStat = (job['status'] ?? '').toString().toLowerCase();
   String lowPhase = (renego?['currentPhase'] ?? '').toString().toLowerCase();
-  bool isClientBoughtPhase =
-      lowStat.contains('bought') ||
-      lowPhase.contains('bought') ||
-      lowStat == 'fundi_buying_parts' ||
-      lowPhase == 'fundi_buying_parts' ||
-      lowPhase == 'client_bought_materials' ||
-      lowStat == 'client_claims_parts_bought' ||
-      lowPhase == 'client_claims_parts_bought' ||
-      lowPhase == 'awaiting_fundi_confirmation';
+  bool hasParts = hasPartsInRenego(renego);
 
-  // OVERRIDE 1 - SAME ORDER AS ORIGINAL
+  // FIX NO PARTS: Skip materials waiting, show START JOB / New Price directly
+  if ((status == 'waiting_for_client_to_buy_parts' ||
+          lowPhase == 'waiting_for_client_to_buy_parts' ||
+          lowStat == 'waiting_for_client_to_buy_parts') &&
+      !hasParts) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade400, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.work, color: Colors.orange.shade800),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Waiting for you to start work - KES $fundiSees',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    color: Colors.orange.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Extra labour KES ${toInt(renego?['acceptedCounterExtraLabor'] ?? 0)} locked. No materials needed. Tap START JOB to begin.',
+            style: GoogleFonts.inter(fontSize: 11),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => FundiTimelineActions.startJob(jobId),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: FundipapColors.greenSuccess,
+                    minimumSize: const Size(double.infinity, 48),
+                  ),
+                  child: const Text(
+                    'START JOB',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          FundiRequestNewPriceScreen(jobId: jobId, job: job),
+                    ),
+                  ),
+                  child: const Text('New Price'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool isClientBoughtPhase =
+      (lowStat.contains('bought') ||
+          lowPhase.contains('bought') ||
+          lowStat == 'fundi_buying_parts' ||
+          lowPhase == 'fundi_buying_parts' ||
+          lowPhase == 'client_bought_materials' ||
+          lowStat == 'client_claims_parts_bought' ||
+          lowPhase == 'client_claims_parts_bought' ||
+          lowPhase == 'awaiting_fundi_confirmation') &&
+      hasParts;
+
   if (lowStat == 'pending_completion' ||
       lowStat == 'job_completed' ||
       lowPhase == 'completed_by_fundi' ||
@@ -107,8 +184,9 @@ Widget? buildCurrentWaiting({
         ),
       ),
     );
-  } else if (status == 'waiting_for_client_to_buy_parts' ||
-      renego?['currentPhase'] == 'waiting_for_client_to_buy_parts') {
+  } else if ((status == 'waiting_for_client_to_buy_parts' ||
+          renego?['currentPhase'] == 'waiting_for_client_to_buy_parts') &&
+      hasParts) {
     return OrangeAnimatedWaitingCard(
       title: 'Waiting for client to buy materials',
       message:
@@ -116,7 +194,6 @@ Widget? buildCurrentWaiting({
     );
   }
 
-  // WAITING STATE SWITCH - ORIGINAL SWITCH PRESERVED 100%
   if (waitingState == null) return null;
   switch (waitingState.type) {
     case FundiWaitingType.clientCounter:
