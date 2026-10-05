@@ -5,7 +5,6 @@ import '../../rating/rate_fundi_screen.dart';
 
 class TimelineActions {
   static Future<void> payEscrow(String jobId, double amount) async {
-    debugPrint('CLIENT DEBUG payEscrow jobId=$jobId amount=$amount');
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'escrowStatus': 'held',
       'escrowAmount': amount,
@@ -13,7 +12,6 @@ class TimelineActions {
       'escrowHeld': true,
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    debugPrint('CLIENT DEBUG payEscrow DONE');
   }
 
   static Future<void> payExtraEscrow(
@@ -22,9 +20,6 @@ class TimelineActions {
     int newTotal,
     String currentRenegStatus,
   ) async {
-    debugPrint(
-      'CLIENT DEBUG payExtraEscrow START jobId=$jobId extra=$extra newTotal=$newTotal status=$currentRenegStatus',
-    );
     String finalStatus = currentRenegStatus.replaceAll(
       '_pending_extra_escrow',
       '',
@@ -41,9 +36,6 @@ class TimelineActions {
               .toString();
     }
     bool clientBuys = whoBuys == 'client';
-    debugPrint(
-      'CLIENT DEBUG payExtraEscrow whoBuys=$whoBuys clientBuys=$clientBuys',
-    );
 
     await jobRef.update({
       'escrowStatus': 'held',
@@ -65,11 +57,9 @@ class TimelineActions {
       'customerHasUnread': false,
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    debugPrint('CLIENT DEBUG payExtraEscrow DONE');
   }
 
   static Future<void> confirmPartsBought(String jobId) async {
-    debugPrint('CLIENT DEBUG confirmPartsBought START jobId=$jobId');
     final jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
     final snap = await jobRef.get();
     String fundiId = '';
@@ -80,9 +70,6 @@ class TimelineActions {
       clientName = (data['customerName'] ?? data['clientName'] ?? 'Client')
           .toString();
     }
-    debugPrint(
-      'CLIENT DEBUG confirmPartsBought fundiId=$fundiId clientName=$clientName',
-    );
 
     await jobRef.update({
       'status': 'client_claims_parts_bought',
@@ -120,10 +107,7 @@ class TimelineActions {
               'isRead': false,
               'createdAt': FieldValue.serverTimestamp(),
             });
-        debugPrint('CLIENT DEBUG confirmPartsBought notifications SENT');
-      } catch (e) {
-        debugPrint('CLIENT DEBUG confirmPartsBought notification FAILED $e');
-      }
+      } catch (_) {}
     }
   }
 
@@ -132,9 +116,6 @@ class TimelineActions {
     String fundiId,
     int expectedTotal,
   ) async {
-    debugPrint(
-      'CLIENT DEBUG proceedWithFundi START jobId=$jobId fundiId=$fundiId expectedTotal=$expectedTotal',
-    );
     final jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
     final jobSnap = await jobRef.get();
     if (!jobSnap.exists) throw 'Job not found';
@@ -179,10 +160,6 @@ class TimelineActions {
     int fundiFee = (labour * 0.05).round();
     int totalClient = labour + transport + clientFee;
     int fundiRec = labour - fundiFee + transport;
-
-    debugPrint(
-      'CLIENT DEBUG proceedWithFundi labour=$labour transport=$transport totalClient=$totalClient fundiRec=$fundiRec bidId=$bidId',
-    );
 
     final batch = FirebaseFirestore.instance.batch();
     batch.update(jobRef, {
@@ -231,7 +208,6 @@ class TimelineActions {
       }
     }
     await batch.commit();
-    debugPrint('CLIENT DEBUG proceedWithFundi DONE');
   }
 
   static Future<void> confirmCompletion({
@@ -243,19 +219,12 @@ class TimelineActions {
     required Function(bool) onReleasing,
   }) async {
     onReleasing(true);
-    debugPrint('CLIENT DEBUG: ========== confirmCompletion START ==========');
-    debugPrint(
-      'CLIENT DEBUG: jobId=$jobId fundiId=$fundiId fundiName=$fundiName',
-    );
     try {
       var jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
       var snap = await jobRef.get();
       if (!snap.exists) throw 'Job not found';
       var j = snap.data() as Map<String, dynamic>;
       var reneg = j['renegotiation'] as Map<String, dynamic>?;
-      debugPrint(
-        'CLIENT DEBUG: job BEFORE - status=${j['status']} escrowStatus=${j['escrowStatus']} assignedFundiId=${j['assignedFundiId']} fundiId=${j['fundiId']} agreedPrice=${j['agreedPrice']} laborCost=${j['laborCost']} totalClientPays=${j['totalClientPays']} escrowAmount=${j['escrowAmount']} fundiHasUnread=${j['fundiHasUnread']} reneg=${reneg}',
-      );
 
       int labour = toInt(j['laborCost'] ?? j['agreedPrice'] ?? 0);
       int transport = toInt(j['transportFee'] ?? 100);
@@ -282,17 +251,10 @@ class TimelineActions {
         );
         totalClient = newTotalClient > 0 ? newTotalClient : totalClient;
         fundiReceives = newFundiReceives > 0 ? newFundiReceives : fundiReceives;
-        debugPrint(
-          'CLIENT DEBUG: reneg detected newLabour=$newLabour newTotalClient=$newTotalClient newFundiReceives=$newFundiReceives => final totalClient=$totalClient fundiReceives=$fundiReceives',
-        );
       }
 
       int alreadyLocked = toInt(j['escrowAmount'] ?? totalClient);
-      debugPrint(
-        'CLIENT DEBUG: calculated labour=$labour transport=$transport clientAppFee=$clientAppFee fundiAppFee=$fundiAppFee totalClient=$totalClient fundiReceives=$fundiReceives alreadyLocked=$alreadyLocked',
-      );
 
-      // UPDATE JOB
       await jobRef.update({
         'status': 'completed',
         'escrowStatus': 'released',
@@ -311,23 +273,9 @@ class TimelineActions {
         'customerHasUnread': false,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      debugPrint('CLIENT DEBUG: jobRef.update DONE to completed/released');
 
-      // VERIFY AFTER
       try {
-        var afterSnap = await jobRef.get();
-        var after = afterSnap.data() as Map<String, dynamic>;
-        debugPrint(
-          'CLIENT DEBUG: job AFTER - status=${after['status']} escrowStatus=${after['escrowStatus']} fundiHasUnread=${after['fundiHasUnread']} totalClientPays=${after['totalClientPays']} totalReleasedAmount=${after['totalReleasedAmount']} clientConfirmedComplete=${after['clientConfirmedComplete']} clientConfirmedCompletion=${after['clientConfirmedCompletion']} escrowReleased=${after['escrowReleased']}',
-        );
-      } catch (e) {
-        debugPrint('CLIENT DEBUG: after get failed $e');
-      }
-
-      // SEND NOTIFICATIONS TO FUNDI
-      try {
-        debugPrint('CLIENT DEBUG: sending notifications to fundiId=$fundiId');
-        var n1 = await FirebaseFirestore.instance.collection('notifications').add({
+        await FirebaseFirestore.instance.collection('notifications').add({
           'toUserId': fundiId,
           'toRole': 'fundi',
           'type': 'escrow_released',
@@ -338,8 +286,7 @@ class TimelineActions {
           'isRead': false,
           'createdAt': FieldValue.serverTimestamp(),
         });
-        debugPrint('CLIENT DEBUG: notifications.add OK id=${n1.id}');
-        var n2 = await FirebaseFirestore.instance
+        await FirebaseFirestore.instance
             .collection('fundis')
             .doc(fundiId)
             .collection('notifications')
@@ -351,10 +298,7 @@ class TimelineActions {
               'isRead': false,
               'createdAt': FieldValue.serverTimestamp(),
             });
-        debugPrint('CLIENT DEBUG: fundis notifications.add OK id=${n2.id}');
-      } catch (e) {
-        debugPrint('CLIENT DEBUG: notification SEND FAILED $e');
-      }
+      } catch (_) {}
 
       try {
         await FirebaseFirestore.instance
@@ -370,17 +314,13 @@ class TimelineActions {
               'releasedAt': FieldValue.serverTimestamp(),
               'updatedAt': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
-        debugPrint('CLIENT DEBUG: escrowTransactions set OK');
-      } catch (e) {
-        debugPrint('CLIENT DEBUG: escrowTransactions set error $e');
-      }
+      } catch (_) {}
 
       if (!context.mounted) return;
       int displayRelease = labour + transport;
       if (reneg != null && reneg['newLaborTotal'] != null) {
         displayRelease = toInt(reneg['newLaborTotal']) + transport;
       }
-      debugPrint('CLIENT DEBUG: showing snackbar Released KES $displayRelease');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Released KES $displayRelease to Fundi')),
       );
@@ -394,13 +334,7 @@ class TimelineActions {
           ),
         ),
       );
-      debugPrint(
-        'CLIENT DEBUG: ========== confirmCompletion SUCCESS ==========',
-      );
     } catch (e) {
-      debugPrint(
-        'CLIENT DEBUG: ========== confirmCompletion ERROR $e ==========',
-      );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

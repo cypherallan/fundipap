@@ -37,7 +37,6 @@ class CustomerMyJobs extends StatelessWidget {
   }
 
   Future<void> _confirmCompletion(String jobId) async {
-    debugPrint('CLIENT DEBUG MyJobs _confirmCompletion START jobId=$jobId');
     var doc = await FirebaseFirestore.instance
         .collection('jobs')
         .doc(jobId)
@@ -47,9 +46,6 @@ class CustomerMyJobs extends StatelessWidget {
     String fundiId = (j['assignedFundiId'] ?? j['fundiId'] ?? '').toString();
     String clientName = (j['customerName'] ?? j['clientName'] ?? 'Client')
         .toString();
-    debugPrint(
-      'CLIENT DEBUG MyJobs BEFORE status=${j['status']} escrow=${j['escrowStatus']} assignedFundiId=${j['assignedFundiId']} agreedPrice=${j['agreedPrice']} escrowAmount=${j['escrowAmount']} totalClientPays=${j['totalClientPays']} fundiId=$fundiId reneg=$reneg',
-    );
 
     int initialAmount =
         (j['escrowAmount'] ?? j['agreedPrice'] ?? j['budgetMax'] ?? 0).toInt();
@@ -66,7 +62,6 @@ class CustomerMyJobs extends StatelessWidget {
         : initialAmount + extraAmount;
     if (totalRelease == 0) totalRelease = initialAmount;
 
-    // FIX: totalRelease was labour only, need totalClientPays with transport+fee
     int labourForCalc = newLaborTotal > 0
         ? newLaborTotal
         : (j['laborCost'] ?? j['agreedPrice'] ?? initialAmount).toInt();
@@ -77,9 +72,6 @@ class CustomerMyJobs extends StatelessWidget {
     if (newLaborTotal > 0) {
       totalRelease = totalClientPays;
     }
-    debugPrint(
-      'CLIENT DEBUG MyJobs CALC initial=$initialAmount extra=$extraAmount transport=$transport newLabor=$newLaborTotal labourForCalc=$labourForCalc totalClientPays=$totalClientPays fundiReceives=$fundiReceives totalRelease=$totalRelease',
-    );
 
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'status': 'completed',
@@ -100,28 +92,10 @@ class CustomerMyJobs extends StatelessWidget {
       'customerHasUnread': false,
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    debugPrint('CLIENT DEBUG MyJobs jobRef.update DONE');
 
-    // VERIFY
-    try {
-      var after =
-          (await FirebaseFirestore.instance.collection('jobs').doc(jobId).get())
-                  .data()
-              as Map<String, dynamic>;
-      debugPrint(
-        'CLIENT DEBUG MyJobs AFTER status=${after['status']} escrow=${after['escrowStatus']} totalClientPays=${after['totalClientPays']} totalReleasedAmount=${after['totalReleasedAmount']} fundiHasUnread=${after['fundiHasUnread']} clientConfirmedCompletion=${after['clientConfirmedCompletion']} escrowReleased=${after['escrowReleased']}',
-      );
-    } catch (e) {
-      debugPrint('CLIENT DEBUG MyJobs after get failed $e');
-    }
-
-    // SEND NOTIFICATION - THIS WAS MISSING
     if (fundiId.isNotEmpty) {
       try {
-        debugPrint(
-          'CLIENT DEBUG MyJobs sending notification to fundi $fundiId',
-        );
-        var n1 = await FirebaseFirestore.instance.collection('notifications').add({
+        await FirebaseFirestore.instance.collection('notifications').add({
           'toUserId': fundiId,
           'toRole': 'fundi',
           'type': 'escrow_released',
@@ -132,8 +106,7 @@ class CustomerMyJobs extends StatelessWidget {
           'isRead': false,
           'createdAt': FieldValue.serverTimestamp(),
         });
-        debugPrint('CLIENT DEBUG MyJobs notifications.add OK ${n1.id}');
-        var n2 = await FirebaseFirestore.instance
+        await FirebaseFirestore.instance
             .collection('fundis')
             .doc(fundiId)
             .collection('notifications')
@@ -146,12 +119,8 @@ class CustomerMyJobs extends StatelessWidget {
               'isRead': false,
               'createdAt': FieldValue.serverTimestamp(),
             });
-        debugPrint('CLIENT DEBUG MyJobs fundis notif OK ${n2.id}');
-      } catch (e) {
-        debugPrint('CLIENT DEBUG MyJobs notification FAILED $e');
-      }
+      } catch (_) {}
     }
-    debugPrint('CLIENT DEBUG MyJobs ========== DONE ==========');
   }
 
   @override
@@ -174,7 +143,6 @@ class CustomerMyJobs extends StatelessWidget {
             ),
           );
         }
-        // FILTER OUT PENDING/OPEN - now on Home
         var allJobs = snap.data!.docs;
         var jobs = allJobs.where((d) {
           var data = d.data() as Map<String, dynamic>;
