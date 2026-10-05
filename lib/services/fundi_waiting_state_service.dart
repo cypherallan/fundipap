@@ -73,6 +73,39 @@ FundiWaitingState? getFundiWaitingState({
   int transport = _toInt(job['transportFee'] ?? 0);
   int fundiSees = labour + transport;
 
+  // === FIX: COMPLETED / RELEASED / RATED MUST NEVER FALL TO bidSent ===
+  Map<String, dynamic>? renegoEarly;
+  var rawRenegoEarly = job['renegotiation'];
+  if (rawRenegoEarly is Map)
+    renegoEarly = Map<String, dynamic>.from(rawRenegoEarly);
+  String earlyPhase = (renegoEarly?['currentPhase'] ?? '')
+      .toString()
+      .toLowerCase();
+
+  bool isCompletedLike =
+      jobStatus.contains('complet') ||
+      jobStatus.contains('closed') ||
+      jobStatus.contains('done') ||
+      jobStatus.contains('rated') ||
+      earlyPhase.contains('complet') ||
+      earlyPhase.contains('released') ||
+      escrowStatus == 'released' ||
+      _toBool(job['fundiConfirmedPayment']) ||
+      _toBool(job['clientConfirmedCompletion']) ||
+      _toBool(job['escrowReleased']) ||
+      _toBool(job['isCompleted']);
+
+  if (isCompletedLike) {
+    return FundiWaitingState(
+      type: FundiWaitingType.jobCompleted,
+      title: 'Job Completed - Waiting for client to confirm',
+      message:
+          'You marked job as completed. Waiting for client to confirm and release payment',
+      price: fundiSees,
+    );
+  }
+  // === END FIX ===
+
   bool siteDone =
       _toBool(job['siteVisitDone']) ||
       _toBool(job['siteVisited']) ||
@@ -153,12 +186,10 @@ FundiWaitingState? getFundiWaitingState({
         price: totalLab,
       );
     }
-    // If we are in material flow but status is still awaiting_extra_escrow, kill it - don't show extra 1000
     if (lowStatus == 'awaiting_extra_escrow') return null;
   }
 
-  // --- ORIGINAL LOGIC ---
-  // NOTIFICATION - WORKING / COMPLETED
+  // WORKING
   if (lowStatus == 'in_progress' ||
       lowStatus == 'fundi_working' ||
       lowPhase == 'fundi_working' ||
@@ -171,6 +202,8 @@ FundiWaitingState? getFundiWaitingState({
       price: totalLab,
     );
   }
+
+  // COMPLETED - kept for safety (already handled above)
   if (lowStatus == 'pending_completion' ||
       lowStatus == 'job_completed' ||
       lowPhase == 'completed_by_fundi' ||
@@ -183,6 +216,7 @@ FundiWaitingState? getFundiWaitingState({
       price: totalLab,
     );
   }
+
   bool renegoRequested = _toBool(renego?['requested']);
   bool renegoPending =
       renego != null && renegoRequested && renegoStatus == 'pending';
