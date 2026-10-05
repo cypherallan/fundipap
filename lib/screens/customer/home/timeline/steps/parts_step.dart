@@ -6,10 +6,27 @@ import '../timeline_utils.dart';
 import '../widgets/timeline_card.dart';
 import '../timeline_context.dart';
 
+bool _hasParts(Map<String, dynamic>? renego) {
+  if (renego == null) return false;
+  var list = renego['partsNeeded'] as List?;
+  if (list != null && list.isNotEmpty) return true;
+  int est = toInt(renego['partsEstimateTotal']);
+  int total = toInt(renego['totalPartsEstimate']);
+  String till = (renego['tillNumber'] ?? '').toString().trim();
+  return est > 0 || total > 0 || till.isNotEmpty;
+}
+
 class PartsSteps {
   static bool handle(List<Widget> timeline, TimelineContext c) {
     final phase = (c.phase).toString();
     final status = (c.status).toString();
+    final bool hasParts = _hasParts(c.reneg);
+
+    // FIX: Skip entire parts flow when no materials were checked
+    if (!hasParts) {
+      return false;
+    }
+
     final isWaitingBuy =
         phase == 'waiting_for_client_to_buy_parts' ||
         status == 'waiting_for_client_to_buy_parts';
