@@ -13,6 +13,7 @@ import 'job_details_screen.dart';
 import 'fundi_home_logic.dart';
 import 'package:fundipap/widgets/animated_waiting_card.dart';
 import '../../../services/fundi_waiting_state_service.dart';
+import '../rating/rate_client_screen.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});
@@ -63,7 +64,42 @@ class _FundiHomeState extends State<FundiHome> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadLocation();
       _initNotificationListeners();
+      _enforceMandatoryRating(); // <-- ADD THIS LINE ONLY
     });
+  }
+
+  Future<void> _enforceMandatoryRating() async {
+    var uid = FirebaseAuth.instance.currentUser!.uid;
+    var q = await FirebaseFirestore.instance
+        .collection('jobs')
+        .where('assignedFundiId', isEqualTo: uid)
+        .where('escrowStatus', isEqualTo: 'released')
+        .where('fundiConfirmedPayment', isEqualTo: true)
+        .get();
+
+    for (var doc in q.docs) {
+      var data = doc.data();
+      bool rated =
+          (data['fundiRated'] == true) || (data['fundiRatedClient'] == true);
+      if (!rated) {
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => RateClientScreen(
+              jobId: doc.id,
+              clientId: (data['customerId'] ?? data['clientId'] ?? '')
+                  .toString(),
+              clientName:
+                  (data['customerName'] ?? data['clientName'] ?? 'Client')
+                      .toString(),
+              trade: (data['title'] ?? data['trade'] ?? '').toString(),
+            ),
+          ),
+          (r) => false,
+        );
+        break;
+      }
+    }
   }
 
   Future<void> _loadMe() async {
