@@ -148,11 +148,14 @@ class _FundiHomeState extends State<FundiHome> {
     if (mounted) setState(() {});
 
     var uid = FirebaseAuth.instance.currentUser!.uid;
+    print('FUNDI HOME DEBUG uid=$uid START');
+
     _bidsSub = FirebaseFirestore.instance
         .collectionGroup('bids')
         .where('fundiId', isEqualTo: uid)
         .snapshots()
         .listen((snap) {
+          print('FUNDI HOME DEBUG bids GOT ${snap.docs.length}');
           _bids.clear();
           for (var b in snap.docs) {
             var bid = Map<String, dynamic>.from(b.data());
@@ -186,13 +189,27 @@ class _FundiHomeState extends State<FundiHome> {
             });
           }
           if (mounted) setState(() {});
-        });
+        }, onError: (e) => print('FUNDI HOME DEBUG bids ERROR $e'));
+
+    // FIX: DO NOT exclude completed - we need it to show Client released
     _assignedSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('assignedFundiId', isEqualTo: uid)
-        .where('status', whereNotIn: ['completed', 'cancelled', 'closed'])
+        .where(
+          'status',
+          whereNotIn: ['cancelled', 'closed'],
+        ) // REMOVED completed
         .snapshots()
-        .listen((snap) => _mergeAssigned(snap.docs));
+        .listen((snap) {
+          print('FUNDI HOME DEBUG assignedJobs GOT ${snap.docs.length}');
+          for (var d in snap.docs) {
+            var j = d.data();
+            print(
+              'FUNDI HOME DEBUG job id=${d.id} status=${j['status']} escrow=${j['escrowStatus']} totalClientPays=${j['totalClientPays']} fundiHasUnread=${j['fundiHasUnread']}',
+            );
+          }
+          _mergeAssigned(snap.docs);
+        }, onError: (e) => print('FUNDI HOME DEBUG assignedJobs ERROR $e'));
   }
 
   Future<void> _markRead(String clientKey, String jobId) async {
@@ -614,7 +631,9 @@ class _FundiHomeState extends State<FundiHome> {
                           wt == FundiWaitingType.waitingNewPriceApproval ||
                           wt == FundiWaitingType.escrowLocked ||
                           wt == FundiWaitingType.siteVisited ||
-                          wt == FundiWaitingType.travelling;
+                          wt == FundiWaitingType.travelling ||
+                          wt == FundiWaitingType.working ||
+                          wt == FundiWaitingType.jobCompleted;
 
                       String msg;
                       if (wt == FundiWaitingType.clientCounter) {

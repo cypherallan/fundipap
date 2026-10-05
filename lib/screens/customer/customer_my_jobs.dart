@@ -37,12 +37,20 @@ class CustomerMyJobs extends StatelessWidget {
   }
 
   Future<void> _confirmCompletion(String jobId) async {
+    debugPrint('CLIENT DEBUG MyJobs _confirmCompletion START jobId=$jobId');
     var doc = await FirebaseFirestore.instance
         .collection('jobs')
         .doc(jobId)
         .get();
     var j = doc.data() as Map<String, dynamic>;
     var reneg = j['renegotiation'] as Map<String, dynamic>?;
+    String fundiId = (j['assignedFundiId'] ?? j['fundiId'] ?? '').toString();
+    String clientName = (j['customerName'] ?? j['clientName'] ?? 'Client')
+        .toString();
+    debugPrint(
+      'CLIENT DEBUG MyJobs BEFORE status=${j['status']} escrow=${j['escrowStatus']} assignedFundiId=${j['assignedFundiId']} agreedPrice=${j['agreedPrice']} escrowAmount=${j['escrowAmount']} totalClientPays=${j['totalClientPays']} fundiId=$fundiId reneg=$reneg',
+    );
+
     int initialAmount =
         (j['escrowAmount'] ?? j['agreedPrice'] ?? j['budgetMax'] ?? 0).toInt();
     int extraAmount =
@@ -51,25 +59,99 @@ class CustomerMyJobs extends StatelessWidget {
                 reneg?['pendingLabor'] ??
                 0)
             .toInt();
+    int transport = (j['transportFee'] ?? j['escrowTransport'] ?? 0).toInt();
     int newLaborTotal = (reneg?['newLaborTotal'] ?? 0).toInt();
     int totalRelease = newLaborTotal > 0
         ? newLaborTotal
         : initialAmount + extraAmount;
     if (totalRelease == 0) totalRelease = initialAmount;
 
+    // FIX: totalRelease was labour only, need totalClientPays with transport+fee
+    int labourForCalc = newLaborTotal > 0
+        ? newLaborTotal
+        : (j['laborCost'] ?? j['agreedPrice'] ?? initialAmount).toInt();
+    int clientFee = (labourForCalc * 0.05).round();
+    int totalClientPays = labourForCalc + transport + clientFee;
+    int fundiReceives =
+        labourForCalc - (labourForCalc * 0.05).round() + transport;
+    if (newLaborTotal > 0) {
+      totalRelease = totalClientPays;
+    }
+    debugPrint(
+      'CLIENT DEBUG MyJobs CALC initial=$initialAmount extra=$extraAmount transport=$transport newLabor=$newLaborTotal labourForCalc=$labourForCalc totalClientPays=$totalClientPays fundiReceives=$fundiReceives totalRelease=$totalRelease',
+    );
+
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'status': 'completed',
       'escrowStatus': 'released',
       'extraEscrowStatus': 'released',
       'clientConfirmedComplete': true,
+      'clientConfirmedCompletion': true,
+      'escrowReleased': true,
       'completedAt': FieldValue.serverTimestamp(),
       'totalReleasedAmount': totalRelease,
-      'fundiPayoutAmount': totalRelease,
+      'totalClientPays': totalClientPays,
+      'fundiPayoutAmount': fundiReceives,
+      'fundiReceives': fundiReceives,
+      'totalClientPaid': totalClientPays,
       'initialEscrowReleased': initialAmount,
       'extraEscrowReleased': extraAmount,
       'fundiHasUnread': true,
+      'customerHasUnread': false,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    debugPrint('CLIENT DEBUG MyJobs jobRef.update DONE');
+
+    // VERIFY
+    try {
+      var after =
+          (await FirebaseFirestore.instance.collection('jobs').doc(jobId).get())
+                  .data()
+              as Map<String, dynamic>;
+      debugPrint(
+        'CLIENT DEBUG MyJobs AFTER status=${after['status']} escrow=${after['escrowStatus']} totalClientPays=${after['totalClientPays']} totalReleasedAmount=${after['totalReleasedAmount']} fundiHasUnread=${after['fundiHasUnread']} clientConfirmedCompletion=${after['clientConfirmedCompletion']} escrowReleased=${after['escrowReleased']}',
+      );
+    } catch (e) {
+      debugPrint('CLIENT DEBUG MyJobs after get failed $e');
+    }
+
+    // SEND NOTIFICATION - THIS WAS MISSING
+    if (fundiId.isNotEmpty) {
+      try {
+        debugPrint(
+          'CLIENT DEBUG MyJobs sending notification to fundi $fundiId',
+        );
+        var n1 = await FirebaseFirestore.instance.collection('notifications').add({
+          'toUserId': fundiId,
+          'toRole': 'fundi',
+          'type': 'escrow_released',
+          'jobId': jobId,
+          'title': 'Client released KES $totalClientPays',
+          'body':
+              '$clientName released KES $totalClientPays - Tap to view receipt',
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        debugPrint('CLIENT DEBUG MyJobs notifications.add OK ${n1.id}');
+        var n2 = await FirebaseFirestore.instance
+            .collection('fundis')
+            .doc(fundiId)
+            .collection('notifications')
+            .add({
+              'jobId': jobId,
+              'type': 'escrow_released',
+              'title':
+                  'Client released KES $totalClientPays - Tap to view receipt',
+              'amount': totalClientPays,
+              'isRead': false,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+        debugPrint('CLIENT DEBUG MyJobs fundis notif OK ${n2.id}');
+      } catch (e) {
+        debugPrint('CLIENT DEBUG MyJobs notification FAILED $e');
+      }
+    }
+    debugPrint('CLIENT DEBUG MyJobs ========== DONE ==========');
   }
 
   @override
