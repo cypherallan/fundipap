@@ -274,6 +274,24 @@ class TimelineActions {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      // ADD THIS - updates total earned that FundiHome reads
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(fundiId)
+            .update({
+              'totalEarned': FieldValue.increment(fundiReceives),
+              'totalEarnings': FieldValue.increment(fundiReceives),
+              'completedJobs': FieldValue.increment(1),
+              'jobsDone': FieldValue.increment(1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+        await FirebaseFirestore.instance.collection('fundis').doc(fundiId).set({
+          'totalEarned': FieldValue.increment(fundiReceives),
+          'completedJobs': FieldValue.increment(1),
+        }, SetOptions(merge: true));
+      } catch (_) {}
+
       try {
         await FirebaseFirestore.instance.collection('notifications').add({
           'toUserId': fundiId,

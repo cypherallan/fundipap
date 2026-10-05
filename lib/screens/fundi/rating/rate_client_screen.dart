@@ -176,62 +176,90 @@ class _RateClientScreenState extends State<RateClientScreen> {
                 .toString();
       }
 
-      if (effectiveClientId.isEmpty) {
-        await jobRef.update({
-          'fundiRated': true,
-          'fundiRating': _rating,
-          'fundiReview': _reviewCtrl.text.trim(),
-          'fundiRatedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        await _goHome();
-        return;
+      if (effectiveClientId.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(effectiveClientId)
+            .collection('clientReviews')
+            .add({
+              'jobId': widget.jobId,
+              'clientId': effectiveClientId,
+              'clientName': widget.clientName,
+              'fundiId': jobData['fundiId'] ?? jobData['assignedFundiId'] ?? '',
+              'rating': _rating,
+              'comment': _reviewCtrl.text.trim(),
+              'trade': widget.trade,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+
+        var clientRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(effectiveClientId);
+        var clientSnap = await clientRef.get();
+        var clientData = clientSnap.data() ?? {};
+        double currentAvg =
+            (clientData['averageClientRating'] ??
+                    clientData['clientRating'] ??
+                    0)
+                .toDouble();
+        int currentCount = (clientData['clientReviewsCount'] ?? 0).toInt();
+        double newAvg =
+            ((currentAvg * currentCount) + _rating) / (currentCount + 1);
+
+        await clientRef.set({
+          'averageClientRating': newAvg,
+          'clientReviewsCount': currentCount + 1,
+          'lastRatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       }
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(effectiveClientId)
-          .collection('clientReviews')
-          .add({
-            'jobId': widget.jobId,
-            'clientId': effectiveClientId,
-            'clientName': widget.clientName,
-            'fundiId': jobData['fundiId'] ?? jobData['assignedFundiId'] ?? '',
-            'rating': _rating,
-            'comment': _reviewCtrl.text.trim(),
-            'trade': widget.trade,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-
-      var clientRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(effectiveClientId);
-      var clientSnap = await clientRef.get();
-      var clientData = clientSnap.data() ?? {};
-      double currentAvg =
-          (clientData['averageClientRating'] ?? clientData['clientRating'] ?? 0)
-              .toDouble();
-      int currentCount = (clientData['clientReviewsCount'] ?? 0).toInt();
-      double newAvg =
-          ((currentAvg * currentCount) + _rating) / (currentCount + 1);
-
-      await clientRef.set({
-        'averageClientRating': newAvg,
-        'clientReviewsCount': currentCount + 1,
-        'lastRatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
+      // MARK RATED + CLOSE
       await jobRef.update({
         'fundiRated': true,
+        'fundiRatedClient': true,
         'fundiRating': _rating,
         'fundiReview': _reviewCtrl.text.trim(),
         'fundiRatedAt': FieldValue.serverTimestamp(),
-        'status': 'completed',
+        'status':
+            'closed', // <- was 'completed', now closed so home query removes it
         'fundiTimelineCleared': true,
         'customerHasUnread': true,
         'fundiHasUnread': false,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      // DELETE NOTIFICATIONS - only after rating
+      var uid = FirebaseAuth.instance.currentUser!.uid;
+      try {
+        var bidsSnap = await jobRef
+            .collection('bids')
+            .where('fundiId', isEqualTo: uid)
+            .get();
+        for (var d in bidsSnap.docs) {
+          await d.reference.update({
+            'deletedForFundi': true,
+            'isReadByFundi': true,
+            'clientCounterSeenByFundi': true,
+          });
+        }
+      } catch (_) {}
+      try {
+        var n1 = await FirebaseFirestore.instance
+            .collection('fundis')
+            .doc(uid)
+            .collection('notifications')
+            .where('jobId', isEqualTo: widget.jobId)
+            .get();
+        for (var doc in n1.docs) await doc.reference.delete();
+      } catch (_) {}
+      try {
+        var n2 = await FirebaseFirestore.instance
+            .collection('notifications')
+            .where('toUserId', isEqualTo: uid)
+            .where('jobId', isEqualTo: widget.jobId)
+            .get();
+        for (var doc in n2.docs) await doc.reference.delete();
+      } catch (_) {}
 
       await _goHome();
     } catch (e) {
