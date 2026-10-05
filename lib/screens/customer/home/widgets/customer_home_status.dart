@@ -62,6 +62,16 @@ Widget timelineCard({
   );
 }
 
+bool _hasParts(Map<String, dynamic>? renego) {
+  if (renego == null) return false;
+  var list = renego['partsNeeded'] as List?;
+  if (list != null && list.isNotEmpty) return true;
+  int est = toInt(renego['partsEstimateTotal']);
+  int total = toInt(renego['totalPartsEstimate']);
+  String till = (renego['tillNumber'] ?? '').toString().trim();
+  return est > 0 || total > 0 || till.isNotEmpty;
+}
+
 class HomeStatusWidget extends StatelessWidget {
   final Map<String, dynamic> job;
   final BuildContext parentContext;
@@ -217,19 +227,20 @@ class HomeStatusWidget extends StatelessWidget {
       );
     }
 
-    if (phase == 'waiting_for_client_to_buy_parts') {
+    bool hasParts = _hasParts(reneg);
+    if (phase == 'waiting_for_client_to_buy_parts' && hasParts) {
       return const OrangeAnimatedWaitingCard(
         title: 'You will buy parts - Confirm when bought',
         message: 'Extra locked. Buy the listed parts then confirm.',
       );
     }
-    if (phase == 'client_claims_parts_bought') {
+    if (phase == 'client_claims_parts_bought' && hasParts) {
       return const OrangeAnimatedWaitingCard(
         title: 'Parts bought - Waiting for fundi to confirm',
         message: 'You marked parts as bought. Waiting for fundi to confirm.',
       );
     }
-    if (phase == 'parts_confirmed_by_fundi') {
+    if (phase == 'parts_confirmed_by_fundi' && hasParts) {
       return const OrangeAnimatedWaitingCard(
         title: 'Fundi confirmed parts - Waiting to start work',
         message:
