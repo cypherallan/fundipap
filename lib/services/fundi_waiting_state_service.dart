@@ -73,7 +73,6 @@ FundiWaitingState? getFundiWaitingState({
   int transport = _toInt(job['transportFee'] ?? 0);
   int fundiSees = labour + transport;
 
-  // === FIX: COMPLETED / RELEASED / RATED MUST NEVER FALL TO bidSent ===
   Map<String, dynamic>? renegoEarly;
   var rawRenegoEarly = job['renegotiation'];
   if (rawRenegoEarly is Map)
@@ -96,6 +95,17 @@ FundiWaitingState? getFundiWaitingState({
       _toBool(job['isCompleted']);
 
   if (isCompletedLike) {
+    if (escrowStatus == 'released' || _toBool(job['escrowReleased'])) {
+      int total = _toInt(
+        job['totalClientPays'] ?? job['escrowAmount'] ?? fundiSees,
+      );
+      return FundiWaitingState(
+        type: FundiWaitingType.jobCompleted,
+        title: 'Client released KES $total - Tap to view receipt of payment',
+        message: 'Client released KES $total',
+        price: total,
+      );
+    }
     return FundiWaitingState(
       type: FundiWaitingType.jobCompleted,
       title: 'Job Completed - Waiting for client to confirm',
@@ -104,7 +114,6 @@ FundiWaitingState? getFundiWaitingState({
       price: fundiSees,
     );
   }
-  // === END FIX ===
 
   bool siteDone =
       _toBool(job['siteVisitDone']) ||
@@ -120,12 +129,10 @@ FundiWaitingState? getFundiWaitingState({
   Map<String, dynamic>? renego;
   var rawRenego = job['renegotiation'];
   if (rawRenego is Map) renego = Map<String, dynamic>.from(rawRenego);
-
   String renegoPhase = (renego?['currentPhase'] ?? '').toString().toLowerCase();
   String renegoStatus = (renego?['status'] ?? '').toString().toLowerCase();
   bool extraLocked = _toBool(renego?['extraLocked']);
 
-  // --- MATERIAL FLOW DETECTION (robust) ---
   String lowStatus = jobStatus.toLowerCase();
   String lowPhase = renegoPhase.toLowerCase();
 
@@ -159,7 +166,6 @@ FundiWaitingState? getFundiWaitingState({
       lowStatus.contains('parts_bought') ||
       lowStatus.contains('awaiting_fundi');
 
-  // 1. MATERIAL FLOW HAS PRIORITY - NEVER GO BACK TO EXTRA 1000
   if (isInMaterialFlow) {
     if (isClientBought) {
       int totalLab = _toInt(job['agreedPrice'] ?? labour);
@@ -186,10 +192,24 @@ FundiWaitingState? getFundiWaitingState({
         price: totalLab,
       );
     }
-    if (lowStatus == 'awaiting_extra_escrow') return null;
+    if (lowStatus == 'awaiting_extra_escrow') {
+      int extra = _toInt(
+        renego?['acceptedCounterExtraLabor'] ??
+            renego?['extraToLock'] ??
+            renego?['counterExtraLabor'] ??
+            2000,
+      );
+      int pureExtra = _toInt(renego?['acceptedCounterExtraLabor'] ?? 0);
+      if (pureExtra > 0) extra = pureExtra;
+      return FundiWaitingState(
+        type: FundiWaitingType.waitingEscrow,
+        title: 'Waiting for client to lock extra KES $extra to escrow',
+        message: 'You accepted extra KES $extra - waiting for client to lock',
+        price: extra,
+      );
+    }
   }
 
-  // WORKING
   if (lowStatus == 'in_progress' ||
       lowStatus == 'fundi_working' ||
       lowPhase == 'fundi_working' ||
@@ -202,8 +222,6 @@ FundiWaitingState? getFundiWaitingState({
       price: totalLab,
     );
   }
-
-  // COMPLETED - kept for safety (already handled above)
   if (lowStatus == 'pending_completion' ||
       lowStatus == 'job_completed' ||
       lowPhase == 'completed_by_fundi' ||
@@ -242,7 +260,6 @@ FundiWaitingState? getFundiWaitingState({
       price: counterExtra,
     );
   }
-
   if (renegoPending) {
     int extra = _toInt(
       renego['extraLabor'] ?? renego['pendingLabor'] ?? renego['extra'] ?? 0,
@@ -258,7 +275,6 @@ FundiWaitingState? getFundiWaitingState({
       price: extra,
     );
   }
-
   if (jobStatus.contains('cancel')) return null;
 
   String bidStatus = (bid['status'] ?? '').toString();
@@ -279,7 +295,6 @@ FundiWaitingState? getFundiWaitingState({
       price: amt,
     );
   }
-
   if (bidStatus == 'counter_accepted_by_fundi' ||
       jobStatus == 'counter_accepted' ||
       jobStatus == 'counter_accepted_by_fundi') {
@@ -292,7 +307,6 @@ FundiWaitingState? getFundiWaitingState({
       price: fundiSees,
     );
   }
-
   if (bidStatus == 'countered' && lastBy == uid) {
     int amt = _toInt(bid['lastCounterAmount'] ?? bid['lastCounterPrice'] ?? 0);
     return FundiWaitingState(
@@ -300,15 +314,6 @@ FundiWaitingState? getFundiWaitingState({
       title: 'You countered • KES $amt - Waiting for client to react',
       message: 'You countered KES $amt. Waiting for client',
       price: amt,
-    );
-  }
-  if (bidStatus == 'pending' || bidStatus == 'sent' || bidStatus == '') {
-    int p = _toInt(bid['price'] ?? bid['amount'] ?? bid['bidPrice'] ?? labour);
-    return FundiWaitingState(
-      type: FundiWaitingType.bidSent,
-      title: 'Bid sent - KES $p - Waiting for client to react',
-      message: 'You sent KES $p',
-      price: p,
     );
   }
 
@@ -321,7 +326,6 @@ FundiWaitingState? getFundiWaitingState({
   bool hasLockedAmount = lockedAmount > 0;
   bool needsTopup = hasLockedAmount && fundiSees > lockedAmount;
   if (extraLocked || isInMaterialFlow) needsTopup = false;
-
   int needExtra = needsTopup ? fundiSees - lockedAmount : 0;
   if (needExtra > 0) {
     int pureExtra = _toInt(
@@ -363,7 +367,6 @@ FundiWaitingState? getFundiWaitingState({
       price: isTopupWait || isAwaitingExtra ? needExtra : fundiSees,
     );
   }
-
   if (siteDone && !renegoPending && !renegoCountered) {
     return FundiWaitingState(
       type: FundiWaitingType.siteVisited,
@@ -391,6 +394,32 @@ FundiWaitingState? getFundiWaitingState({
       title: 'Escrow locked - KES $fundiSees - Click to Start site visit now',
       message: 'Client locked KES $fundiSees. Start travelling',
       price: fundiSees,
+    );
+  }
+
+  // BID SENT MUST BE LAST
+  if (bidStatus == 'pending' || bidStatus == 'sent' || bidStatus == '') {
+    int hasAgreed = _toInt(
+      job['agreedPrice'] ??
+          job['acceptedBidAmount'] ??
+          job['fundiBidAmount'] ??
+          0,
+    );
+    int hasEscrow = _toInt(
+      job['escrowAmount'] ??
+          job['lockedEscrow'] ??
+          job['escrowLockedAmount'] ??
+          0,
+    );
+    if (hasAgreed > 0 || hasEscrow > 0 || escrowDone || siteDone || travelling)
+      return null;
+    int p = _toInt(bid['price'] ?? bid['amount'] ?? bid['bidPrice'] ?? labour);
+    if (p == 0) p = _toInt(job['agreedPrice'] ?? 6000);
+    return FundiWaitingState(
+      type: FundiWaitingType.bidSent,
+      title: 'Bid sent - KES $p - Waiting for client to react',
+      message: 'You sent KES $p',
+      price: p,
     );
   }
   return null;

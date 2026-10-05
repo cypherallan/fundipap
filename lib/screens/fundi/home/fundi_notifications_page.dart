@@ -276,105 +276,9 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    final assignedIds = _assignedJobs.map((d) => d.id).toSet();
     Map<String, Map<String, dynamic>> grouped = {};
 
-    for (var b in _sentBids) {
-      if (assignedIds.contains(b['jobId'])) continue;
-      if (_excludedJobIds.contains(b['jobId'])) continue;
-      String key = "${b['jobId']}_${b['clientId']}_sent";
-      grouped[key] = {
-        'jobId': b['jobId'],
-        'bidId': b['bidId'],
-        'clientName': b['clientName'],
-        'clientId': b['clientId'],
-        'category': 'Bid sent - KES ${b['price']} • ${b['jobTitle']}',
-        'jobData': {
-          'title': b['jobTitle'],
-          'status': 'bid_sent',
-          'customerName': b['clientName'],
-        },
-        'latestAt': (b['createdAt'] is Timestamp)
-            ? (b['createdAt'] as Timestamp).toDate()
-            : DateTime.now(),
-        'isRead': b['isRead'] == true,
-        'type': 'bid_sent',
-        'waitingType': FundiWaitingType.bidSent,
-      };
-    }
-    for (var b in _acceptedCounters) {
-      if (assignedIds.contains(b['jobId'])) continue;
-      if (_excludedJobIds.contains(b['jobId'])) continue;
-      String key = "${b['jobId']}_${b['clientId']}_accepted_counter";
-      grouped[key] = {
-        'jobId': b['jobId'],
-        'bidId': b['bidId'],
-        'clientName': b['clientName'],
-        'clientId': b['clientId'],
-        'category':
-            'Accepted counter bid - KES ${b['price']} • ${b['jobTitle']}',
-        'jobData': {
-          'title': b['jobTitle'],
-          'status': 'counter_accepted',
-          'customerName': b['clientName'],
-        },
-        'latestAt': (b['createdAt'] is Timestamp)
-            ? (b['createdAt'] as Timestamp).toDate()
-            : DateTime.now(),
-        'isRead': b['isRead'] == true,
-        'type': 'accepted_counter',
-        'waitingType': FundiWaitingType.myCounter,
-      };
-    }
-    for (var b in _acceptedBids) {
-      if (assignedIds.contains(b['jobId'])) continue;
-      if (_excludedJobIds.contains(b['jobId'])) continue;
-      String key = "${b['jobId']}_${b['clientId']}";
-      grouped[key] = {
-        'jobId': b['jobId'],
-        'clientName': b['clientName'],
-        'clientId': b['clientId'],
-        'category': b['jobTitle'],
-        'jobData': {
-          'title': b['jobTitle'],
-          'status': 'accepted',
-          'customerName': b['clientName'],
-        },
-        'latestAt': (b['createdAt'] is Timestamp)
-            ? (b['createdAt'] as Timestamp).toDate()
-            : DateTime.now(),
-        'isRead': b['isRead'] == true,
-        'type': 'accepted',
-        'waitingType': FundiWaitingType.bidSent,
-      };
-    }
-    for (var b in _clientCounters) {
-      if (assignedIds.contains(b['jobId'])) continue;
-      if (_excludedJobIds.contains(b['jobId'])) continue;
-      String key = "${b['jobId']}_${b['clientId']}_counter";
-      grouped[key] = {
-        'jobId': b['jobId'],
-        'bidId': b['bidId'],
-        'clientName': b['clientName'],
-        'clientId': b['clientId'],
-        'category': '${b['jobTitle']} • Client countered KES ${b['price']}',
-        'jobData': {
-          'title': b['jobTitle'],
-          'status': 'countered',
-          'customerName': b['clientName'],
-          'focusedBid': b['bidData'],
-          'focusedBidId': b['bidId'],
-        },
-        'latestAt': (b['createdAt'] is Timestamp)
-            ? (b['createdAt'] as Timestamp).toDate()
-            : DateTime.now(),
-        'isRead': b['isRead'] == true,
-        'type': 'counter',
-        'waitingType': FundiWaitingType.clientCounter,
-      };
-    }
-
-    // FIXED: ASSIGNED JOBS NOW USE SHARED SERVICE - SAME AS TIMELINE
+    // 1. Build assigned jobs FIRST - they have highest priority
     for (var doc in _assignedJobs) {
       var job = doc.data() as Map<String, dynamic>;
       var title = (job['title'] ?? 'Job').toString();
@@ -393,12 +297,10 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       FundiWaitingType waitingType;
 
       if (ws != null) {
-        category = ws
-            .title; // This will be "Waiting for you to start work - KES..." for siteVisited
+        category = ws.title;
         type = ws.type.name;
         waitingType = ws.type;
       } else {
-        // fallback for reneg cases
         var reneg = job['renegotiation'] as Map<String, dynamic>?;
         var renegStatus = (reneg?['status'] ?? '').toString();
         bool isRenegCounter = renegStatus == 'countered_by_client';
@@ -441,6 +343,124 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         'isRead': job['fundiHasUnread'] != true,
         'type': type,
         'waitingType': waitingType,
+      };
+    }
+
+    // 2. All jobIds that already have progress - NEVER show bid_sent for them
+    Set<String> jobsWithProgress = grouped.keys.toSet();
+    jobsWithProgress.addAll(_acceptedBids.map((e) => e['jobId'] as String));
+    jobsWithProgress.addAll(_acceptedCounters.map((e) => e['jobId'] as String));
+    jobsWithProgress.addAll(_clientCounters.map((e) => e['jobId'] as String));
+    // also any job in _jobsMap with agreedPrice / escrow
+    for (var entry in _jobsMap.entries) {
+      var j = entry.value.data() as Map<String, dynamic>;
+      int agreed = _toInt(j['agreedPrice'] ?? j['acceptedBidAmount'] ?? 0);
+      int escAmt = _toInt(j['escrowAmount'] ?? j['lockedEscrow'] ?? 0);
+      String esc = (j['escrowStatus'] ?? '').toString().toLowerCase();
+      if (agreed > 0 ||
+          escAmt > 0 ||
+          ['held', 'paid', 'released'].contains(esc)) {
+        jobsWithProgress.add(entry.key);
+      }
+    }
+
+    // 3. Now add other notifications ONLY if jobId not already has progress
+    for (var b in _clientCounters) {
+      if (jobsWithProgress.contains(b['jobId'])) continue;
+      if (_excludedJobIds.contains(b['jobId'])) continue;
+      String key = "${b['jobId']}_${b['clientId']}_counter";
+      grouped[key] = {
+        'jobId': b['jobId'],
+        'bidId': b['bidId'],
+        'clientName': b['clientName'],
+        'clientId': b['clientId'],
+        'category': '${b['jobTitle']} • Client countered KES ${b['price']}',
+        'jobData': {
+          'title': b['jobTitle'],
+          'status': 'countered',
+          'customerName': b['clientName'],
+          'focusedBid': b['bidData'],
+          'focusedBidId': b['bidId'],
+        },
+        'latestAt': (b['createdAt'] is Timestamp)
+            ? (b['createdAt'] as Timestamp).toDate()
+            : DateTime.now(),
+        'isRead': b['isRead'] == true,
+        'type': 'counter',
+        'waitingType': FundiWaitingType.clientCounter,
+      };
+    }
+
+    for (var b in _acceptedCounters) {
+      if (jobsWithProgress.contains(b['jobId'])) continue;
+      if (_excludedJobIds.contains(b['jobId'])) continue;
+      String key = "${b['jobId']}_${b['clientId']}_accepted_counter";
+      grouped[key] = {
+        'jobId': b['jobId'],
+        'bidId': b['bidId'],
+        'clientName': b['clientName'],
+        'clientId': b['clientId'],
+        'category':
+            'Accepted counter bid - KES ${b['price']} • ${b['jobTitle']}',
+        'jobData': {
+          'title': b['jobTitle'],
+          'status': 'counter_accepted',
+          'customerName': b['clientName'],
+        },
+        'latestAt': (b['createdAt'] is Timestamp)
+            ? (b['createdAt'] as Timestamp).toDate()
+            : DateTime.now(),
+        'isRead': b['isRead'] == true,
+        'type': 'accepted_counter',
+        'waitingType': FundiWaitingType.myCounter,
+      };
+    }
+
+    for (var b in _acceptedBids) {
+      if (jobsWithProgress.contains(b['jobId'])) continue;
+      if (_excludedJobIds.contains(b['jobId'])) continue;
+      String key = "${b['jobId']}_${b['clientId']}";
+      grouped[key] = {
+        'jobId': b['jobId'],
+        'clientName': b['clientName'],
+        'clientId': b['clientId'],
+        'category': b['jobTitle'],
+        'jobData': {
+          'title': b['jobTitle'],
+          'status': 'accepted',
+          'customerName': b['clientName'],
+        },
+        'latestAt': (b['createdAt'] is Timestamp)
+            ? (b['createdAt'] as Timestamp).toDate()
+            : DateTime.now(),
+        'isRead': b['isRead'] == true,
+        'type': 'accepted',
+        'waitingType': FundiWaitingType.bidSent,
+      };
+    }
+
+    // 4. Bid sent LAST and with same jobId check - this is where 20000 was leaking
+    for (var b in _sentBids) {
+      if (jobsWithProgress.contains(b['jobId'])) continue;
+      if (_excludedJobIds.contains(b['jobId'])) continue;
+      String key = "${b['jobId']}_${b['clientId']}_sent";
+      grouped[key] = {
+        'jobId': b['jobId'],
+        'bidId': b['bidId'],
+        'clientName': b['clientName'],
+        'clientId': b['clientId'],
+        'category': 'Bid sent - KES ${b['price']} • ${b['jobTitle']}',
+        'jobData': {
+          'title': b['jobTitle'],
+          'status': 'bid_sent',
+          'customerName': b['clientName'],
+        },
+        'latestAt': (b['createdAt'] is Timestamp)
+            ? (b['createdAt'] as Timestamp).toDate()
+            : DateTime.now(),
+        'isRead': b['isRead'] == true,
+        'type': 'bid_sent',
+        'waitingType': FundiWaitingType.bidSent,
       };
     }
 
@@ -513,7 +533,9 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                           wt == FundiWaitingType.waitingNewPriceApproval ||
                           wt == FundiWaitingType.escrowLocked ||
                           wt == FundiWaitingType.travelling ||
-                          wt == FundiWaitingType.siteVisited;
+                          wt == FundiWaitingType.siteVisited ||
+                          wt == FundiWaitingType.working ||
+                          wt == FundiWaitingType.jobCompleted;
 
                       if (isOrange) {
                         String msg;
@@ -648,31 +670,16 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                               g['jobId'],
                             );
                             if (!context.mounted) return;
-                            if (isCounter && g['bidId'] != null) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => JobDetailsScreen(
-                                    job: {
-                                      ...g['jobData'] as Map<String, dynamic>,
-                                      'id': g['jobId'],
-                                      'jobId': g['jobId'],
-                                    },
-                                  ),
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FundiCustomerTimelinePage(
+                                  jobId: g['jobId'],
+                                  clientName: g['clientName'],
+                                  jobTitle: g['category'],
                                 ),
-                              );
-                            } else {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => FundiCustomerTimelinePage(
-                                    jobId: g['jobId'],
-                                    clientName: g['clientName'],
-                                    jobTitle: g['category'],
-                                  ),
-                                ),
-                              );
-                            }
+                              ),
+                            );
                           },
                         ),
                       );
