@@ -127,19 +127,29 @@ class _FundiRequestNewPriceScreenState
     }
     setState(() => uploading = true);
     try {
+      bool hasParts =
+          selectedReasons.contains('New parts / materials needed') ||
+          selectedReasons.contains('Replacement needed (old part damaged)');
+
       var evidenceUrls = await _uploadPhotos(evidencePhotos, 'evidence');
       var oldPartUrls = await _uploadPhotos(oldPartPhotos, 'old_parts');
-      List<Map> partsNeededData = partsNeeded
-          .where((p) => (p['name']?.text.trim().isNotEmpty ?? false))
-          .map(
-            (p) => {
-              'name': p['name']!.text.trim(),
-              'qty': int.tryParse(p['qty']?.text ?? '1') ?? 1,
-              'model': p['model']?.text.trim() ?? '',
-              'estPrice': int.tryParse(p['estPrice']?.text ?? '0') ?? 0,
-            },
-          )
-          .toList();
+
+      List<Map> partsNeededData = hasParts
+          ? partsNeeded
+                .where((p) => (p['name']?.text.trim().isNotEmpty ?? false))
+                .map(
+                  (p) => {
+                    'name': p['name']!.text.trim(),
+                    'qty': int.tryParse(p['qty']?.text ?? '1') ?? 1,
+                    'model': p['model']?.text.trim() ?? '',
+                    'estPrice': int.tryParse(p['estPrice']?.text ?? '0') ?? 0,
+                  },
+                )
+                .toList()
+          : [];
+
+      int finalPartsTotal = hasParts ? partsEstimateTotal : 0;
+      String finalTill = hasParts ? tillCtrl.text.trim() : '';
 
       await FirebaseFirestore.instance
           .collection('jobs')
@@ -163,9 +173,9 @@ class _FundiRequestNewPriceScreenState
               'newFundiReceives': newFundiReceives,
               'extraToLock': extraToLock,
               'partsNeeded': partsNeededData,
-              'partsEstimateTotal': partsEstimateTotal,
+              'partsEstimateTotal': finalPartsTotal,
               'partsPaymentDestination': 'shop_direct',
-              'tillNumber': tillCtrl.text.trim(),
+              'tillNumber': finalTill,
               'evidencePhotoUrls': evidenceUrls,
               'oldPartPhotoUrls': oldPartUrls,
               'whoBuysParts': null,
