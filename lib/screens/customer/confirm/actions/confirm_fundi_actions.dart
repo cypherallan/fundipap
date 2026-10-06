@@ -2,8 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../theme/app_theme.dart';
-import '../../../utils/transport_calculator.dart';
+import '../../../../theme/app_theme.dart';
+import '../../../../utils/transport_calculator.dart';
 
 mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
   Map<String, dynamic>? get fundi;

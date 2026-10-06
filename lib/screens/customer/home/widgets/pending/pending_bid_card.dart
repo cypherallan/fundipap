@@ -5,7 +5,7 @@ import '../../../../../theme/app_theme.dart';
 import '../../../../../widgets/fundi_badge_chip.dart';
 import '../../../../../widgets/animated_waiting_card.dart';
 import '../../models/customer_home_models.dart';
-import '../../../confirm/confirm_fundi_page.dart';
+import '../../../confirm/page/confirm_fundi_page.dart';
 import '../../timeline/customer_fundi_timeline_page.dart';
 
 class PendingBidCard extends StatelessWidget {

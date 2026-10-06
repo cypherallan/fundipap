@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../theme/app_theme.dart';
-import '../../../services/dynamic_pricing_service.dart';
+import '../../../../theme/app_theme.dart';
+import '../../../../services/dynamic_pricing_service.dart';
 
 /// CLIENT BID LIST WITH FILTERING - Price, Rating, Jobs Done, Distance, Zero Fraud
 /// Shows average range for that service

@@ -2,13 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../theme/app_theme.dart';
-import '../../../utils/transport_calculator.dart';
-import 'confirm_fundi_actions.dart';
-import 'confirm_fundi_profile_card.dart';
-import 'confirm_fundi_details_section.dart';
-import 'confirm_fundi_bid_card.dart';
-import 'confirm_fundi_reviews.dart';
+import '../../../../theme/app_theme.dart';
+import '../../../../utils/transport_calculator.dart';
+import '../actions/confirm_fundi_actions.dart';
+import '../profile/confirm_fundi_profile_card.dart';
+import '../profile/confirm_fundi_details_section.dart';
+import '../bidding/confirm_fundi_bid_card.dart';
+import '../profile/confirm_fundi_reviews.dart';
 
 class ConfirmFundiPage extends StatefulWidget {
   final String jobId;
