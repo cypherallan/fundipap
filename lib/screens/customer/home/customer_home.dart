@@ -459,6 +459,7 @@ class _CustomerHomeState extends State<CustomerHome> {
               fundiUnreadCounts: fundiUnreadCounts,
               totalTabCounter: totalTabCounter,
               onMarkRead: _markThisFundiAsRead,
+              userPos: _userPos,
             ),
           ),
           SliverToBoxAdapter(

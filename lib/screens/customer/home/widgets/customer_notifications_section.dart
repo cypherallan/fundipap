@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../../../theme/app_theme.dart';
 import 'customer_home_status.dart';
 import '../timeline/customer_fundi_timeline_page.dart';
@@ -12,6 +13,7 @@ class CustomerNotificationsSection extends StatelessWidget {
   final Map<String, int> fundiUnreadCounts;
   final int totalTabCounter;
   final Future<void> Function(String fundiKey) onMarkRead;
+  final Position? userPos;
 
   const CustomerNotificationsSection({
     super.key,
@@ -19,6 +21,7 @@ class CustomerNotificationsSection extends StatelessWidget {
     required this.fundiUnreadCounts,
     required this.totalTabCounter,
     required this.onMarkRead,
+    required this.userPos,
   });
 
   int _toInt(dynamic v, [int fb = 0]) {
@@ -113,7 +116,6 @@ class CustomerNotificationsSection extends StatelessWidget {
                 ),
               ),
             ),
-
           ...groupedList.take(5).map((g) {
             String fundiKey = (g['fundiId'] ?? '').toString();
             int badgeCount = fundiUnreadCounts[fundiKey] ?? 0;
@@ -216,6 +218,7 @@ class CustomerNotificationsSection extends StatelessWidget {
                         bidCount: 1,
                         parentContext: parentContext,
                         sheetContext: sheetContext,
+                        userPos: userPos,
                         initialTitle: 'Your counter accepted',
                         initialBadge: 'KES $acceptedAmt',
                       ),
@@ -478,6 +481,7 @@ class CustomerNotificationsSection extends StatelessWidget {
                         bidCount: bidCount,
                         parentContext: parentContext,
                         sheetContext: sheetContext,
+                        userPos: userPos,
                       ),
                     );
                   },
@@ -600,6 +604,7 @@ class _BidsSheetWithFilter extends StatefulWidget {
   final int bidCount;
   final BuildContext parentContext;
   final BuildContext sheetContext;
+  final Position? userPos;
   final String? initialTitle;
   final String? initialBadge;
   const _BidsSheetWithFilter({
@@ -609,6 +614,7 @@ class _BidsSheetWithFilter extends StatefulWidget {
     required this.bidCount,
     required this.parentContext,
     required this.sheetContext,
+    required this.userPos,
     this.initialTitle,
     this.initialBadge,
   });
@@ -618,6 +624,7 @@ class _BidsSheetWithFilter extends StatefulWidget {
 
 class _BidsSheetWithFilterState extends State<_BidsSheetWithFilter> {
   FilterType _filter = FilterType.all;
+  double _distance = 20; // min 0 max 20
 
   @override
   Widget build(BuildContext context) {
@@ -671,12 +678,13 @@ class _BidsSheetWithFilterState extends State<_BidsSheetWithFilter> {
               ],
             ),
           ),
-          // YOUR REAL FILTER FROM HOME
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: PendingFilterBar(
               value: _filter,
+              distanceKm: _distance,
               onChanged: (v) => setState(() => _filter = v),
+              onDistanceChanged: (d) => setState(() => _distance = d),
             ),
           ),
           const Divider(height: 1),
@@ -688,7 +696,8 @@ class _BidsSheetWithFilterState extends State<_BidsSheetWithFilter> {
                 jobId: widget.jobId,
                 job: widget.job,
                 filter: _filter,
-                userPos: null,
+                maxDistanceKm: _distance,
+                userPos: widget.userPos,
                 parentContextForNav: widget.parentContext,
                 sheetContextForClose: widget.sheetContext,
               ),

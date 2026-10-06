@@ -12,6 +12,7 @@ class PendingBidList extends StatelessWidget {
   final String jobId;
   final Map<String, dynamic> job;
   final FilterType filter;
+  final double maxDistanceKm; // <-- slider value 0-20
   final Position? userPos;
   final BuildContext? parentContextForNav;
   final BuildContext? sheetContextForClose;
@@ -21,6 +22,7 @@ class PendingBidList extends StatelessWidget {
     required this.jobId,
     required this.job,
     required this.filter,
+    this.maxDistanceKm = 20, // default max
     required this.userPos,
     this.parentContextForNav,
     this.sheetContextForClose,
@@ -79,13 +81,14 @@ class PendingBidList extends StatelessWidget {
                   return e.referrals >= 10;
                 case FilterType.clean:
                   return e.penalty < 20;
+                case FilterType.nearby:
+                  return e.distanceKm > 0 && e.distanceKm <= maxDistanceKm;
                 case FilterType.badge:
                 case FilterType.all:
                   return true;
               }
             }).toList();
 
-            // FIX: keep accepted counters on top with different color
             filtered.sort((a, b) {
               bool aAcc = (a.bid['status'] ?? '').toString().contains(
                 'counter_accepted_by_fundi',
@@ -101,9 +104,25 @@ class PendingBidList extends StatelessWidget {
             if (filtered.isEmpty) {
               return Padding(
                 padding: const EdgeInsets.all(16),
-                child: Text(
-                  'No fundis for this filter',
-                  style: GoogleFonts.inter(fontSize: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'No fundis for this filter',
+                      style: GoogleFonts.inter(fontSize: 12),
+                    ),
+                    if (filter == FilterType.nearby)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Try increasing distance to ${maxDistanceKm.toInt()}km',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               );
             }
