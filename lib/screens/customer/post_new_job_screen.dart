@@ -180,6 +180,7 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
           .get();
       var uData = userDoc.data() ?? {};
 
+      // GET PRECISE LOCATION AT BUTTON PRESS - high accuracy
       var pos = await LocationService.determinePosition(context);
       if (pos == null) {
         if (mounted) {
@@ -194,6 +195,9 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
         }
         return;
       }
+
+      // Optional: check accuracy - if > 50m, warn but still save
+      double accuracy = pos.accuracy; // meters
 
       List<String> newUrls = [];
       for (var f in photos) {
@@ -213,6 +217,9 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
         faultId: faultId,
       );
 
+      // CANONICAL REFERENCE LOCATION - saved at POST time, never changes
+      final GeoPoint jobGeo = GeoPoint(pos.latitude, pos.longitude);
+
       Map<String, dynamic> jobPayload = {
         'title': titleC.text.trim(),
         'description': descC.text.trim(),
@@ -231,7 +238,8 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
                 orElse: () => {"name": faultId},
               )['name'])
             : '',
-        // DYNAMIC PRICING FIELDS
+
+        // PRICING
         'pricingSource': priceInfo['source'],
         'systemPriceMin': priceInfo['min'],
         'systemPriceMax': priceInfo['max'],
@@ -243,28 +251,49 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
         'pricingVersion': PricingService.version,
         'priceDictatedBy': 'fundi_market',
         'requiresSiteVisit': true,
-        // backward compat
         'budget': priceInfo['avg'],
         'offeredPrice': priceInfo['avg'],
         'budgetMin': priceInfo['min'],
         'budgetMax': priceInfo['max'],
         'photos': allPhotos,
         'images': allPhotos,
+
+        // === PRECISE CLIENT LOCATION AT POST TIME - SINGLE SOURCE OF TRUTH ===
+        // Canonical fields - use these everywhere for distance/transport
+        'jobLocation': jobGeo, // main GeoPoint for queries
+        'jobLat': pos.latitude,
+        'jobLng': pos.longitude,
+        'originalJobLat':
+            pos.latitude, // immutable reference for transport calc
+        'originalJobLng': pos.longitude,
+        'originalJobLocation': jobGeo,
+        'locationCapturedAt': FieldValue.serverTimestamp(),
+        'locationAccuracy': accuracy,
+
+        // Backward compat - keep old keys but with REAL values, no Kisumu string
         'customerLat': pos.latitude,
         'customerLng': pos.longitude,
         'clientLat': pos.latitude,
         'clientLng': pos.longitude,
         'lat': pos.latitude,
         'lng': pos.longitude,
-        'clientLocation': GeoPoint(pos.latitude, pos.longitude),
-        'customerLocation': GeoPoint(pos.latitude, pos.longitude),
-        'locationGeoPoint': GeoPoint(pos.latitude, pos.longitude),
+        'clientLocation': jobGeo,
+        'customerLocation': jobGeo,
+        'locationGeoPoint': jobGeo,
+        // FIXED: remove hardcoded 'Kisumu' - save as lat,lng, you can reverse geocode later
         'location':
-            'Kisumu ${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}',
+            '${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)}',
+        'locationString':
+            '${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)}',
+
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
       if (isEdit) {
+        // On edit, DON'T overwrite original reference location - keep transport base same
+        jobPayload.remove('originalJobLat');
+        jobPayload.remove('originalJobLng');
+        jobPayload.remove('originalJobLocation');
         await FirebaseFirestore.instance
             .collection('jobs')
             .doc(widget.jobId)
@@ -279,6 +308,7 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
           'status': 'open',
           'createdAt': FieldValue.serverTimestamp(),
           'escrowStatus': 'pending',
+          'originalCreatedAt': FieldValue.serverTimestamp(),
         });
         await FirebaseFirestore.instance.collection('jobs').add(jobPayload);
       }

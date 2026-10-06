@@ -14,6 +14,8 @@ import 'fundi_home_logic.dart';
 import 'package:fundipap/widgets/animated_waiting_card.dart';
 import '../../../services/fundi_waiting_state_service.dart';
 import '../rating/rate_client_screen.dart';
+import 'fundi_home_actions_mixin.dart';
+import '../../../services/fundi_penalty_service.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});
@@ -21,7 +23,7 @@ class FundiHome extends StatefulWidget {
   State<FundiHome> createState() => _FundiHomeState();
 }
 
-class _FundiHomeState extends State<FundiHome> {
+class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
   Map<String, dynamic>? me;
   int completedJobs = 0;
   double totalEarned = 0;
@@ -60,12 +62,20 @@ class _FundiHomeState extends State<FundiHome> {
   @override
   void initState() {
     super.initState();
+    initOnlineStatus();
     _loadMe();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadLocation();
       _initNotificationListeners();
-      _enforceMandatoryRating(); // <-- ADD THIS LINE ONLY
+      _enforceMandatoryRating();
     });
+  }
+
+  @override
+  void dispose() {
+    disposeTracking();
+    _bidsSub?.cancel();
+    _assignedSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _enforceMandatoryRating() async {
@@ -280,6 +290,31 @@ class _FundiHomeState extends State<FundiHome> {
   }
 
   Future<void> bidForJob(BuildContext context, Map<String, dynamic> job) async {
+    // ONLINE CHECK
+    if (!isOnline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Go Online first to see and bid for jobs'),
+        ),
+      );
+      return;
+    }
+
+    // SUSPENSION CHECK (from mixin)
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    bool canBid = await FundiPenaltyService.canFundiBid(uid);
+    if (!canBid) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('You are suspended for cancelling jobs.'),
+          ),
+        );
+      }
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -311,13 +346,6 @@ class _FundiHomeState extends State<FundiHome> {
       case BadgeLevel.none:
         return Colors.transparent;
     }
-  }
-
-  @override
-  void dispose() {
-    _bidsSub?.cancel();
-    _assignedSub?.cancel();
-    super.dispose();
   }
 
   @override
@@ -569,6 +597,56 @@ class _FundiHomeState extends State<FundiHome> {
                           ),
                         ),
                       ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // ONLINE TOGGLE - ADD HERE
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: isOnline ? Colors.green.shade50 : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isOnline ? Colors.green : Colors.grey.shade300,
+                    width: 1.2,
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.circle,
+                          size: 12,
+                          color: isOnline ? Colors.green : Colors.grey,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isOnline
+                              ? 'Online - Receiving Jobs'
+                              : 'Offline - Not receiving',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                            color: isOnline
+                                ? Colors.green.shade800
+                                : Colors.black54,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Switch(
+                      value: isOnline,
+                      activeColor: Colors.green,
+                      onChanged: (_) => toggleOnline(context),
                     ),
                   ],
                 ),
@@ -879,17 +957,47 @@ class _FundiHomeState extends State<FundiHome> {
               child: Container(
                 color: FundipapColors.blackGray,
                 padding: const EdgeInsets.fromLTRB(0, 16, 0, 80),
-                child: FundiHomeJobsTab(
-                  search: search,
-                  onSearchChanged: (v) =>
-                      setState(() => search = v.toLowerCase()),
-                  mySkill: mySkill,
-                  me: me,
-                  completedJobs: completedJobs,
-                  relevanceScore: relevanceScore,
-                  onBid: bidForJob,
-                  currentPos: currentPos,
-                ),
+                child: isOnline
+                    ? FundiHomeJobsTab(
+                        search: search,
+                        onSearchChanged: (v) =>
+                            setState(() => search = v.toLowerCase()),
+                        mySkill: mySkill,
+                        me: me,
+                        completedJobs: completedJobs,
+                        relevanceScore: relevanceScore,
+                        onBid: bidForJob,
+                        currentPos: currentPos,
+                      )
+                    : Container(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          children: [
+                            const Icon(
+                              Icons.wifi_off,
+                              size: 48,
+                              color: Colors.white24,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'You are Offline',
+                              style: GoogleFonts.montserrat(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Go Online to see nearby jobs',
+                              style: GoogleFonts.inter(
+                                color: Colors.white60,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
               ),
             ),
           ],
