@@ -40,6 +40,16 @@ Widget? buildCurrentWaiting({
           lowPhase == 'waiting_for_client_to_buy_parts' ||
           lowStat == 'waiting_for_client_to_buy_parts') &&
       !hasParts) {
+    // FIX: Show actual extra labour without fee - handles both counter and no-counter
+    int extraLabourToShow = toInt(
+      renego?['acceptedCounterExtraLabor'] ??
+          renego?['extraLabor'] ??
+          renego?['counterExtraLabor'] ??
+          renego?['extraLaborAmount'] ??
+          job['extraLaborAmount'] ??
+          0,
+    );
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -68,7 +78,7 @@ Widget? buildCurrentWaiting({
           ),
           const SizedBox(height: 6),
           Text(
-            'Extra labour KES ${toInt(renego?['acceptedCounterExtraLabor'] ?? 0)} locked. No materials needed. Tap START JOB to begin.',
+            'Extra labour KES $extraLabourToShow locked. No materials needed. Tap START JOB to begin.',
             style: GoogleFonts.inter(fontSize: 11),
           ),
           const SizedBox(height: 12),
