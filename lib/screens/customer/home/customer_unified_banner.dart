@@ -7,7 +7,7 @@ import '../../../../theme/app_theme.dart';
 import '../confirm/confirm_fundi_page.dart';
 import '../tracking/customer_tracking_screen.dart';
 import '../../customer/my_jobs/customer_confirmed_jobs_page.dart';
-import '../confirm/client_price_approval_screen.dart';
+import '../confirm/approval/client_price_approval_screen.dart';
 
 class CustomerUnifiedBanner extends StatefulWidget {
   const CustomerUnifiedBanner({super.key});

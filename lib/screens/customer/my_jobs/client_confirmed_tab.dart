@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../../customer/confirm/client_price_approval_screen.dart';
+import '../confirm/approval/client_price_approval_screen.dart';
 import '../../../services/job_cancel_service.dart'; // <-- NEW
 
 class ClientConfirmedTab extends StatelessWidget {

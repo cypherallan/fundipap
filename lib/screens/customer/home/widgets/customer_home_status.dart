@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/animated_waiting_card.dart';
 import '../timeline/customer_fundi_timeline_page.dart';
-import '../../confirm/client_price_approval_screen.dart';
+import '../../confirm/approval/client_price_approval_screen.dart';
 import '../../tracking/customer_tracking_screen.dart';
 import '../helpers/customer_home_utils.dart';
 

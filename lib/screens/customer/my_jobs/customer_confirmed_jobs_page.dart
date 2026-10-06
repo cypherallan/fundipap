@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../confirm/client_price_approval_screen.dart';
+import '../confirm/approval/client_price_approval_screen.dart';
 import '../tracking/customer_tracking_screen.dart';
 
 class CustomerConfirmedJobsPage extends StatefulWidget {

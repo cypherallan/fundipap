@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../../widgets/animated_waiting_card.dart';
-import '../../../confirm/client_price_approval_screen.dart';
+import '../../../confirm/approval/client_price_approval_screen.dart';
 import '../timeline_actions.dart';
 import '../timeline_utils.dart';
 import '../widgets/timeline_card.dart';
