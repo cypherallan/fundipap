@@ -4,6 +4,7 @@ import '../../../../theme/app_theme.dart';
 import 'customer_home_status.dart';
 import '../timeline/customer_fundi_timeline_page.dart';
 import 'pending/pending_bid_list.dart';
+import 'pending/pending_filter_bar.dart';
 import '../models/customer_home_models.dart';
 
 class CustomerNotificationsSection extends StatelessWidget {
@@ -119,7 +120,6 @@ class CustomerNotificationsSection extends StatelessWidget {
             final job = Map<String, dynamic>.from(g['jobData'] as Map);
             final type = (g['type'] ?? '').toString();
             final isBid = type == 'bid';
-
             final bidStatus = (g['bidStatus'] ?? job['bidStatus'] ?? '')
                 .toString();
             final isCounterAccepted =
@@ -129,12 +129,10 @@ class CustomerNotificationsSection extends StatelessWidget {
                 (job['counterAcceptedBy'] != null &&
                     (job['counterAcceptedBy'] as List).isNotEmpty &&
                     isBid);
-
             final reneg = (job['renegotiation'] as Map<String, dynamic>?) ?? {};
             final renegStatus = (reneg['status'] ?? '').toString();
             final jobStatus = (job['status'] ?? '').toString();
             final escrowStatus = (job['escrowStatus'] ?? '').toString();
-
             final isRenegCountered =
                 renegStatus == 'countered_by_client' ||
                 jobStatus == 'renegotiation_countered_by_client';
@@ -211,80 +209,21 @@ class CustomerNotificationsSection extends StatelessWidget {
                           top: Radius.circular(16),
                         ),
                       ),
-                      builder: (sheetContext) => DraggableScrollableSheet(
-                        expand: false,
-                        initialChildSize: 0.85,
-                        minChildSize: 0.5,
-                        maxChildSize: 0.95,
-                        builder: (ctx, scrollCtrl) => Column(
-                          children: [
-                            const SizedBox(height: 12),
-                            Container(
-                              width: 40,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: Colors.black12,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'Your counter accepted',
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.green,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      'KES $acceptedAmt',
-                                      style: GoogleFonts.montserrat(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Divider(height: 1),
-                            Expanded(
-                              child: SingleChildScrollView(
-                                controller: scrollCtrl,
-                                padding: const EdgeInsets.all(12),
-                                child: PendingBidList(
-                                  jobId: g['jobId'].toString(),
-                                  job: job,
-                                  filter: FilterType.all,
-                                  userPos: null,
-                                  parentContextForNav: parentContext,
-                                  sheetContextForClose: sheetContext,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                      builder: (sheetContext) => _BidsSheetWithFilter(
+                        jobId: g['jobId'].toString(),
+                        job: job,
+                        category: g['category'].toString(),
+                        bidCount: 1,
+                        parentContext: parentContext,
+                        sheetContext: sheetContext,
+                        initialTitle: 'Your counter accepted',
+                        initialBadge: 'KES $acceptedAmt',
                       ),
                     );
                   },
                 ),
               );
             }
-
             if (isRenegCountered) {
               int extraLabor = _toInt(reneg['counterExtraLabor'] ?? 0);
               int extraToLock = _toInt(
@@ -353,8 +292,6 @@ class CustomerNotificationsSection extends StatelessWidget {
                 ),
               );
             }
-
-            // === FIX: FUNDI ACCEPTED YOUR EXTRA COUNTER ===
             if (isRenegApprovedNeedsTopup) {
               int approvedExtra = _toInt(
                 reneg['approvedExtra'] ??
@@ -534,72 +471,13 @@ class CustomerNotificationsSection extends StatelessWidget {
                           top: Radius.circular(16),
                         ),
                       ),
-                      builder: (sheetContext) => DraggableScrollableSheet(
-                        expand: false,
-                        initialChildSize: 0.85,
-                        minChildSize: 0.5,
-                        maxChildSize: 0.95,
-                        builder: (ctx, scrollCtrl) => Column(
-                          children: [
-                            const SizedBox(height: 12),
-                            Container(
-                              width: 40,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: Colors.black12,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'Bids for ${g['category']}',
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: FundipapColors.primaryYellow,
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      '$bidCount ${bidCount == 1 ? 'bid' : 'bids'}',
-                                      style: GoogleFonts.montserrat(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Divider(height: 1),
-                            Expanded(
-                              child: SingleChildScrollView(
-                                controller: scrollCtrl,
-                                padding: const EdgeInsets.all(12),
-                                child: PendingBidList(
-                                  jobId: g['jobId'].toString(),
-                                  job: job,
-                                  filter: FilterType.all,
-                                  userPos: null,
-                                  parentContextForNav: parentContext,
-                                  sheetContextForClose: sheetContext,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                      builder: (sheetContext) => _BidsSheetWithFilter(
+                        jobId: g['jobId'].toString(),
+                        job: job,
+                        category: g['category'].toString(),
+                        bidCount: bidCount,
+                        parentContext: parentContext,
+                        sheetContext: sheetContext,
                       ),
                     );
                   },
@@ -709,6 +587,113 @@ class CustomerNotificationsSection extends StatelessWidget {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BidsSheetWithFilter extends StatefulWidget {
+  final String jobId;
+  final Map<String, dynamic> job;
+  final String category;
+  final int bidCount;
+  final BuildContext parentContext;
+  final BuildContext sheetContext;
+  final String? initialTitle;
+  final String? initialBadge;
+  const _BidsSheetWithFilter({
+    required this.jobId,
+    required this.job,
+    required this.category,
+    required this.bidCount,
+    required this.parentContext,
+    required this.sheetContext,
+    this.initialTitle,
+    this.initialBadge,
+  });
+  @override
+  State<_BidsSheetWithFilter> createState() => _BidsSheetWithFilterState();
+}
+
+class _BidsSheetWithFilterState extends State<_BidsSheetWithFilter> {
+  FilterType _filter = FilterType.all;
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (ctx, scrollCtrl) => Column(
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.black12,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.initialTitle ?? 'Bids for ${widget.category}',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: FundipapColors.primaryYellow,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    widget.initialBadge ??
+                        '${widget.bidCount} ${widget.bidCount == 1 ? 'bid' : 'bids'}',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // YOUR REAL FILTER FROM HOME
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: PendingFilterBar(
+              value: _filter,
+              onChanged: (v) => setState(() => _filter = v),
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: SingleChildScrollView(
+              controller: scrollCtrl,
+              padding: const EdgeInsets.all(12),
+              child: PendingBidList(
+                jobId: widget.jobId,
+                job: widget.job,
+                filter: _filter,
+                userPos: null,
+                parentContextForNav: widget.parentContext,
+                sheetContextForClose: widget.sheetContext,
+              ),
+            ),
+          ),
         ],
       ),
     );

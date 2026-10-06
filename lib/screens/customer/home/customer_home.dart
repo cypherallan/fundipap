@@ -6,7 +6,6 @@ import 'package:geolocator/geolocator.dart';
 import '../../../theme/app_theme.dart';
 import '../rating/rate_fundi_screen.dart';
 import 'customer_home_header.dart';
-import 'models/customer_home_models.dart';
 import 'helpers/customer_home_utils.dart';
 import 'widgets/customer_notifications_section.dart';
 import 'widgets/pending/pending_section.dart';
@@ -23,7 +22,6 @@ class _CustomerHomeState extends State<CustomerHome> {
   Map<String, dynamic>? _me;
   int _completedJobs = 0;
   int _profilePct = 0;
-  FilterType _pendingFilter = FilterType.all;
 
   final List<Map<String, dynamic>> _bids = [];
   StreamSubscription? _jobsSub;
@@ -179,11 +177,12 @@ class _CustomerHomeState extends State<CustomerHome> {
         .collection('users')
         .doc(uid)
         .get();
-    if (doc.exists && mounted)
+    if (doc.exists && mounted) {
       setState(() {
         _me = doc.data();
         _profilePct = calcProfilePct(_me);
       });
+    }
   }
 
   Future<void> _loadCompletedCount() async {
@@ -206,8 +205,9 @@ class _CustomerHomeState extends State<CustomerHome> {
         return;
       }
       LocationPermission perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied)
+      if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
+      }
       if (perm == LocationPermission.deniedForever ||
           perm == LocationPermission.denied) {
         if (mounted) setState(() => _loadingLoc = false);
@@ -216,11 +216,12 @@ class _CustomerHomeState extends State<CustomerHome> {
       Position pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _userPos = pos;
           _loadingLoc = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingLoc = false);
     }
@@ -461,12 +462,7 @@ class _CustomerHomeState extends State<CustomerHome> {
             ),
           ),
           SliverToBoxAdapter(
-            child: CustomerPendingSection(
-              uid: uid,
-              pendingFilter: _pendingFilter,
-              onFilterChanged: (v) => setState(() => _pendingFilter = v),
-              userPos: _userPos,
-            ),
+            child: CustomerPendingSection(uid: uid, userPos: _userPos),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 80)),
         ],

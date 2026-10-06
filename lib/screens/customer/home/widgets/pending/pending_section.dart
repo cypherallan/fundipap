@@ -6,26 +6,20 @@ import '../../../../../theme/app_theme.dart';
 import '../../models/customer_home_models.dart';
 import '../../../post_new_job_screen.dart';
 import 'pending_header.dart';
-import 'pending_filter_bar.dart';
 import 'pending_job_tile.dart';
 
 class CustomerPendingSection extends StatelessWidget {
   final String uid;
-  final FilterType pendingFilter;
-  final ValueChanged<FilterType> onFilterChanged;
   final Position? userPos;
 
   const CustomerPendingSection({
     super.key,
     required this.uid,
-    required this.pendingFilter,
-    required this.onFilterChanged,
     required this.userPos,
   });
 
   @override
   Widget build(BuildContext context) {
-    // FIX: keep counter_accepted inside pending until client confirms
     const pendingStatuses = [
       'open',
       'pending',
@@ -65,7 +59,6 @@ class CustomerPendingSection extends StatelessWidget {
             if (snap2.hasData) for (var d in snap2.data!.docs) map[d.id] = d;
             var jobs = map.values.toList();
 
-            // FIX: sort accepted counters to top
             jobs.sort((a, b) {
               var ad = a.data() as Map<String, dynamic>;
               var bd = b.data() as Map<String, dynamic>;
@@ -102,11 +95,6 @@ class CustomerPendingSection extends StatelessWidget {
                 children: [
                   PendingHeader(count: jobs.length),
                   const SizedBox(height: 12),
-                  PendingFilterBar(
-                    value: pendingFilter,
-                    onChanged: onFilterChanged,
-                  ),
-                  const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
                     height: 48,
@@ -184,7 +172,7 @@ class CustomerPendingSection extends StatelessWidget {
                     ...jobs.map(
                       (jobDoc) => PendingJobTile(
                         jobDoc: jobDoc,
-                        filter: pendingFilter,
+                        filter: FilterType.all,
                         userPos: userPos,
                       ),
                     ),
