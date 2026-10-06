@@ -18,13 +18,29 @@ class WorkSteps {
   static bool handle(List<Widget> timeline, TimelineContext c) {
     bool hasParts = _hasParts(c.reneg);
 
-    if (c.status == 'site_visit' &&
-        (c.phase.isEmpty ||
-            (!hasParts &&
-                (c.phase.contains('buy_parts') ||
-                    c.phase.contains('fundi_buying') ||
-                    c.phase.contains('bought') ||
-                    c.phase == 'waiting_for_client_to_buy_parts')))) {
+    // FIX: Exact same logic as HomeStatusWidget that shows notification correctly
+    bool isSiteVisitPhase =
+        c.status == 'site_visit' ||
+        c.phase == 'waiting_for_client_to_buy_parts' ||
+        c.phase == 'fundi_buying_parts' ||
+        c.phase == 'client_claims_parts_bought' ||
+        c.phase == 'parts_confirmed_by_fundi' ||
+        c.phase.contains('waiting_for_fundi_to_start');
+
+    if (isSiteVisitPhase) {
+      if (!hasParts) {
+        timeline.add(
+          const OrangeAnimatedWaitingCard(
+            title: 'Waiting for fundi to start job',
+            message:
+                'Extra labour locked. Fundi will start working now - no parts needed.',
+          ),
+        );
+        return true;
+      }
+    }
+
+    if (c.status == 'site_visit' && !hasParts) {
       timeline.add(
         OrangeAnimatedWaitingCard(
           title: 'Waiting for fundi to start job',
@@ -33,7 +49,9 @@ class WorkSteps {
         ),
       );
       return true;
-    } else if (c.status == 'in_progress' ||
+    }
+
+    if (c.status == 'in_progress' ||
         c.phase == 'fundi_working' ||
         c.status.contains('completed')) {
       timeline.add(
@@ -51,7 +69,7 @@ class WorkSteps {
         OrangeAnimatedWaitingCard(
           title: 'Fundi is working - Waiting to complete',
           message:
-              '${c.trade} in progress at ${c.location}. ${c.fundiName} is working. Waiting for him to tap MARK JOB AS COMPLETED.',
+              '${c.trade} in progress at ${c.location}. ${c.fundiName} is working.',
         ),
       );
       return true;
