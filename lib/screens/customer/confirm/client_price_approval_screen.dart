@@ -56,10 +56,40 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
       int oldClientFee = (oldLabor * 0.05).round();
       int newClientFee = (newLabor * 0.05).round();
       int newFundiFee = (newLabor * 0.05).round();
-      int extraAppFee = newClientFee - oldClientFee;
+      int extraAppFee = (newClientFee - oldClientFee).clamp(0, 999999);
       int extraToLock = extraLabor + extraAppFee;
       int newTotal = alreadyLockedCorrect + extraToLock;
-      int newFundiReceives = newLabor - newFundiFee + oldTransport;
+
+      // MATERIALS ONLY: skip escrow lock entirely
+      if (extraToLock == 0) {
+        await FirebaseFirestore.instance
+            .collection('jobs')
+            .doc(widget.jobId)
+            .update({
+              'agreedPrice': newLabor,
+              'laborCost': newLabor,
+              'transportFee': oldTransport,
+              'clientAppFee': newClientFee,
+              'fundiAppFee': newFundiFee,
+              'totalClientPays': alreadyLockedCorrect,
+              'totalCost': alreadyLockedCorrect,
+              'fundiReceives': newLabor - newFundiFee + oldTransport,
+              'extraLaborAmount': 0,
+              'extraToLock': 0,
+              'status': 'waiting_for_client_to_buy_parts',
+              'renegotiation.status': 'accepted_client_buys_parts',
+              'renegotiation.whoBuysParts': 'client',
+              'renegotiation.currentPhase': 'waiting_for_client_to_buy_parts',
+              'renegotiation.extraLabor': 0,
+              'renegotiation.extraToLock': 0,
+              'renegotiation.acceptedAt': FieldValue.serverTimestamp(),
+              'fundiHasUnread': true,
+              'customerHasUnread': false,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+        if (mounted) Navigator.pop(context);
+        return;
+      }
 
       await FirebaseFirestore.instance
           .collection('jobs')
@@ -67,13 +97,12 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
           .update({
             'agreedPrice': newLabor,
             'laborCost': newLabor,
-            'laborPrice': newLabor,
             'transportFee': oldTransport,
             'clientAppFee': newClientFee,
             'fundiAppFee': newFundiFee,
             'totalClientPays': newTotal,
             'totalCost': newTotal,
-            'fundiReceives': newFundiReceives,
+            'fundiReceives': newLabor - newFundiFee + oldTransport,
             'extraLaborAmount': extraLabor,
             'extraClientAppFee': extraAppFee,
             'extraEscrowAmount': extraToLock,
@@ -84,10 +113,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                 'accepted_client_buys_parts_pending_extra_escrow',
             'renegotiation.whoBuysParts': 'client',
             'renegotiation.currentPhase': 'waiting_for_extra_escrow',
-            'renegotiation.oldTransportFee': oldTransport,
             'renegotiation.extraLabor': extraLabor,
-            'renegotiation.newClientAppFee': newClientFee,
-            'renegotiation.newTotalClientPays': newTotal,
             'renegotiation.extraToLock': extraToLock,
             'renegotiation.acceptedAt': FieldValue.serverTimestamp(),
             'fundiHasUnread': true,
@@ -116,6 +142,38 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
       int extraToLock = extraLabor + extraAppFee;
       int newTotal = alreadyLockedCorrect + extraToLock;
       int newFundiReceives = newLabor - newFundiFee + oldTransport;
+
+      // MATERIALS ONLY: skip escrow lock entirely
+      if (extraToLock == 0) {
+        await FirebaseFirestore.instance
+            .collection('jobs')
+            .doc(widget.jobId)
+            .update({
+              'agreedPrice': newLabor,
+              'laborCost': newLabor,
+              'transportFee': oldTransport,
+              'clientAppFee': newClientFee,
+              'fundiAppFee': newFundiFee,
+              'totalClientPays': alreadyLockedCorrect,
+              'totalCost': alreadyLockedCorrect,
+              'fundiReceives': newLabor - newFundiFee + oldTransport,
+              'extraLaborAmount': 0,
+              'extraToLock': 0,
+              'status': 'fundi_buying_parts',
+              'renegotiation.status': 'accepted_fundi_buys_at_client_risk',
+              'renegotiation.whoBuysParts': 'fundi',
+              'renegotiation.partsPaidTo': 'shop_direct',
+              'renegotiation.currentPhase': 'fundi_buying_parts',
+              'renegotiation.riskAccepted': true,
+              'renegotiation.extraLabor': 0,
+              'renegotiation.extraToLock': 0,
+              'renegotiation.acceptedAt': FieldValue.serverTimestamp(),
+              'fundiHasUnread': true,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+        if (mounted) Navigator.pop(context);
+        return;
+      }
 
       await FirebaseFirestore.instance
           .collection('jobs')
@@ -154,7 +212,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
   }
 
   Future<void> _payExtraEscrow(
-    Map<String, dynamic> job, // <-- pass job from StreamBuilder
+    Map<String, dynamic> job,
     int alreadyLocked,
     int extraToLock,
     String whoBuysVal,
@@ -168,7 +226,6 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                   widget.job['assignedFundiId'] ??
                   '')
               .toString();
-
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
@@ -255,7 +312,6 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
     try {
       int counterExtraLabor = int.tryParse(counterPriceCtrl.text.trim()) ?? 0;
       if (counterExtraLabor <= 0) return;
-
       int counterExtraFee = (counterExtraLabor * 0.05).round();
       int counterExtraToLock = counterExtraLabor + counterExtraFee;
       int counterNewLaborTotal = oldLabor + counterExtraLabor;
@@ -263,7 +319,6 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
       int counterNewFundiFee = (counterNewLaborTotal * 0.05).round();
       int counterFundiReceives =
           counterNewLaborTotal - counterNewFundiFee + oldTransport;
-
       String fundiId =
           (widget.job['assignedFundiId'] ??
                   widget.job['fundiId'] ??
@@ -378,7 +433,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
 
           int acceptedCounterLabour = _toInt(
             reneg['acceptedCounterExtraLabor'] ??
-                reneg['approvedExtra'] ?? // <- fundi accept saves this
+                reneg['approvedExtra'] ??
                 reneg['counterExtraLabor'] ??
                 0,
           );
@@ -412,22 +467,22 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
             reneg['newClientAppFee'] ?? (newLabor * 0.05).round(),
           );
           int extraAppFee = (newClientFee - oldClientFee).clamp(0, 999999);
-          if (isCounterAccepted) {
+          if (isCounterAccepted)
             extraAppFee = _toInt(
               reneg['acceptedCounterExtraAppFee'] ??
                   reneg['counterExtraAppFee'] ??
                   extraAppFee,
             );
-          }
           int alreadyLockedCorrect = oldLabor + oldTransport + oldClientFee;
           int extraToLock = extraLabor + extraAppFee;
           int newTotal = alreadyLockedCorrect + extraToLock;
 
           bool needsExtraEscrow =
-              renegStatus.contains('pending_extra_escrow') ||
-              renegStatus == 'approved' ||
-              renegStatus == 'approved_pending_extra_escrow' ||
-              _toBool(job['clientNeedsToTopup']);
+              extraToLock > 0 &&
+              (renegStatus.contains('pending_extra_escrow') ||
+                  renegStatus == 'approved' ||
+                  renegStatus == 'approved_pending_extra_escrow' ||
+                  _toBool(job['clientNeedsToTopup']));
 
           List<String> reasons = List<String>.from(
             reneg['reasons'] ?? [reneg['reason'] ?? 'Extra work'],
@@ -446,143 +501,368 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
             calc += _toInt(p['qty'], 1) * _toInt(p['estPrice']);
           if (partsEstimateTotal == 0) partsEstimateTotal = calc;
 
+          bool isMaterialsOnly = extraLabor == 0 && partsNeeded.isNotEmpty;
+
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.orange.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info, color: Colors.orange),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Fundi visited site - new labour KES $newLabor (was $oldLabor). Transport KES $oldTransport unchanged.',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                if (isMaterialsOnly) ...[
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.receipt_long,
+                              color: Colors.black87,
+                              size: 18,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Materials Needed',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                              ),
+                            ),
+                            Spacer(),
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade100,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                'No extra labour',
+                                style: GoogleFonts.inter(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.green.shade800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 12),
+                        // HEADER
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Text(
+                                  'Description',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  'Model',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 1,
+                                child: Text(
+                                  'Qty',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 10,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  'Price',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 10,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.black12),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Already locked:',
-                            style: GoogleFonts.inter(fontSize: 11),
-                          ),
-                          Text(
-                            'KES $alreadyLockedCorrect',
-                            style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 11,
-                              color: Colors.green,
+                        SizedBox(height: 6),
+                        // ROWS from fundi side: partsNeeded contains name, model, qty, estPrice
+                        ...partsNeeded.map((p) {
+                          int qty = _toInt(p['qty'], 1);
+                          int unit = _toInt(p['estPrice']);
+                          int lineTotal = qty * unit;
+                          return Padding(
+                            padding: EdgeInsets.symmetric(
+                              vertical: 8,
+                              horizontal: 6,
                             ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Old Labour:',
-                            style: GoogleFonts.inter(fontSize: 11),
-                          ),
-                          Text(
-                            'KES $oldLabor',
-                            style: GoogleFonts.inter(fontSize: 11),
-                          ),
-                        ],
-                      ),
-                      if (oldTransport > 0)
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    '${p['name'] ?? ''}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    '${p['model'] ?? '-'}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 1,
+                                  child: Text(
+                                    '$qty',
+                                    style: GoogleFonts.inter(fontSize: 11),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    'KES $lineTotal',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 11,
+                                    ),
+                                    textAlign: TextAlign.right,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        Divider(),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'Transport:',
+                              'Total Materials Estimate:',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              'KES $partsEstimateTotal',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 14,
+                                color: Colors.black,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (tillNumber.isNotEmpty) ...[
+                          SizedBox(height: 10),
+                          Container(
+                            padding: EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.storefront,
+                                  size: 18,
+                                  color: Colors.blue.shade700,
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Till: $tillNumber',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Spacer(),
+                                Text(
+                                  'Pay directly to shop',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 9,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info, color: Colors.orange),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Fundi visited site - new labour KES $newLabor (was $oldLabor). Transport KES $oldTransport unchanged.',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Already locked:',
                               style: GoogleFonts.inter(fontSize: 11),
                             ),
                             Text(
-                              'KES $oldTransport',
+                              'KES $alreadyLockedCorrect',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                                color: Colors.green,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Old Labour:',
+                              style: GoogleFonts.inter(fontSize: 11),
+                            ),
+                            Text(
+                              'KES $oldLabor',
                               style: GoogleFonts.inter(fontSize: 11),
                             ),
                           ],
                         ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Extra Labour Requested:',
-                            style: GoogleFonts.inter(fontSize: 11),
+                        if (oldTransport > 0)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Transport:',
+                                style: GoogleFonts.inter(fontSize: 11),
+                              ),
+                              Text(
+                                'KES $oldTransport',
+                                style: GoogleFonts.inter(fontSize: 11),
+                              ),
+                            ],
                           ),
-                          Text(
-                            'KES $extraLabor',
-                            style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                              color: Colors.red,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Extra Labour Requested:',
+                              style: GoogleFonts.inter(fontSize: 11),
                             ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'New App Maintenance Cost (5%):',
-                            style: GoogleFonts.inter(fontSize: 10),
-                          ),
-                          Text(
-                            'KES $extraAppFee',
-                            style: GoogleFonts.inter(fontSize: 10),
-                          ),
-                        ],
-                      ),
-                      const Divider(),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Extra to lock now:',
-                            style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 11,
-                              color: Colors.red,
+                            Text(
+                              'KES $extraLabor',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                                color: Colors.red,
+                              ),
                             ),
-                          ),
-                          Text(
-                            'KES $extraToLock',
-                            style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
-                              color: Colors.red,
+                          ],
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'New App Maintenance Cost (5%):',
+                              style: GoogleFonts.inter(fontSize: 10),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                            Text(
+                              'KES $extraAppFee',
+                              style: GoogleFonts.inter(fontSize: 10),
+                            ),
+                          ],
+                        ),
+                        const Divider(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Extra to lock now:',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11,
+                                color: Colors.red,
+                              ),
+                            ),
+                            Text(
+                              'KES $extraToLock',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                                color: Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                ],
                 const SizedBox(height: 12),
                 Text(
                   'Reasons',
@@ -605,7 +885,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                       .toList(),
                 ),
                 const SizedBox(height: 12),
-                if (tillNumber.isNotEmpty)
+                if (!isMaterialsOnly && tillNumber.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -634,23 +914,170 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                       ],
                     ),
                   ),
-                if (partsNeeded.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Parts Needed (${partsNeeded.length})',
-                    style: GoogleFonts.montserrat(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11,
+                if (!isMaterialsOnly && partsNeeded.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.black12),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  ...partsNeeded.map(
-                    (p) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        '• ${p['name'] ?? ''} x${p['qty'] ?? 1} - KES ${_toInt(p['estPrice'])}',
-                        style: GoogleFonts.inter(fontSize: 11),
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.inventory_2_outlined, size: 16),
+                            SizedBox(width: 6),
+                            Text(
+                              'Materials Needed',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11,
+                              ),
+                            ),
+                            Spacer(),
+                            Text(
+                              '${partsNeeded.length} items',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 10),
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                            vertical: 6,
+                            horizontal: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Text(
+                                  'Description',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 9,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  'Model',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 9,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 1,
+                                child: Text(
+                                  'Qty',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 9,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  'Price',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 9,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        ...partsNeeded.map((p) {
+                          int qty = _toInt(p['qty'], 1);
+                          int unit = _toInt(p['estPrice']);
+                          return Padding(
+                            padding: EdgeInsets.symmetric(
+                              vertical: 6,
+                              horizontal: 6,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    '${p['name'] ?? ''}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    '${(p['model'] ?? '').toString().isEmpty ? '-' : p['model']}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 1,
+                                  child: Text(
+                                    '$qty',
+                                    style: GoogleFonts.inter(fontSize: 10),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    'KES ${qty * unit}',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 10,
+                                    ),
+                                    textAlign: TextAlign.right,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        Divider(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Materials Total:',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                              ),
+                            ),
+                            Text(
+                              'KES $partsEstimateTotal',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -737,7 +1164,6 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                     ),
                   ),
                 ] else if (renegStatus == 'pending') ...[
-                  // --- FIX: only show who-buys if parts exist ---
                   Builder(
                     builder: (_) {
                       bool hasParts = partsNeeded.isNotEmpty;
@@ -785,8 +1211,6 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                             ),
                             const SizedBox(height: 12),
                           ],
-
-                          // ACCEPT BUTTONS - if no parts, show single accept
                           if (!hasParts)
                             SizedBox(
                               width: double.infinity,
@@ -814,8 +1238,8 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                                   textAlign: TextAlign.center,
                                 ),
                               ),
-                            )
-                          else ...[
+                            ),
+                          if (hasParts) ...[
                             if (whoBuys == 'client')
                               SizedBox(
                                 width: double.infinity,
@@ -839,7 +1263,9 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                                           oldTransport,
                                         ),
                                   child: Text(
-                                    'Accept - Pay extra KES $extraToLock to escrow + Buy parts yourself\nTotal will be KES $newTotal',
+                                    isMaterialsOnly
+                                        ? 'Accept Materials - I will buy myself\nTotal materials KES $partsEstimateTotal'
+                                        : 'Accept - Pay extra KES $extraToLock to escrow + Buy parts yourself\nTotal will be KES $newTotal',
                                     style: GoogleFonts.montserrat(
                                       fontWeight: FontWeight.w800,
                                       fontSize: 11,
@@ -870,7 +1296,9 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                                           oldTransport,
                                         ),
                                   child: Text(
-                                    'Accept - Lock KES $extraToLock + Pay shop\nTotal KES $newTotal',
+                                    isMaterialsOnly
+                                        ? 'Accept - Send fundi to buy materials\nTotal materials KES $partsEstimateTotal to Till $tillNumber'
+                                        : 'Accept - Lock KES $extraToLock + Pay shop\nTotal KES $newTotal',
                                     style: GoogleFonts.montserrat(
                                       fontWeight: FontWeight.w800,
                                       fontSize: 11,
@@ -883,77 +1311,82 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen> {
                           const SizedBox(height: 10),
                           Row(
                             children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () {
-                                    showDialog(
-                                      context: context,
-                                      builder: (_) => AlertDialog(
-                                        title: const Text(
-                                          'Counter Offer - Enter Labour Only',
-                                        ),
-                                        content: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            TextField(
-                                              controller: counterPriceCtrl,
-                                              keyboardType:
-                                                  TextInputType.number,
-                                              decoration: InputDecoration(
-                                                labelText:
-                                                    'Your extra labour offer (e.g. 1000)',
-                                                helperText:
-                                                    'Extra + 5% = total extra to lock. Transport already locked',
-                                              ),
-                                              onChanged: (_) => setState(() {}),
-                                            ),
-                                            if (counterPriceCtrl
-                                                .text
-                                                .isNotEmpty)
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  top: 8,
+                              if (!isMaterialsOnly)
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (_) => AlertDialog(
+                                          title: const Text(
+                                            'Counter Offer - Enter Labour Only',
+                                          ),
+                                          content: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              TextField(
+                                                controller: counterPriceCtrl,
+                                                keyboardType:
+                                                    TextInputType.number,
+                                                decoration: InputDecoration(
+                                                  labelText:
+                                                      'Your extra labour offer (e.g. 1000)',
+                                                  helperText:
+                                                      'Extra + 5% = total extra to lock. Transport already locked',
                                                 ),
-                                                child: Text(
-                                                  'Extra to lock: KES ${_toInt(counterPriceCtrl.text) + (_toInt(counterPriceCtrl.text) * 0.05).round()}',
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: 10,
-                                                    color: Colors.green,
-                                                    fontWeight: FontWeight.w700,
+                                                onChanged: (_) =>
+                                                    setState(() {}),
+                                              ),
+                                              if (counterPriceCtrl
+                                                  .text
+                                                  .isNotEmpty)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        top: 8,
+                                                      ),
+                                                  child: Text(
+                                                    'Extra to lock: KES ${_toInt(counterPriceCtrl.text) + (_toInt(counterPriceCtrl.text) * 0.05).round()}',
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 10,
+                                                      color: Colors.green,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
                                                   ),
                                                 ),
+                                              TextField(
+                                                controller: counterReasonCtrl,
+                                                decoration:
+                                                    const InputDecoration(
+                                                      labelText: 'Reason',
+                                                    ),
                                               ),
-                                            TextField(
-                                              controller: counterReasonCtrl,
-                                              decoration: const InputDecoration(
-                                                labelText: 'Reason',
+                                            ],
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context),
+                                              child: const Text('Cancel'),
+                                            ),
+                                            ElevatedButton(
+                                              onPressed: () => _counter(
+                                                oldLabor,
+                                                alreadyLockedCorrect,
+                                                oldTransport,
+                                                extraLabor,
                                               ),
+                                              child: const Text('Send Counter'),
                                             ),
                                           ],
                                         ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context),
-                                            child: const Text('Cancel'),
-                                          ),
-                                          ElevatedButton(
-                                            onPressed: () => _counter(
-                                              oldLabor,
-                                              alreadyLockedCorrect,
-                                              oldTransport,
-                                              extraLabor,
-                                            ),
-                                            child: const Text('Send Counter'),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  },
-                                  child: const Text('Counter'),
+                                      );
+                                    },
+                                    child: const Text('Counter'),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 10),
+                              if (!isMaterialsOnly) const SizedBox(width: 10),
                               Expanded(
                                 child: OutlinedButton(
                                   onPressed: () async {

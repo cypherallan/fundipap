@@ -555,10 +555,9 @@ class _FundiRequestNewPriceScreenState
                 child: uploading
                     ? const CircularProgressIndicator()
                     : Text(
-                        'Send Request Extra to Pay KES ${newLaborTotal - oldLabor}',
-                        style: GoogleFonts.montserrat(
-                          fontWeight: FontWeight.w800,
-                        ),
+                        extraLabor == 0 && needsParts
+                            ? 'Request Materials Only - KES $partsEstimateTotal parts (no extra labour)'
+                            : 'Send Request Extra to Pay KES ${newLaborTotal - oldLabor}',
                       ),
               ),
             ),
