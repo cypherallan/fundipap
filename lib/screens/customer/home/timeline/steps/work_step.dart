@@ -1,11 +1,30 @@
 import 'package:flutter/material.dart';
 import '../../../../../widgets/animated_waiting_card.dart';
+import '../timeline_utils.dart';
 import '../widgets/timeline_card.dart';
 import '../timeline_context.dart';
 
+bool _hasParts(Map<String, dynamic>? renego) {
+  if (renego == null) return false;
+  var list = renego['partsNeeded'] as List?;
+  if (list != null && list.isNotEmpty) return true;
+  int est = toInt(renego['partsEstimateTotal']);
+  int total = toInt(renego['totalPartsEstimate']);
+  String till = (renego['tillNumber'] ?? '').toString().trim();
+  return est > 0 || total > 0 || till.isNotEmpty;
+}
+
 class WorkSteps {
   static bool handle(List<Widget> timeline, TimelineContext c) {
-    if (c.status == 'site_visit' && c.phase.isEmpty) {
+    bool hasParts = _hasParts(c.reneg);
+
+    if (c.status == 'site_visit' &&
+        (c.phase.isEmpty ||
+            (!hasParts &&
+                (c.phase.contains('buy_parts') ||
+                    c.phase.contains('fundi_buying') ||
+                    c.phase.contains('bought') ||
+                    c.phase == 'waiting_for_client_to_buy_parts')))) {
       timeline.add(
         OrangeAnimatedWaitingCard(
           title: 'Waiting for fundi to start job',

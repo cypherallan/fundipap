@@ -93,7 +93,14 @@ class HomeStatusWidget extends StatelessWidget {
     var reneg = job['renegotiation'] as Map<String, dynamic>?;
     String renegStatus = (reneg?['status'] ?? '').toString();
     String phase = (reneg?['currentPhase'] ?? '').toString();
-    bool needsExtraEscrow = renegStatus.contains('pending_extra_escrow');
+
+    // FIX: Cover all extra escrow statuses
+    bool needsExtraEscrow =
+        renegStatus.contains('pending_extra_escrow') ||
+        renegStatus.contains('extra_pending_escrow') ||
+        status == 'awaiting_extra_escrow' ||
+        status == 'awaiting_extra_payment';
+
     int labour = toInt(
       job['laborCost'] ?? job['agreedPrice'] ?? job['acceptedBidAmount'] ?? 0,
     );
@@ -159,12 +166,19 @@ class HomeStatusWidget extends StatelessWidget {
       );
     }
 
+    // Travelling states
     if (!isTravelling &&
         !siteDone &&
         status != 'site_visit' &&
         status != 'in_progress' &&
         !status.contains('completed') &&
-        phase != 'fundi_working') {
+        status != 'awaiting_extra_escrow' &&
+        status != 'waiting_for_client_to_buy_parts' &&
+        status != 'fundi_buying_parts' &&
+        phase != 'fundi_working' &&
+        phase != 'waiting_for_client_to_buy_parts' &&
+        phase != 'fundi_buying_parts' &&
+        !needsExtraEscrow) {
       return OrangeAnimatedWaitingCard(
         title: 'Waiting for fundi to start travelling',
         message:
@@ -186,6 +200,7 @@ class HomeStatusWidget extends StatelessWidget {
       );
     }
 
+    // FIX: Show lock extra after price preview
     if (needsExtraEscrow) {
       int counterExtra = toInt(
         reneg?['acceptedCounterExtraLabor'] ?? reneg?['counterExtraLabor'] ?? 0,
@@ -228,6 +243,8 @@ class HomeStatusWidget extends StatelessWidget {
     }
 
     bool hasParts = _hasParts(reneg);
+
+    // Parts flow - only if hasParts
     if (phase == 'waiting_for_client_to_buy_parts' && hasParts) {
       return const OrangeAnimatedWaitingCard(
         title: 'You will buy parts - Confirm when bought',
@@ -247,13 +264,34 @@ class HomeStatusWidget extends StatelessWidget {
             'Fundi confirmed parts are available. Waiting for him to tap Start Job.',
       );
     }
-    if (status == 'site_visit' && phase.isEmpty) {
-      return const OrangeAnimatedWaitingCard(
-        title: 'Waiting for fundi to start job',
-        message:
-            'Fundi arrived at your location and is on site. Waiting for him to Start Job.',
-      );
+
+    // FIX: After locking extra with NO parts, show waiting for fundi to start job
+    bool isSiteVisitPhase =
+        status == 'site_visit' ||
+        phase == 'waiting_for_client_to_buy_parts' ||
+        phase == 'fundi_buying_parts' ||
+        phase == 'client_claims_parts_bought' ||
+        phase == 'parts_confirmed_by_fundi';
+
+    if (isSiteVisitPhase) {
+      // If hasParts is false, skip parts and show waiting for fundi to start
+      if (!hasParts) {
+        return const OrangeAnimatedWaitingCard(
+          title: 'Waiting for fundi to start job',
+          message:
+              'Extra labour locked. Fundi will start working now - no parts needed.',
+        );
+      }
+      // If hasParts true but we are already past parts, still show waiting for fundi
+      if (phase == 'parts_confirmed_by_fundi' || phase.isEmpty) {
+        return const OrangeAnimatedWaitingCard(
+          title: 'Waiting for fundi to start job',
+          message:
+              'Fundi arrived at your location and is on site. Waiting for him to Start Job.',
+        );
+      }
     }
+
     if (phase == 'fundi_working' || status == 'in_progress') {
       return const OrangeAnimatedWaitingCard(
         title: 'Fundi is working - Waiting to complete',
