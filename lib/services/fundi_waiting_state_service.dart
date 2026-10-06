@@ -50,7 +50,6 @@ bool _toBool(dynamic v, [bool fb = false]) {
   return fb;
 }
 
-// Checks if materials were checked during extra price request
 bool _hasParts(Map<String, dynamic>? renego) {
   if (renego == null) return false;
   var list = renego['partsNeeded'] as List?;
@@ -147,10 +146,15 @@ FundiWaitingState? getFundiWaitingState({
   String lowStatus = jobStatus.toLowerCase();
   String lowPhase = renegoPhase.toLowerCase();
 
-  // FIX: Check if materials/parts were actually requested
   bool hasParts = _hasParts(renego);
+  int extraLaborReq = _toInt(renego?['extraLabor'] ?? 0);
+  int extraToLockReq = _toInt(renego?['extraToLock'] ?? 0);
+  int partsTotal = _toInt(
+    renego?['partsEstimateTotal'] ?? renego?['totalPartsEstimate'] ?? 0,
+  );
+  bool isMaterialsOnly = hasParts && extraLaborReq == 0 && extraToLockReq == 0;
 
-  // FIXED: If no parts, go to siteVisited (START JOB) not working
+  // FIX: If no parts, go to siteVisited not working
   if ((lowStatus.contains('waiting_for_client_to_buy') ||
           lowPhase.contains('waiting_for_client_to_buy')) &&
       !hasParts) {
@@ -162,8 +166,6 @@ FundiWaitingState? getFundiWaitingState({
       price: fundiSees,
     );
   }
-
-  // FIXED: If no parts, go to siteVisited not working
   if ((lowStatus.contains('bought') ||
           lowPhase.contains('bought') ||
           lowStatus.contains('fundi_buying') ||
@@ -195,7 +197,8 @@ FundiWaitingState? getFundiWaitingState({
           lowStatus.contains('buy_parts') ||
           lowStatus.contains('bought') ||
           lowStatus.contains('fundi_buying') ||
-          lowPhase.contains('fundi_buying'));
+          lowPhase.contains('fundi_buying') ||
+          isMaterialsOnly);
 
   bool isWaitingBuy =
       lowStatus.contains('waiting_for_client_to_buy') ||
@@ -221,6 +224,15 @@ FundiWaitingState? getFundiWaitingState({
     }
     if (isWaitingBuy) {
       int totalLab = _toInt(job['agreedPrice'] ?? labour);
+      // MATERIALS ONLY: don't show extra 0, show parts total
+      if (isMaterialsOnly) {
+        return FundiWaitingState(
+          type: FundiWaitingType.waitingNewPriceApproval,
+          title: 'Waiting for client to buy materials - KES $partsTotal',
+          message: 'Materials KES $partsTotal • Waiting for client to buy',
+          price: partsTotal,
+        );
+      }
       int extra = _toInt(
         renego?['acceptedCounterExtraLabor'] ??
             renego?['counterExtraLabor'] ??
@@ -235,6 +247,15 @@ FundiWaitingState? getFundiWaitingState({
       );
     }
     if (lowStatus == 'awaiting_extra_escrow') {
+      // MATERIALS ONLY FIX: never show lock extra 0
+      if (isMaterialsOnly) {
+        return FundiWaitingState(
+          type: FundiWaitingType.waitingNewPriceApproval,
+          title: 'Waiting for client to buy materials - KES $partsTotal',
+          message: 'Materials only - no extra labour to lock',
+          price: partsTotal,
+        );
+      }
       int extra = _toInt(
         renego?['acceptedCounterExtraLabor'] ??
             renego?['extraToLock'] ??
@@ -243,6 +264,15 @@ FundiWaitingState? getFundiWaitingState({
       );
       int pureExtra = _toInt(renego?['acceptedCounterExtraLabor'] ?? 0);
       if (pureExtra > 0) extra = pureExtra;
+      if (extra == 0) {
+        // fallback if extra computed as 0 but hasParts false already handled - treat as materials flow
+        return FundiWaitingState(
+          type: FundiWaitingType.waitingNewPriceApproval,
+          title: 'Waiting for client to buy materials - KES $partsTotal',
+          message: 'Waiting for client to buy materials',
+          price: partsTotal,
+        );
+      }
       return FundiWaitingState(
         type: FundiWaitingType.waitingEscrow,
         title: 'Waiting for client to lock extra KES $extra to escrow',
@@ -303,6 +333,15 @@ FundiWaitingState? getFundiWaitingState({
     );
   }
   if (renegoPending) {
+    // MATERIALS ONLY FIX: don't show approve extra KES 0
+    if (isMaterialsOnly) {
+      return FundiWaitingState(
+        type: FundiWaitingType.waitingNewPriceApproval,
+        title: 'Waiting for client to approve materials - KES $partsTotal',
+        message: 'You requested materials KES $partsTotal - no extra labour',
+        price: partsTotal,
+      );
+    }
     int extra = _toInt(
       renego['extraLabor'] ?? renego['pendingLabor'] ?? renego['extra'] ?? 0,
     );
@@ -439,7 +478,6 @@ FundiWaitingState? getFundiWaitingState({
     );
   }
 
-  // BID SENT MUST BE LAST
   if (bidStatus == 'pending' || bidStatus == 'sent' || bidStatus == '') {
     int hasAgreed = _toInt(
       job['agreedPrice'] ??
