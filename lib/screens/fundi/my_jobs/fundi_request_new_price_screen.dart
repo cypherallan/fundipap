@@ -57,6 +57,28 @@ class _FundiRequestNewPriceScreenState
     );
   }
 
+  void _clearParts() {
+    tillCtrl.clear();
+    for (var p in partsNeeded) {
+      p['name']?.clear();
+      p['qty']?.text = '1';
+      p['model']?.clear();
+      p['estPrice']?.text = '0';
+    }
+    // keep one empty row so UI doesn't disappear
+    if (partsNeeded.length > 1) {
+      partsNeeded = [partsNeeded.first];
+    }
+  }
+
+  bool get _needsParts =>
+      selectedReasons.contains('New parts / materials needed') ||
+      selectedReasons.contains('Replacement needed (old part damaged)');
+  bool get _needsLabor =>
+      selectedReasons.contains('Job bigger / more work than expected') ||
+      selectedReasons.contains('Extra labor required') ||
+      selectedReasons.contains('Transport / distance extra');
+
   int _toInt(dynamic v, [int fb = 0]) {
     if (v == null) return fb;
     if (v is int) return v;
@@ -66,14 +88,14 @@ class _FundiRequestNewPriceScreenState
   }
 
   int get oldLabor => _toInt(
-    widget.job['agreedPrice'] ?? // 5000 correct first
+    widget.job['agreedPrice'] ??
         widget.job['laborCost'] ??
         widget.job['budget'] ??
         0,
   );
   int get transport =>
       _toInt(widget.job['transportFee'] ?? widget.job['escrowTransport'] ?? 0);
-  int get extraLabor => _toInt(extraLaborCtrl.text);
+  int get extraLabor => _needsLabor ? _toInt(extraLaborCtrl.text) : 0;
   int get newLaborTotal => oldLabor + extraLabor;
   int get oldClientFee => (oldLabor * 0.05).round();
   int get newClientFee => (newLaborTotal * 0.05).round();
@@ -88,6 +110,7 @@ class _FundiRequestNewPriceScreenState
   int get extraToLock => newTotalClient - oldTotalClient;
 
   int get partsEstimateTotal {
+    if (!_needsParts) return 0;
     int total = 0;
     for (var p in partsNeeded) {
       if ((p['name']?.text.trim().isEmpty ?? true)) continue;
@@ -125,11 +148,21 @@ class _FundiRequestNewPriceScreenState
       );
       return;
     }
+    if (_needsLabor && extraLabor <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter extra labour amount')),
+      );
+      return;
+    }
+    if (_needsParts && partsEstimateTotal == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add at least 1 part with price')),
+      );
+      return;
+    }
     setState(() => uploading = true);
     try {
-      bool hasParts =
-          selectedReasons.contains('New parts / materials needed') ||
-          selectedReasons.contains('Replacement needed (old part damaged)');
+      bool hasParts = _needsParts;
 
       var evidenceUrls = await _uploadPhotos(evidencePhotos, 'evidence');
       var oldPartUrls = await _uploadPhotos(oldPartPhotos, 'old_parts');
@@ -204,16 +237,11 @@ class _FundiRequestNewPriceScreenState
 
   @override
   Widget build(BuildContext context) {
-    bool needsParts =
-        selectedReasons.contains('New parts / materials needed') ||
-        selectedReasons.contains('Replacement needed (old part damaged)');
+    bool needsParts = _needsParts;
     bool needsReplacement = selectedReasons.contains(
       'Replacement needed (old part damaged)',
     );
-    bool needsLabor =
-        selectedReasons.contains('Job bigger / more work than expected') ||
-        selectedReasons.contains('Extra labor required') ||
-        selectedReasons.contains('Transport / distance extra');
+    bool needsLabor = _needsLabor;
 
     return Scaffold(
       appBar: AppBar(
@@ -272,10 +300,33 @@ class _FundiRequestNewPriceScreenState
                   selected: sel,
                   selectedColor: FundipapColors.primaryYellow,
                   onSelected: (v) => setState(() {
-                    if (v)
+                    if (v) {
                       selectedReasons.add(r);
-                    else
+                    } else {
                       selectedReasons.remove(r);
+                      // CLEAR ON DESELECT - FIX
+                      bool stillNeedsLabor =
+                          selectedReasons.contains(
+                            'Job bigger / more work than expected',
+                          ) ||
+                          selectedReasons.contains('Extra labor required') ||
+                          selectedReasons.contains(
+                            'Transport / distance extra',
+                          );
+                      bool stillNeedsParts =
+                          selectedReasons.contains(
+                            'New parts / materials needed',
+                          ) ||
+                          selectedReasons.contains(
+                            'Replacement needed (old part damaged)',
+                          );
+                      if (!stillNeedsLabor) {
+                        extraLaborCtrl.text = '0';
+                      }
+                      if (!stillNeedsParts) {
+                        _clearParts();
+                      }
+                    }
                   }),
                 );
               }).toList(),
@@ -401,17 +452,19 @@ class _FundiRequestNewPriceScreenState
                 );
               }),
             ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: tillCtrl,
-              decoration: InputDecoration(
-                labelText: 'Till Number (Optional)',
-                hintText: 'Leave blank if you dont know shops around',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            if (needsParts) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: tillCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Till Number (Optional)',
+                  hintText: 'Leave blank if you dont know shops around',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
-            ),
+            ],
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(14),
@@ -432,11 +485,7 @@ class _FundiRequestNewPriceScreenState
                   ),
                   const SizedBox(height: 8),
                   _billRow('Old Labour:', 'KES $oldLabor'),
-                  _billRow(
-                    'Extra Labour:',
-                    'KES ${newLaborTotal - oldLabor}',
-                    highlight: true,
-                  ),
+                  _billRow('Extra Labour:', 'KES $extraLabor', highlight: true),
                   _billRow(
                     'New Labour Total:',
                     'KES $newLaborTotal',
@@ -447,12 +496,14 @@ class _FundiRequestNewPriceScreenState
                   _billRow('Old Total Paid:', 'KES ${oldLabor + transport}'),
                   _billRow(
                     'Extra to Lock Now:',
-                    'KES ${newLaborTotal - oldLabor}',
+                    'KES ${needsLabor ? extraLabor : 0}',
                     highlightYellow: true,
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Parts: ${partsNeeded.where((p) => (p['name']?.text.trim().isNotEmpty ?? false)).length} items - KES $partsEstimateTotal separate (client buys)',
+                    needsParts
+                        ? 'Parts: ${partsNeeded.where((p) => (p['name']?.text.trim().isNotEmpty ?? false)).length} items - KES $partsEstimateTotal separate (client buys)'
+                        : 'No parts requested',
                     style: GoogleFonts.inter(
                       color: Colors.white54,
                       fontSize: 10,
@@ -557,7 +608,9 @@ class _FundiRequestNewPriceScreenState
                     : Text(
                         extraLabor == 0 && needsParts
                             ? 'Request Materials Only - KES $partsEstimateTotal parts (no extra labour)'
-                            : 'Send Request Extra to Pay KES ${newLaborTotal - oldLabor}',
+                            : extraLabor == 0 && !needsParts
+                            ? 'Select a reason to continue'
+                            : 'Send Request Extra to Pay KES $extraLabor',
                       ),
               ),
             ),
