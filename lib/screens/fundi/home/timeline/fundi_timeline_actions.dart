@@ -27,23 +27,37 @@ class FundiTimelineActions {
     String jobId,
     String jobTitle,
   ) async {
-    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
-      'travelling': true,
-      'siteVisitStarted': true,
-      'travellingAt': FieldValue.serverTimestamp(),
-      'siteVisitStartedAt': FieldValue.serverTimestamp(),
-      'status': 'travelling',
-      'customerHasUnread': true,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    if (!context.mounted) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            VisitCustomerScreen(jobId: jobId, job: {'title': jobTitle}),
-      ),
-    );
+    try {
+      // FIXED: fetch full job doc so geopoint exists - don't pass only {title}
+      var jobSnap = await FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(jobId)
+          .get(const GetOptions(source: Source.server));
+      var fullJob = jobSnap.data() ?? {'title': jobTitle};
+
+      await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+        'travelling': true,
+        'siteVisitStarted': true,
+        'travellingAt': FieldValue.serverTimestamp(),
+        'siteVisitStartedAt': FieldValue.serverTimestamp(),
+        'status': 'travelling',
+        'customerHasUnread': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => VisitCustomerScreen(jobId: jobId, job: fullJob),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to start visit: $e')));
+    }
   }
 
   static Future<void> confirmPartsAvailable(String jobId) async {

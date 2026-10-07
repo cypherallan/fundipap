@@ -198,19 +198,19 @@ class PendingBidCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 4,
+                        runSpacing: 2,
                         children: [
-                          Flexible(
-                            child: Text(
-                              fundiName,
-                              style: GoogleFonts.montserrat(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                          Text(
+                            fundiName,
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(width: 4),
                           // LIVE DISTANCE STREAM
                           StreamBuilder<DocumentSnapshot>(
                             stream: FirebaseFirestore.instance
@@ -269,7 +269,7 @@ class PendingBidCard extends StatelessWidget {
                               } catch (_) {}
                               if (km <= 0.05) return const SizedBox.shrink();
                               return Text(
-                                ' (${km.toStringAsFixed(1)} km)',
+                                '(${km.toStringAsFixed(1)} km)',
                                 style: GoogleFonts.montserrat(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 11,
@@ -279,17 +279,13 @@ class PendingBidCard extends StatelessWidget {
                             },
                           ),
                           if (bid.verified)
-                            const Padding(
-                              padding: EdgeInsets.only(left: 4),
-                              child: Icon(
-                                Icons.verified,
-                                size: 14,
-                                color: Colors.blue,
-                              ),
+                            const Icon(
+                              Icons.verified,
+                              size: 14,
+                              color: Colors.blue,
                             ),
                           if (isAcceptedCounter)
                             Container(
-                              margin: const EdgeInsets.only(left: 6),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 6,
                                 vertical: 2,

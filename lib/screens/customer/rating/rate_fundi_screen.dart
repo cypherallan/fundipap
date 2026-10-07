@@ -28,6 +28,7 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
   Map<String, dynamic>? _job;
   bool _loadingJob = true;
   bool _hasRated = false;
+  bool? _wouldRefer; // NEW: null = not selected, true = Yes, false = No
 
   @override
   void initState() {
@@ -81,6 +82,14 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
       );
       return;
     }
+    if (_wouldRefer == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select if you want to refer this fundi'),
+        ),
+      );
+      return;
+    }
     setState(() => _submitting = true);
     try {
       var jobRef = FirebaseFirestore.instance
@@ -89,10 +98,16 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
       var jobSnap = await jobRef.get();
       var jobData = jobSnap.data() ?? {};
       String clientId =
-          (jobData['clientId'] ?? jobData['customerId'] ?? 'unknown')
+          (jobData['clientId'] ??
+                  jobData['customerId'] ??
+                  FirebaseAuth.instance.currentUser?.uid ??
+                  'unknown')
               .toString();
       String clientName =
-          (jobData['clientName'] ?? jobData['customerName'] ?? 'Client')
+          (jobData['clientName'] ??
+                  jobData['customerName'] ??
+                  FirebaseAuth.instance.currentUser?.displayName ??
+                  'Client')
               .toString();
 
       String effectiveFundiId = widget.fundiId.trim();
@@ -106,10 +121,12 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
           'clientRated': true,
           'clientRating': _rating,
           'clientReview': _reviewCtrl.text.trim(),
+          'wouldRefer': _wouldRefer,
           'ratedAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
       } else {
+        // 1. Save review
         await FirebaseFirestore.instance
             .collection('fundis')
             .doc(effectiveFundiId)
@@ -121,10 +138,12 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
               'fundiId': effectiveFundiId,
               'rating': _rating,
               'comment': _reviewCtrl.text.trim(),
+              'wouldRefer': _wouldRefer,
               'trade': widget.trade,
               'createdAt': FieldValue.serverTimestamp(),
             });
 
+        // 2. Update averageRating
         var fundiRef = FirebaseFirestore.instance
             .collection('fundis')
             .doc(effectiveFundiId);
@@ -135,16 +154,55 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
         double newAvg = currentCount == 0
             ? _rating
             : ((currentAvg * currentCount) + _rating) / (currentCount + 1);
-        await fundiRef.update({
+
+        Map<String, dynamic> fundiUpdates = {
           'averageRating': newAvg,
           'reviewsCount': currentCount + 1,
           'lastRatedAt': FieldValue.serverTimestamp(),
-        });
+        };
+
+        // 3. REFERRAL LOGIC - if Yes
+        if (_wouldRefer == true) {
+          var referralRef = fundiRef.collection('referrals').doc(clientId);
+          var referralSnap = await referralRef.get();
+          if (!referralSnap.exists) {
+            await referralRef.set({
+              'clientId': clientId,
+              'clientName': clientName,
+              'jobId': widget.jobId,
+              'ratingGiven': _rating,
+              'createdAt': FieldValue.serverTimestamp(),
+              'type': 'post_job_referral',
+            });
+            fundiUpdates.addAll({
+              'referralCount': FieldValue.increment(1),
+              'referrals': FieldValue.increment(1),
+              'totalReferrals': FieldValue.increment(1),
+              'referralsCount': FieldValue.increment(1),
+            });
+          }
+        }
+
+        await fundiRef.update(fundiUpdates);
+
+        // Also update users doc (your enrichBids reads both)
+        try {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(effectiveFundiId)
+              .update({
+                if (_wouldRefer == true)
+                  'referralCount': FieldValue.increment(1),
+                if (_wouldRefer == true) 'referrals': FieldValue.increment(1),
+                'averageRating': newAvg,
+              });
+        } catch (_) {}
 
         await jobRef.update({
           'clientRated': true,
           'clientRating': _rating,
           'clientReview': _reviewCtrl.text.trim(),
+          'wouldRefer': _wouldRefer,
           'ratedAt': FieldValue.serverTimestamp(),
           'status': 'completed',
           'clientTimelineCleared': true,
@@ -155,7 +213,6 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
 
       if (!mounted) return;
       setState(() => _hasRated = true);
-
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
           builder: (_) => HomeNavigator(
@@ -196,6 +253,173 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
     );
   }
 
+  Widget _buildReferChoice() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _wouldRefer == null
+              ? Colors.orange.shade300
+              : Colors.grey.shade300,
+          width: _wouldRefer == null ? 1.5 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.share, size: 18, color: Colors.black87),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Would you like to refer ${widget.fundiName} to other clients?',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              if (_wouldRefer == null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade100,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'REQUIRED',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.orange.shade800,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _wouldRefer = true),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _wouldRefer == true ? Colors.black : Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _wouldRefer == true
+                            ? Colors.black
+                            : Colors.grey.shade300,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _wouldRefer == true
+                              ? Icons.check_circle
+                              : Icons.thumb_up_outlined,
+                          size: 18,
+                          color: _wouldRefer == true
+                              ? Colors.white
+                              : Colors.black54,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'YES, Refer',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: _wouldRefer == true
+                                ? Colors.white
+                                : Colors.black,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _wouldRefer = false),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _wouldRefer == false
+                          ? Colors.grey.shade200
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _wouldRefer == false
+                            ? Colors.black
+                            : Colors.grey.shade300,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.close,
+                          size: 18,
+                          color: _wouldRefer == false
+                              ? Colors.black
+                              : Colors.black54,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'NO',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_wouldRefer == true)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Great! This adds +1 referral to ${widget.fundiName}\'s profile and helps others find trusted fundis.',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: Colors.green.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          if (_wouldRefer == false)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'No referral will be added.',
+                style: GoogleFonts.inter(fontSize: 11, color: Colors.black54),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     String title = (_job?['title'] ?? _job?['description'] ?? 'Job').toString();
@@ -217,7 +441,6 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
       else
         paid = int.tryParse(v.toString()) ?? 0;
     } catch (_) {}
-
     final ratingLabels = [
       '0.0 Tap to rate',
       '0.5 Poor',
@@ -407,7 +630,7 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                     TextField(
                       controller: _reviewCtrl,
                       maxLines: 4,
@@ -419,6 +642,8 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 20),
+                    _buildReferChoice(),
                     const SizedBox(height: 20),
                     SizedBox(
                       width: double.infinity,
@@ -445,7 +670,7 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
                     const SizedBox(height: 8),
                     Center(
                       child: Text(
-                        'Locked until rated - reappears on relaunch',
+                        'Locked until rated + referral choice',
                         style: GoogleFonts.inter(
                           fontSize: 10,
                           color: Colors.black45,

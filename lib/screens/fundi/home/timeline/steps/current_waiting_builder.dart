@@ -497,8 +497,23 @@ Widget? buildCurrentWaiting({
             ),
             icon: const Icon(Icons.navigation),
             label: const Text('START SITE VISIT'),
-            onPressed: () =>
-                FundiTimelineActions.startSiteVisit(context, jobId, jobTitle),
+            onPressed: () async {
+              // FIXED: same as OPEN TRACKING - use VisitCustomerScreen directly
+              await FirebaseFirestore.instance
+                  .collection('jobs')
+                  .doc(jobId)
+                  .update({
+                    'status': 'travelling',
+                    'travelling': true,
+                    'updatedAt': FieldValue.serverTimestamp(),
+                  });
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => VisitCustomerScreen(jobId: jobId, job: job),
+                ),
+              );
+            },
           ),
         ),
       );
