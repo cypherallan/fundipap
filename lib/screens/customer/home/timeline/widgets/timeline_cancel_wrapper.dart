@@ -45,7 +45,7 @@ class TimelineCancelWrapper extends StatelessWidget {
                 context: context,
                 jobId: jobId,
                 job: job,
-                isClient: true,
+                isClient: false,
               ),
               child: Text(
                 'CANCEL JOB',

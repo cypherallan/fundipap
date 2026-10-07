@@ -71,7 +71,7 @@ class _FundiMyJobsPageState extends State<FundiMyJobsPage>
           ),
           FundiRejectedTab(bidsStream: bidsStream),
           FundiCompletedTab(jobsStream: jobsStream),
-          FundiCancelledTab(jobsStream: jobsStream), // <-- NEW
+          FundiCancelledTab(jobsStream: jobsStream, bidsStream: bidsStream),
         ],
       ),
     );

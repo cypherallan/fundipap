@@ -57,7 +57,6 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
         await loadLocation(context);
       }
     } catch (e) {
-      print('initOnlineStatus error: $e');
       await loadLocation(context);
     }
   }
@@ -118,7 +117,6 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
 
       // Ignore very bad accuracy
       if (pos.accuracy > 100) {
-        print('⚠️ IGNORED bad accuracy ${pos.accuracy}');
         return;
       }
 
@@ -133,18 +131,12 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
         if (jump > 300 &&
             _lastPosTime != null &&
             DateTime.now().difference(_lastPosTime!).inSeconds < 30) {
-          print(
-            '🚫 BLOCKED REAL FLIP ${jump.toStringAsFixed(0)}m - keeping fake ${_stablePos!.latitude},${_stablePos!.longitude}',
-          );
           return;
         }
       }
 
       _stablePos = pos;
       _lastPosTime = DateTime.now();
-      print(
-        '✅ UI USING: ${pos.latitude},${pos.longitude} mocked=${pos.isMocked} acc=${pos.accuracy}',
-      );
       setState(() => currentPos = pos);
     });
   }

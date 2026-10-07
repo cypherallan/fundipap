@@ -76,7 +76,6 @@ class LocationService {
         locationSettings: _currentSettings(),
       );
     } catch (e) {
-      debugPrint('determinePosition timeout, trying lastKnown: $e');
       return await Geolocator.getLastKnownPosition();
     }
   }
@@ -100,21 +99,15 @@ class LocationService {
       Position initial = await GeolocatorPlatform.instance.getCurrentPosition(
         locationSettings: _currentSettings(),
       );
-      debugPrint(
-        '📍 INITIAL ${initial.latitude},${initial.longitude} mocked=${initial.isMocked}',
-      );
       await _updateFirestore(uid, initial, isOnline: true);
     } catch (e) {
-      debugPrint('init err $e');
     }
 
     _trackingSub = getPositionStream().listen(
       (pos) async {
-        debugPrint('📍 STREAM ${pos.latitude},${pos.longitude}');
         await _updateFirestore(uid, pos, isOnline: true);
       },
       onError: (e) {
-        debugPrint('Tracking error: $e - restarting');
       },
     );
   }

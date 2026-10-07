@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import 'fundi_penalty_service.dart';
-import 'fundi_badge_service.dart'; 
+import 'fundi_badge_service.dart';
+
 class JobCancelService {
   static const double feeRate = 0.05;
 
@@ -25,8 +26,21 @@ class JobCancelService {
     'Other',
   ];
 
+  static bool _isOpenStatus(String status) {
+    return [
+      'open',
+      'bidding',
+      'pending',
+      'searching',
+      'new',
+    ].contains(status.toLowerCase());
+  }
+
   static bool _canFundiCancel(Map<String, dynamic> job) {
-    String status = (job['status'] ?? '').toString();
+    String status = (job['status'] ?? '').toString().toLowerCase();
+    // OPEN jobs - fundi can always withdraw his bid
+    if (_isOpenStatus(status)) return true;
+
     bool travelling = job['travelling'] == true || status == 'travelling';
     bool siteDone =
         job['siteVisitDone'] == true ||
@@ -61,7 +75,101 @@ class JobCancelService {
     required Map<String, dynamic> job,
     required bool isClient,
   }) async {
-    String status = (job['status'] ?? '').toString();
+    String status = (job['status'] ?? '').toString().toLowerCase();
+
+    // FUNDI withdrawing from OPEN job - no escrow, just remove his bid
+    if (!isClient && _isOpenStatus(status)) {
+      String reason = fundiReasons[0];
+      final otherCtrl = TextEditingController();
+      bool? ok = await showDialog<bool>(
+        context: context,
+        builder: (_) => StatefulBuilder(
+          builder: (ctx, setSt) => AlertDialog(
+            title: Text(
+              'Cancel this bid?',
+              style: GoogleFonts.montserrat(
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'You will withdraw your bid. Job stays open for other fundis.',
+                  style: GoogleFonts.inter(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: reason,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: fundiReasons
+                      .map(
+                        (r) => DropdownMenuItem(
+                          value: r,
+                          child: Text(
+                            r,
+                            style: GoogleFonts.inter(fontSize: 12),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setSt(() => reason = v!),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: otherCtrl,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: reason == 'Other'
+                        ? 'Explain *'
+                        : 'Details (optional)',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Keep Bid'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade700,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () {
+                  if (reason == 'Other' && otherCtrl.text.trim().length < 5) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Explain reason min 5 chars'),
+                      ),
+                    );
+                    return;
+                  }
+                  Navigator.pop(ctx, true);
+                },
+                child: const Text('Yes, Cancel Bid'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (ok != true) return;
+      await _performFundiWithdraw(
+        context: context,
+        jobId: jobId,
+        reason: reason,
+        details: otherCtrl.text.trim(),
+      );
+      return;
+    }
+
     bool travelling = job['travelling'] == true || status == 'travelling';
     bool siteDone =
         job['siteVisitDone'] == true ||
@@ -107,7 +215,6 @@ class JobCancelService {
     String reason = isClient ? clientReasons[0] : fundiReasons[0];
     final otherCtrl = TextEditingController();
 
-    // OLD labour (what's currently locked)
     int oldLabour = _toInt(
       job['currentLabour'] ??
           job['agreedPrice'] ??
@@ -117,50 +224,33 @@ class JobCancelService {
           0,
     );
     var reneg = job['renegotiation'] as Map<String, dynamic>?;
-    // Keep oldLabour from reneg if available
-    if (reneg != null && reneg['oldLabor'] != null) {
+    if (reneg != null && reneg['oldLabor'] != null)
       oldLabour = _toInt(reneg['oldLabor']);
-    }
-
-    // NEW labour (fundi requested)
     int newLabour = oldLabour;
-    if (reneg != null && reneg['newLaborTotal'] != null) {
+    if (reneg != null && reneg['newLaborTotal'] != null)
       newLabour = _toInt(reneg['newLaborTotal']);
-    }
-
     int transport = _toInt(job['transportFee'] ?? job['escrowTransport'] ?? 0);
     int escrowAmount = _toInt(job['escrowAmount'] ?? 0);
     int totalLocked = escrowAmount > 0
         ? escrowAmount
         : (oldLabour + transport + (oldLabour * feeRate).round());
-
-    // Is extra escrow already locked?
     int newTotalExpected =
         newLabour + transport + (newLabour * feeRate).round();
     bool extraLocked =
         escrowAmount >= newTotalExpected && newLabour != oldLabour;
-
-    // CRITICAL FIX: if price request pending and extra NOT locked, use OLD labour for math
     int labourForCalc = oldLabour;
     if (priceRequestPending) {
-      if (extraLocked) {
-        labourForCalc = newLabour; // extra already paid, use new
-      } else {
-        labourForCalc = oldLabour; // still 5350 locked, use old 5000
-      }
+      labourForCalc = extraLocked ? newLabour : oldLabour;
     } else {
-      // normal case - if new labour exists and is accepted/paid, use it
       labourForCalc =
           (reneg != null &&
               reneg['newLaborTotal'] != null &&
               !priceRequestPending)
           ? newLabour
           : oldLabour;
-      // if reneg accepted but not pending, use new
       if (reneg != null &&
-          (reneg['status'] ?? '').toString().contains('accepted')) {
+          (reneg['status'] ?? '').toString().contains('accepted'))
         labourForCalc = newLabour;
-      }
     }
 
     String escrowStatusStr = (job['escrowStatus'] ?? '').toString();
@@ -229,18 +319,15 @@ class JobCancelService {
         clientRefund = labourForCalc + transport;
         fundiGets = 0;
       } else {
-        // AFTER TRAVEL OR AFTER PRICE REQUEST (pending, extra not locked) - same rule
-        platformFee = (labourForCalc * feeRate).round(); // 5000*0.05=250
-        clientRefund = (labourForCalc * 0.95).round(); // 5000*0.95=4750
-        fundiGets = transport; // 100
+        platformFee = (labourForCalc * feeRate).round();
+        clientRefund = (labourForCalc * 0.95).round();
+        fundiGets = transport;
       }
     } else {
       platformFee = 0;
       clientRefund = totalLocked;
       fundiGets = 0;
     }
-
-    // Safety: clientRefund can never be > totalLocked
     if (clientRefund + fundiGets > totalLocked) {
       clientRefund = totalLocked - fundiGets;
       if (clientRefund < 0) clientRefund = 0;
@@ -328,17 +415,6 @@ class JobCancelService {
                                 'KES $fundiGets',
                                 color: Colors.blue.shade700,
                                 bold: true,
-                              ),
-                            if (priceRequestPending && !extraLocked)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Text(
-                                  'Note: New price KES ${newLabour + transport + (newLabour * 0.05).round()} not locked yet. Cancel uses old escrow KES $totalLocked.',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 10,
-                                    color: Colors.black54,
-                                  ),
-                                ),
                               ),
                           ],
                         ),
@@ -434,6 +510,77 @@ class JobCancelService {
         ),
       ),
     );
+  }
+
+  // NEW: fundi withdraws bid for OPEN job - only for him
+  static Future<void> _performFundiWithdraw({
+    required BuildContext context,
+    required String jobId,
+    required String reason,
+    required String details,
+  }) async {
+    try {
+      final db = FirebaseFirestore.instance;
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+
+      // Get job title for cancelled collection
+      var jobDoc = await db.collection('jobs').doc(jobId).get();
+      var jobData = jobDoc.data() ?? {};
+
+      final bids = await db
+          .collection('jobs')
+          .doc(jobId)
+          .collection('bids')
+          .where('fundiId', isEqualTo: uid)
+          .get();
+      for (var b in bids.docs) {
+        await b.reference.update({
+          'deletedForFundi': true,
+          'status': 'withdrawn',
+          'cancelReason': reason,
+          'cancelDetails': details,
+          'withdrawnAt': FieldValue.serverTimestamp(),
+          'cancelledAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // NEW: Add to fundi's cancelledJobs like notifications/reviews
+      await db
+          .collection('fundis')
+          .doc(uid)
+          .collection('cancelledJobs')
+          .doc(jobId)
+          .set({
+            'jobId': jobId,
+            'title': jobData['title'] ?? 'Job',
+            'clientName':
+                jobData['customerName'] ?? jobData['clientName'] ?? 'Client',
+            'cancelReason': reason,
+            'cancelDetails': details,
+            'type': 'withdrawn',
+            'cancelledAt': FieldValue.serverTimestamp(),
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bid cancelled - moved to cancelled tab'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Cancel failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   static Future<void> _showBlocked(
@@ -571,14 +718,35 @@ class JobCancelService {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
+      // NEW: save to fundi cancelledJobs subcollection like notifications
+      if (fundiId.isNotEmpty) {
+        try {
+          await db
+              .collection('fundis')
+              .doc(fundiId)
+              .collection('cancelledJobs')
+              .doc(jobId)
+              .set({
+                'jobId': jobId,
+                'title': job['title'] ?? 'Job',
+                'clientName':
+                    job['customerName'] ?? job['clientName'] ?? 'Client',
+                'cancelReason': reason,
+                'type': 'assigned_cancelled',
+                'cancelledBy': isClient ? 'client' : 'fundi',
+                'transportPayout': fundiGets,
+                'cancelledAt': FieldValue.serverTimestamp(),
+                'createdAt': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true));
+        } catch (_) {}
+      }
+
       if (!isClient && fundiId.isNotEmpty) {
-        // new: flag + suspend + penaltyScore + admin log
         await FundiPenaltyService.onFundiCancel(
           fundiId: fundiId,
           jobId: jobId,
           reason: reason,
         );
-        // recalc badge instantly (drops to none/bronze)
         await FundiBadgeService.recalcAndUpdate(fundiId);
       }
 

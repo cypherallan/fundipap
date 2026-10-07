@@ -4,15 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/job_chat_section.dart';
-import '../../../../widgets/animated_waiting_card.dart';
 import '../../../../services/fundi_waiting_state_service.dart';
 import '../timeline/fundi_timeline_context.dart';
 import 'core/timeline_utils.dart';
 import 'core/timeline_navigation.dart';
-import 'widgets/green_done_card.dart';
 import 'steps/history_builder.dart';
 import 'steps/current_waiting_builder.dart';
 import 'steps/completed_released_view.dart';
+import '../../../customer/home/timeline/widgets/timeline_cancel_wrapper.dart';
 
 class FundiCustomerTimelinePage extends StatefulWidget {
   final String jobId;
@@ -87,16 +86,24 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
               backgroundColor: FundipapColors.blackGray,
               foregroundColor: Colors.white,
             ),
-            body: ListView(
-              padding: const EdgeInsets.all(12),
-              children: [
-                greenDoneCard(
-                  title: 'Cancelled - $status',
-                  message:
-                      'Cancelled by ${job['cancelledBy'] ?? ''} Reason: ${job['cancelReason'] ?? ''}',
-                  icon: Icons.cancel,
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.cancel, size: 64, color: Colors.grey.shade400),
+                    const SizedBox(height: 16),
+                    Text(
+                      'You cancelled this job',
+                      style: GoogleFonts.montserrat(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           );
         }
@@ -114,29 +121,6 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                 body: Center(child: CircularProgressIndicator()),
               );
             if (bidsSnap.data!.docs.isEmpty) {
-              List<Widget> timeline = [];
-              timeline.add(
-                greenDoneCard(
-                  title: 'Bid sent - KES $labour - Done',
-                  message: '${widget.jobTitle} • ${widget.clientName}',
-                ),
-              );
-              if (escrowDone)
-                timeline.add(
-                  greenDoneCard(
-                    title: 'Escrow locked - Done KES $fundiSees',
-                    message:
-                        'Labour KES $labour + Transport KES $transport = KES $fundiSees locked',
-                  ),
-                );
-              else
-                timeline.add(
-                  OrangeAnimatedWaitingCard(
-                    title: 'Waiting for client to pay KES $fundiSees to escrow',
-                    message:
-                        'Client ${widget.clientName} has not locked money yet',
-                  ),
-                );
               return Scaffold(
                 appBar: AppBar(
                   leading: IconButton(
@@ -150,16 +134,77 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                   backgroundColor: FundipapColors.blackGray,
                   foregroundColor: Colors.white,
                 ),
-                body: ListView.separated(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: timeline.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) => timeline[i],
+                body: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.cancel,
+                          size: 64,
+                          color: Colors.grey.shade400,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'You cancelled this job',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               );
             }
             var bidDoc = bidsSnap.data!.docs.first;
             var bid = bidDoc.data() as Map<String, dynamic>;
+
+            // FIX: open job cancelled by fundi (deletedForFundi) -> show only cancelled
+            if (bid['deletedForFundi'] == true ||
+                (bid['status'] ?? '').toString() == 'withdrawn' ||
+                (bid['status'] ?? '').toString() == 'cancelled') {
+              return Scaffold(
+                appBar: AppBar(
+                  leading: IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => goBack(context, 2),
+                  ),
+                  title: Text(
+                    widget.clientName,
+                    style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+                  ),
+                  backgroundColor: FundipapColors.blackGray,
+                  foregroundColor: Colors.white,
+                ),
+                body: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.cancel,
+                          size: 64,
+                          color: Colors.grey.shade400,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'You cancelled this job',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
             int myBidPrice = toInt(
               bid['price'] ?? bid['amount'] ?? bid['bidPrice'] ?? 0,
             );
@@ -226,6 +271,19 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                 List<Widget> timeline = [];
                 if (currentWaiting != null) timeline.add(currentWaiting);
                 timeline.addAll(doneHistory.reversed);
+
+                bool isTravellingNow =
+                    job['travelling'] == true || status == 'travelling';
+                bool isStartedNow = [
+                  'in_progress',
+                  'pending_completion',
+                  'job_completed',
+                ].contains(status);
+                bool canFundiCancelNow =
+                    !isTravellingNow &&
+                    !siteDone &&
+                    !isStartedNow &&
+                    !status.contains('cancel');
 
                 return Scaffold(
                   appBar: AppBar(
@@ -303,11 +361,16 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                       ),
                     ],
                   ),
-                  body: ListView.separated(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: timeline.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (_, i) => timeline[i],
+                  body: TimelineCancelWrapper(
+                    canCancel: canFundiCancelNow,
+                    jobId: widget.jobId,
+                    job: job,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: timeline.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (_, i) => timeline[i],
+                    ),
                   ),
                 );
               },

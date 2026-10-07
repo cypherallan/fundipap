@@ -2,39 +2,33 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../home/timeline/fundi_customer_timeline_page.dart';
 
 class FundiCancelledTab extends StatelessWidget {
   final Stream<QuerySnapshot> jobsStream;
-  const FundiCancelledTab({super.key, required this.jobsStream});
-
-  int _toInt(dynamic v) {
-    if (v == null) return 0;
-    if (v is int) return v;
-    if (v is double) return v.toInt();
-    if (v is num) return v.toInt();
-    return int.tryParse(v.toString()) ?? 0;
-  }
+  final Stream<QuerySnapshot> bidsStream;
+  const FundiCancelledTab({
+    super.key,
+    required this.jobsStream,
+    required this.bidsStream,
+  });
 
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
+
     return StreamBuilder<QuerySnapshot>(
-      stream: jobsStream,
+      stream: FirebaseFirestore.instance
+          .collection('fundis')
+          .doc(uid)
+          .collection('cancelledJobs')
+          .orderBy('cancelledAt', descending: true)
+          .snapshots(),
       builder: (_, snap) {
         if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
-        if (!snap.hasData) {
+        if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-
-        var docs = snap.data!.docs.where((d) {
-          var status = ((d.data() as Map)['status'] ?? '')
-              .toString()
-              .toLowerCase();
-          return status.contains('cancel');
-        }).toList();
-
-        if (docs.isEmpty) {
+        if (snap.data == null || snap.data!.docs.isEmpty) {
           return Center(
             child: Text(
               'No cancelled jobs',
@@ -45,20 +39,10 @@ class FundiCancelledTab extends StatelessWidget {
 
         return ListView.builder(
           padding: const EdgeInsets.all(12),
-          itemCount: docs.length,
+          itemCount: snap.data!.docs.length,
           itemBuilder: (_, i) {
-            var doc = docs[i];
-            var job = doc.data() as Map<String, dynamic>;
-            bool byClient =
-                (job['cancelledBy'] ?? '').toString().toLowerCase() == 'client';
-            bool afterArrival =
-                job['status'] == 'cancelled_after_arrival' ||
-                (job['wasPriceRequestPending'] == true);
-            // FIXED: safe int parse
-            int transport = _toInt(
-              job['transportFee'] ?? job['fundiPayout'] ?? 0,
-            );
-
+            var data = snap.data!.docs[i].data() as Map<String, dynamic>;
+            bool byClient = (data['cancelledBy'] ?? '').toString() == 'client';
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(12),
@@ -92,175 +76,35 @@ class FundiCancelledTab extends StatelessWidget {
                       ),
                       const Spacer(),
                       Text(
-                        byClient ? 'By Client' : 'By You',
+                        data['type'] == 'withdrawn'
+                            ? 'By You'
+                            : (byClient ? 'By Client' : 'By You'),
                         style: GoogleFonts.inter(fontSize: 10),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    job['title'] ?? '',
+                    data['title'] ?? 'Job',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Reason: ${job['cancelReason'] ?? ''}',
-                          style: GoogleFonts.inter(fontSize: 11),
-                        ),
-                        const SizedBox(height: 4),
-                        if (byClient && afterArrival)
-                          Text(
-                            'You get transport: KES $transport',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.green.shade700,
-                            ),
-                          ),
-                        if (byClient && !afterArrival)
-                          Text(
-                            'Cancelled before travel - no payout',
-                            style: GoogleFonts.inter(fontSize: 11),
-                          ),
-                        if (!byClient)
-                          Text(
-                            'You cancelled - counts to your rate',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              color: Colors.red.shade700,
-                            ),
-                          ),
-                      ],
+                  Text(
+                    'You cancelled this job',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  FutureBuilder<QuerySnapshot>(
-                    future: FirebaseFirestore.instance
-                        .collection('jobs')
-                        .where('repostedFrom', isEqualTo: doc.id)
-                        .limit(1)
-                        .get(),
-                    builder: (ctx, repSnap) {
-                      if (!repSnap.hasData || repSnap.data!.docs.isEmpty)
-                        return const SizedBox();
-                      var newDoc = repSnap.data!.docs.first;
-                      var newJob = newDoc.data() as Map<String, dynamic>;
-                      var escrow = (newJob['escrowStatus'] ?? '').toString();
-                      var status = (newJob['status'] ?? '')
-                          .toString()
-                          .toLowerCase();
-                      bool escrowLocked =
-                          [
-                            'held',
-                            'paid',
-                            'locked',
-                            'released',
-                          ].contains(escrow) ||
-                          status != 'open';
-
-                      if (escrowLocked) {
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.grey.shade300,
-                                foregroundColor: Colors.black54,
-                              ),
-                              icon: const Icon(Icons.block, size: 14),
-                              label: Text(
-                                'Job Unavailable',
-                                style: GoogleFonts.montserrat(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 11,
-                                ),
-                              ),
-                              onPressed: null,
-                            ),
-                          ),
-                        );
-                      }
-                      return FutureBuilder<QuerySnapshot>(
-                        future: newDoc.reference
-                            .collection('bids')
-                            .where('fundiId', isEqualTo: uid)
-                            .limit(1)
-                            .get(),
-                        builder: (ctx2, bidSnap) {
-                          bool alreadyBid =
-                              bidSnap.hasData && bidSnap.data!.docs.isNotEmpty;
-                          if (alreadyBid) {
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green.shade100,
-                                    foregroundColor: Colors.green.shade800,
-                                  ),
-                                  icon: const Icon(
-                                    Icons.check_circle,
-                                    size: 14,
-                                  ),
-                                  label: Text(
-                                    'You already placed a bid for this job',
-                                    style: GoogleFonts.montserrat(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                  onPressed: null,
-                                ),
-                              ),
-                            );
-                          }
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.black,
-                                  foregroundColor: Colors.white,
-                                ),
-                                icon: const Icon(Icons.refresh, size: 14),
-                                label: Text(
-                                  'CLIENT REPOSTED - VIEW NEW JOB',
-                                  style: GoogleFonts.montserrat(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                onPressed: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => FundiCustomerTimelinePage(
-                                      jobId: newDoc.id,
-                                      clientName:
-                                          newJob['customerName'] ?? 'Client',
-                                      jobTitle: newJob['title'] ?? '',
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
+                  Text(
+                    'Reason: ${data['cancelReason'] ?? 'Withdrawn'}',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      color: Colors.black45,
+                    ),
                   ),
                 ],
               ),
