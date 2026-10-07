@@ -188,24 +188,22 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
                 0)
             .toDouble();
 
-    // REAL TRANSPORT WITH MIN 100 RULE
     var transport = await TransportCalculator.calc(
       jobData: jobData,
       fundiId: bidData['fundiId'],
     );
     int transportFee = transport['fee'] as int;
-    if (transportFee < 100) transportFee = 100; // YOUR RULE: min 100 if <=1km
+    if (transportFee < 100) transportFee = 100;
     double km = transport['km'] as double;
     String mode = transport['mode'] as String;
 
     int labour = finalPrice.toInt();
     if (labour == 0) labour = (jobData['budgetMax'] ?? 1000) as int;
-    int clientAppFee = (labour * 0.05).round(); // 250 client sees
-    int fundiAppFee = (labour * 0.05).round(); // 250 hidden
-    int adminComm = clientAppFee + fundiAppFee; // 500
-    int totalLocked =
-        labour + transportFee + clientAppFee; // 5000+100+250=5350 CLIENT
-    int fundiPayout = labour - fundiAppFee + transportFee; // 4850 FUNDI
+    int clientAppFee = (labour * 0.05).round();
+    int fundiAppFee = (labour * 0.05).round();
+    int adminComm = clientAppFee + fundiAppFee;
+    int totalLocked = labour + transportFee + clientAppFee;
+    int fundiPayout = labour - fundiAppFee + transportFee;
 
     await jobRef.update({
       'assignedFundi': bidData['fundiId'],
@@ -214,7 +212,7 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
       'acceptedBidId': bidRef.id,
       'agreedPrice': labour,
       'laborCost': labour,
-      'transportFee': transportFee, // always >=100
+      'transportFee': transportFee,
       'transportDistanceKm': km,
       'transportMode': mode,
       'clientAppFee': clientAppFee,
@@ -229,7 +227,7 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
         'appFee': -fundiAppFee,
         'total': fundiPayout,
       },
-      'escrowAmount': 0, // stays 0 until Mpesa paid
+      'escrowAmount': 0,
       'escrowStatus': 'pending',
       'escrowJob': labour,
       'escrowTransport': transportFee,
@@ -257,7 +255,7 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
           'jobId': jobId,
           'clientId': FirebaseAuth.instance.currentUser!.uid,
           'fundiId': bidData['fundiId'],
-          'amount': totalLocked, // 5350 to be locked
+          'amount': totalLocked,
           'laborAmount': labour,
           'transportAmount': transportFee,
           'clientAppFee': clientAppFee,

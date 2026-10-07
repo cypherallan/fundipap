@@ -51,7 +51,6 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
     );
   }
 
-  // NEW SIGNATURE - receives receipt from ConfirmFundiPage
   Future<void> confirmFundi({
     int? totalToLock,
     int? clientAppFee,
@@ -78,16 +77,11 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
     double km = t['km'] as double;
     String mode = t['mode'] as String;
 
-    // YOUR RULE: 10% split = 5% client + 5% fundi, transport NOT deducted
-    int cAppFee =
-        clientAppFee ?? (finalPrice * 0.05).round(); // 250 client sees
-    int fAppFee =
-        fundiAppFee ?? (finalPrice * 0.05).round(); // 250 hidden from client
-    int adminComm = cAppFee + fAppFee; // 500 you keep
-    int totalLocked =
-        totalToLock ?? (finalPrice + transFee + cAppFee); // 5350 client pays
-    int fundiPayout =
-        fundiReceives ?? (finalPrice - fAppFee + transFee); // 4850 fundi gets
+    int cAppFee = clientAppFee ?? (finalPrice * 0.05).round();
+    int fAppFee = fundiAppFee ?? (finalPrice * 0.05).round();
+    int adminComm = cAppFee + fAppFee;
+    int totalLocked = totalToLock ?? (finalPrice + transFee + cAppFee);
+    int fundiPayout = fundiReceives ?? (finalPrice - fAppFee + transFee);
 
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'status': 'assigned',
@@ -99,20 +93,19 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
       'transportFee': transFee,
       'transportDistanceKm': km,
       'transportMode': mode,
-      // NEW BREAKDOWN - THIS IS WHERE YOUR PROFIT IS LOCKED
       'clientAppFee': cAppFee,
       'fundiAppFee': fAppFee,
       'adminCommission': adminComm,
-      'totalCost': totalLocked, // 5350 - shown to client as total
+      'totalCost': totalLocked,
       'totalClientPays': totalLocked,
-      'fundiReceives': fundiPayout, // 4850 - shown to fundi only on completion
+      'fundiReceives': fundiPayout,
       'fundiReceivesBreakdown': {
         'labour': finalPrice,
         'transport': transFee,
         'appFee': -fAppFee,
         'total': fundiPayout,
       },
-      'escrowAmount': 0, // stays 0 until Mpesa paid
+      'escrowAmount': 0,
       'escrowStatus': 'pending',
       'acceptedBidAmount': finalPrice,
       'acceptedBidId': bidId,
@@ -143,13 +136,13 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
           'jobId': jobId,
           'clientId': FirebaseAuth.instance.currentUser!.uid,
           'fundiId': bidData['fundiId'],
-          'amount': totalLocked, // 5350 to be locked
-          'laborAmount': finalPrice, // 5000
-          'transportAmount': transFee, // 100
-          'clientAppFee': cAppFee, // 250
-          'fundiAppFee': fAppFee, // 250
-          'adminCommission': adminComm, // 500
-          'fundiPayout': fundiPayout, // 4850
+          'amount': totalLocked,
+          'laborAmount': finalPrice,
+          'transportAmount': transFee,
+          'clientAppFee': cAppFee,
+          'fundiAppFee': fAppFee,
+          'adminCommission': adminComm,
+          'fundiPayout': fundiPayout,
           'status': 'pending_payment',
           'createdAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));

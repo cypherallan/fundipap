@@ -39,7 +39,6 @@ class ConfirmFundiBidCard extends StatelessWidget {
         status == 'countered' &&
         (bidData['counterBy'] ?? bidData['lastCounterBy'] ?? '') == 'client';
 
-    // FIX: new countered offer calculations - use agreedPrice / clientCounter first
     int effectiveLabor = _toInt(
       bidData['agreedPrice'] ??
           bidData['effectiveLabor'] ??
@@ -65,8 +64,7 @@ class ConfirmFundiBidCard extends StatelessWidget {
 
     int transport = _calcTransport(jobData, bidData);
     int clientAppFee = (effectiveLabor * 0.05).round();
-    int totalToLock =
-        effectiveLabor + transport + clientAppFee; // 5000+100+250=5350
+    int totalToLock = effectiveLabor + transport + clientAppFee;
 
     return Container(
       padding: const EdgeInsets.all(12),

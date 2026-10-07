@@ -4,9 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../services/dynamic_pricing_service.dart';
 
-/// CLIENT BID LIST WITH FILTERING - Price, Rating, Jobs Done, Distance, Zero Fraud
-/// Shows average range for that service
-
 class ClientBidFilterBar extends StatelessWidget {
   final String selectedSort;
   final bool ascending;
@@ -94,7 +91,6 @@ class ClientBidFilterBar extends StatelessWidget {
   }
 }
 
-/// Full Bid List Widget for Confirm Fundi Page
 class ClientBidsListWithFilter extends StatefulWidget {
   final String jobId;
   final String categoryId;
@@ -122,7 +118,6 @@ class _ClientBidsListWithFilterState extends State<ClientBidsListWithFilter> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Market average header
         StreamBuilder<DocumentSnapshot>(
           stream: DynamicPricingService.statsStream(
             widget.categoryId,
@@ -316,10 +311,7 @@ class _ClientBidsListWithFilterState extends State<ClientBidsListWithFilter> {
                           vertical: 8,
                         ),
                       ),
-                      onPressed: () {
-                        // Accept bid -> renegotiation can start
-                        // Your existing confirm_fundi logic here
-                      },
+                      onPressed: () {},
                       child: Text(
                         'View',
                         style: GoogleFonts.montserrat(

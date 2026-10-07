@@ -14,10 +14,10 @@ class CounterAcceptedSteps {
 
     if (!isThisFundiAccepted || alreadyAssigned) return false;
 
-    final labour = c.labour; // 5000
-    final transport = c.transport; // 100
-    final fee = c.clientAppFee; // 250
-    final total = c.totalToPay; // 5350
+    final labour = c.labour;
+    final transport = c.transport;
+    final fee = c.clientAppFee;
+    final total = c.totalToPay;
 
     t.add(
       TimelineCard(
@@ -40,6 +40,6 @@ class CounterAcceptedSteps {
         ),
       ),
     );
-    return true; // stop timeline here, don't show escrow yet
+    return true;
   }
 }

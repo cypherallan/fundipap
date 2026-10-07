@@ -15,7 +15,6 @@ class ConfirmFundiProfileCard extends StatelessWidget {
     var profession = combined['profession'] ?? combined['skill'] ?? 'Fundi';
     var bio = combined['bio'] ?? 'No bio yet';
 
-    // badge data from Firestore (written by FundiBadgeService.recalcAndUpdate)
     String badgeStr = (combined['badgeLevel'] ?? 'none').toString();
     BadgeLevel level = BadgeLevel.values.firstWhere(
       (e) => e.name == badgeStr,

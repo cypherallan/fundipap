@@ -11,7 +11,7 @@ class ConfirmFundiReviews extends StatefulWidget {
 }
 
 class _ConfirmFundiReviewsState extends State<ConfirmFundiReviews> {
-  bool _expanded = false; // default = hide
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {

@@ -29,7 +29,6 @@ class ConfirmFundiBottomActions extends StatelessWidget {
   });
 
   int _enforceMinTransport(int fee, double km) {
-    // YOUR RULE: min 100 if <=1km, maths if >1km but never <100
     if (fee <= 0) fee = 100;
     if (km > 0 && km <= 1.0 && fee < 100) return 100;
     if (fee < 100) return 100;
@@ -48,7 +47,6 @@ class ConfirmFundiBottomActions extends StatelessWidget {
         ? total
         : displayLabor + effectiveTransport + displayAppFee;
 
-    // Force total to always include min transport
     if (total == 0 || transportFee == 0) {
       displayTotal = displayLabor + effectiveTransport + displayAppFee;
     }

@@ -67,7 +67,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
   }
 
   int _getEffectiveLabor() {
-    // FIX: new countered offer calculations - use agreedPrice / client counter first
     final b = widget.bidData;
     return ((b['agreedPrice'] ??
                 b['clientCounterAmount'] ??
@@ -102,7 +101,7 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         labor = lab;
         clientAppFee = cFee;
         fundiAppFee = fFee;
-        totalClientPays = lab + trans + cFee; // 5000 + 100 + 250 = 5350
+        totalClientPays = lab + trans + cFee;
         fundiReceives = lab - fFee + trans;
         transportLoading = false;
       });

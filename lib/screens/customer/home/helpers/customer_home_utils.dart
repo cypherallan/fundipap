@@ -34,8 +34,9 @@ BadgeLevel parseBadge(String? s) {
 
 double getFundiLat(Map<String, dynamic>? f) {
   if (f == null) return 0;
-  if (f['liveLocation'] is GeoPoint)
+  if (f['liveLocation'] is GeoPoint) {
     return (f['liveLocation'] as GeoPoint).latitude;
+  }
   if (f['location'] is GeoPoint) return (f['location'] as GeoPoint).latitude;
   if (f['lat'] != null) return (f['lat'] as num).toDouble();
   if (f['latitude'] != null) return (f['latitude'] as num).toDouble();
@@ -44,8 +45,9 @@ double getFundiLat(Map<String, dynamic>? f) {
 
 double getFundiLng(Map<String, dynamic>? f) {
   if (f == null) return 0;
-  if (f['liveLocation'] is GeoPoint)
+  if (f['liveLocation'] is GeoPoint) {
     return (f['liveLocation'] as GeoPoint).longitude;
+  }
   if (f['location'] is GeoPoint) return (f['location'] as GeoPoint).longitude;
   if (f['lng'] != null) return (f['lng'] as num).toDouble();
   if (f['longitude'] != null) return (f['longitude'] as num).toDouble();
@@ -76,13 +78,11 @@ Future<List<BidWithFundi>> enrichBids(
       Map<String, dynamic>? fundiLive;
 
       if (fid.isNotEmpty) {
-        // users for badge/rating
         var d = await FirebaseFirestore.instance
             .collection('users')
             .doc(fid)
             .get();
         f = d.data();
-        // fundis for LIVE location - force server
         try {
           var liveDoc = await FirebaseFirestore.instance
               .collection('fundis')
@@ -96,11 +96,9 @@ Future<List<BidWithFundi>> enrichBids(
 
       double dist = 0;
       if (userPos != null) {
-        // prefer live fundi location
         var locSource = fundiLive ?? f;
         double fLat = getFundiLat(locSource);
         double fLng = getFundiLng(locSource);
-        // also check liveLocation GeoPoint
         if (locSource != null) {
           var geo =
               locSource['liveLocation'] ??
@@ -155,6 +153,8 @@ Future<void> deleteJob(String jobId) async {
       .doc(jobId)
       .collection('bids')
       .get();
-  for (var d in bids.docs) await d.reference.delete();
+  for (var d in bids.docs) {
+    await d.reference.delete();
+  }
   await FirebaseFirestore.instance.collection('jobs').doc(jobId).delete();
 }
