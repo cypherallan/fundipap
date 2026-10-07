@@ -32,7 +32,7 @@ class FundiJobCard extends StatelessWidget {
     final budgetText = 'KES $offered';
     final distanceText = distanceKm != null
         ? '${distanceKm!.toStringAsFixed(1)}km away'
-        : (data['distance'] ?? 'Kisumu');
+        : 'Calculating...';
 
     return InkWell(
       onTap: onTap,
@@ -205,7 +205,7 @@ class FundiJobCard extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              data['location'] ?? 'Kisumu',
+              data['location'] ?? data['address'] ?? '',
               style: GoogleFonts.inter(fontSize: 10, color: Colors.black54),
             ),
             const SizedBox(height: 10),
