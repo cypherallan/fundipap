@@ -310,7 +310,12 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
     if (isMarking) return;
     setState(() => isMarking = true);
 
-    double fee = calculateTransportFee(finalDistance);
+    double lockedFee =
+        (widget.job['transportFee'] ?? widget.job['transportFeeLocked'] ?? 0)
+            .toDouble();
+    double fee = lockedFee > 0
+        ? lockedFee
+        : calculateTransportFee(finalDistance);
     await FirebaseFirestore.instance
         .collection('jobs')
         .doc(widget.jobId)
@@ -351,8 +356,16 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
     bool canMark =
         pos != null && distance != null && distance! <= 100 && !isMarking;
     bool within100 = distance != null && distance! <= 100;
-    double fee = distance != null ? calculateTransportFee(distance!) : 100;
-
+    // FIXED: use locked transportFee, not new GPS calc
+    double lockedFee =
+        (widget.job['transportFee'] ??
+                widget.job['transportFeeLocked'] ??
+                widget.job['agreedTransportFee'] ??
+                0)
+            .toDouble();
+    double fee = lockedFee > 0
+        ? lockedFee
+        : (distance != null ? calculateTransportFee(distance!) : 100);
     return Scaffold(
       appBar: AppBar(
         title: Text(
