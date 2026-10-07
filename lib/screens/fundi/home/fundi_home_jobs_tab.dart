@@ -49,28 +49,44 @@ class FundiHomeJobsTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            children: [
-              Chip(
-                label: Text(
-                  'For You: $mySkill',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
+          Builder(
+            builder: (context) {
+              // real city from fundi profile, fallback to "Near you"
+              final String locName =
+                  (me != null &&
+                      me!['location'] != null &&
+                      me!['location'].toString().trim().isNotEmpty)
+                  ? me!['location'].toString()
+                  : 'Near you';
+
+              final String radiusText = currentPos != null
+                  ? '5km'
+                  : 'Set location';
+
+              return Wrap(
+                spacing: 8,
+                children: [
+                  Chip(
+                    label: Text(
+                      'For You: $mySkill',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    backgroundColor: FundipapColors.primaryYellow,
                   ),
-                ),
-                backgroundColor: FundipapColors.primaryYellow,
-              ),
-              Chip(
-                label: Text(
-                  'Kisumu • 5km',
-                  style: GoogleFonts.inter(fontSize: 10),
-                ),
-                backgroundColor: Colors.white10,
-                labelStyle: const TextStyle(color: Colors.white70),
-              ),
-            ],
+                  Chip(
+                    label: Text(
+                      '$locName • $radiusText',
+                      style: GoogleFonts.inter(fontSize: 10),
+                    ),
+                    backgroundColor: Colors.white10,
+                    labelStyle: const TextStyle(color: Colors.white70),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 16),
           Text(

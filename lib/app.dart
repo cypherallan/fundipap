@@ -19,7 +19,7 @@ class FundiPapApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Fundi Pap - Kisumu',
+      title: 'Fundi Pap',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       home: const AuthGate(),

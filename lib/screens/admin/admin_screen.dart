@@ -410,7 +410,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
               const SizedBox(height: 20),
               Text(
-                'Top 6 Money Makers (80% jobs Kisumu/Nairobi)',
+                'Top 6 Money Makers (80% jobs)',
                 style: GoogleFonts.montserrat(
                   fontWeight: FontWeight.w700,
                   fontSize: 13,

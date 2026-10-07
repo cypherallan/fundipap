@@ -186,7 +186,7 @@ class CustomerFundiProfileScreen extends StatelessWidget {
               child: Text(
                 fundi['bio'] ??
                     fundi['description'] ??
-                    'Experienced ${fundi['skill'] ?? 'fundi'} in Kisumu. Verified, reliable, and rated highly by clients.',
+                    'Experienced ${fundi['skill'] ?? 'fundi'}. Verified, reliable, and rated highly by clients.',
                 style: GoogleFonts.inter(fontSize: 13),
               ),
             ),

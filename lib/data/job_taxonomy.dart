@@ -1,8 +1,3 @@
-/// FundiPap Kenya - Full 24 Category Taxonomy - COMPREHENSIVE INSTALLATIONS EDITION
-/// Top 6 money makers: Plumbing, Electrical, Appliance, Carpentry, Welding, Automotive = 80% jobs in Kisumu/Nairobi
-/// Every category now has Repair & Installation subcategories - covers ALL possible installations
-/// PRICING RULE: Client and Fundi NEVER dictate price. System dictates via baseMin/baseMax + siteVisitFee
-
 class FundiTaxonomy {
   static const int siteVisitFeeStandard = 500; // KES - mandatory for all
   static const int siteVisitFeeOther = 700; // For Other / custom jobs

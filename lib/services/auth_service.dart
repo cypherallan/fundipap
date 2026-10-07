@@ -25,7 +25,7 @@ class AuthService {
     String? username,
     String? profession,
     String? searchKeyword,
-    List<String>? otherSkills, // NEW
+    List<String>? otherSkills,
   }) async {
     var cred = await _auth.createUserWithEmailAndPassword(
       email: email,
@@ -42,7 +42,7 @@ class AuthService {
       'skill': profession ?? 'General',
       'profession': profession ?? 'General',
       'searchKeyword': searchKeyword ?? profession?.toLowerCase() ?? 'general',
-      'otherSkills': otherSkills ?? [], // NEW - your other skills
+      'otherSkills': otherSkills ?? [],
       'photoUrl': null,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -57,9 +57,8 @@ class AuthService {
         'profession': profession ?? 'General',
         'searchKeyword':
             searchKeyword ?? profession?.toLowerCase() ?? 'general',
-        'otherSkills': otherSkills ?? [], // NEW
-        'specialization':
-            profession ?? 'General', // for badge "Specializes in..."
+        'otherSkills': otherSkills ?? [],
+        'specialization': profession ?? 'General',
         'bio': '',
         'price': 0,
         'rating': 5.0,
@@ -68,7 +67,10 @@ class AuthService {
         'resumes': [],
         'certificates': [],
         'portfolio': [],
-        'location': 'Kisumu',
+        'location': '',
+        'locationLat': null,
+        'locationLng': null,
+        'locationSet': false,
         'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     }

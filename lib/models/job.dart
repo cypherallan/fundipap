@@ -85,7 +85,7 @@ class Job {
     required this.systemPriceAvg,
     required this.siteVisitFee,
     required this.estimatedTotal,
-    this.pricingVersion = 'v1_2025_kisumu',
+    this.pricingVersion = 'v1_2025',
     this.priceDictatedBy = 'system',
     this.requiresSiteVisit = true,
     this.isOtherCategory = false,
@@ -154,7 +154,7 @@ class Job {
       siteVisitFee: (d['siteVisitFee'] ?? FundiTaxonomy.siteVisitFeeStandard)
           .toInt(),
       estimatedTotal: (d['estimatedTotal'] ?? 0).toInt(),
-      pricingVersion: d['pricingVersion'] ?? 'v1_2025_kisumu',
+      pricingVersion: d['pricingVersion'] ?? 'v1_2025',
       priceDictatedBy: d['priceDictatedBy'] ?? 'system',
       requiresSiteVisit: d['requiresSiteVisit'] ?? true,
       isOtherCategory: d['isOtherCategory'] ?? false,

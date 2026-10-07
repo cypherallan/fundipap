@@ -637,7 +637,7 @@ class _FundiProfileState extends State<FundiProfile> {
               maxLines: 4,
               decoration: InputDecoration(
                 hintText:
-                    'e.g I install & repair washing machines, dishwashers, TVs. 5 years experience in Kisumu...',
+                    'e.g I install & repair washing machines, dishwashers, TVs. 5 years experience...',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),

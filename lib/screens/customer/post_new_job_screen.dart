@@ -257,20 +257,14 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
         'budgetMax': priceInfo['max'],
         'photos': allPhotos,
         'images': allPhotos,
-
-        // === PRECISE CLIENT LOCATION AT POST TIME - SINGLE SOURCE OF TRUTH ===
-        // Canonical fields - use these everywhere for distance/transport
-        'jobLocation': jobGeo, // main GeoPoint for queries
+        'jobLocation': jobGeo,
         'jobLat': pos.latitude,
         'jobLng': pos.longitude,
-        'originalJobLat':
-            pos.latitude, // immutable reference for transport calc
+        'originalJobLat': pos.latitude,
         'originalJobLng': pos.longitude,
         'originalJobLocation': jobGeo,
         'locationCapturedAt': FieldValue.serverTimestamp(),
         'locationAccuracy': accuracy,
-
-        // Backward compat - keep old keys but with REAL values, no Kisumu string
         'customerLat': pos.latitude,
         'customerLng': pos.longitude,
         'clientLat': pos.latitude,
@@ -280,7 +274,6 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
         'clientLocation': jobGeo,
         'customerLocation': jobGeo,
         'locationGeoPoint': jobGeo,
-        // FIXED: remove hardcoded 'Kisumu' - save as lat,lng, you can reverse geocode later
         'location':
             '${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)}',
         'locationString':
@@ -290,7 +283,6 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
       };
 
       if (isEdit) {
-        // On edit, DON'T overwrite original reference location - keep transport base same
         jobPayload.remove('originalJobLat');
         jobPayload.remove('originalJobLng');
         jobPayload.remove('originalJobLocation');
