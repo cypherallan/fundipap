@@ -4,11 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import 'fundi_penalty_service.dart';
-import 'fundi_badge_service.dart'; // for auto recalc
-/// FINAL CANCEL SERVICE - FIXED FOR PRICE REQUEST PENDING BUG
-/// Bug: labour 6000, transport 100, total locked 5350 -> showed refund 5700 (> locked)
-/// Fix: when renegotiation pending + extra NOT locked, use OLD labour for fee/refund
-
+import 'fundi_badge_service.dart'; 
 class JobCancelService {
   static const double feeRate = 0.05;
 
