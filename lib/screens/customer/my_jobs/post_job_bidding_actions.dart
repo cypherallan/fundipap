@@ -118,6 +118,24 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
         .collection('jobs')
         .doc(jobId)
         .get();
+
+    var bidSnap = await bidRef.get();
+    var bidData = bidSnap.data() as Map<String, dynamic>?;
+    var transport = await TransportCalculator.calc(
+      jobData: jobSnap.data() ?? {},
+      fundiId: bidData?['fundiId'],
+    );
+    int transportFee = transport['fee'] as int;
+    if (transportFee < 100) transportFee = 100;
+    var jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
+    await jobRef.update({
+      'transportFee': transportFee,
+      'transportDistanceKm': transport['km'],
+      'transportMode': transport['mode'],
+      'transportLocked': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
     var hasReneg = (jobSnap.data()?['renegotiation']?['requested'] == true);
     if (hasReneg) {
       await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
