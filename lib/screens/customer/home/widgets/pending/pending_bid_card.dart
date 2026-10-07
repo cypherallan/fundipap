@@ -218,57 +218,58 @@ class PendingBidCard extends StatelessWidget {
                                 .doc(fundiId)
                                 .snapshots(),
                             builder: (_, fundiSnap) {
-                              double km = bid.distanceKm;
+                              if (!fundiSnap.hasData ||
+                                  !fundiSnap.data!.exists) {
+                                return const SizedBox.shrink();
+                              }
+                              double km = 0;
                               try {
-                                if (fundiSnap.hasData &&
-                                    fundiSnap.data!.exists) {
-                                  var fData =
-                                      fundiSnap.data!.data()
-                                          as Map<String, dynamic>;
-                                  var fGeo =
-                                      fData['liveLocation'] ??
-                                      fData['location'] ??
-                                      fData['geopoint'];
-                                  var jGeo =
-                                      jobData['geopoint'] ??
-                                      jobData['location'] ??
-                                      jobData['liveLocation'];
-                                  double? fLat, fLng, jLat, jLng;
-                                  if (fGeo is GeoPoint) {
-                                    fLat = fGeo.latitude;
-                                    fLng = fGeo.longitude;
-                                  }
-                                  if (jGeo is GeoPoint) {
-                                    jLat = jGeo.latitude;
-                                    jLng = jGeo.longitude;
-                                  }
-                                  fLat ??= (fData['lat'] ?? fData['latitude'])
-                                      ?.toDouble();
-                                  fLng ??= (fData['lng'] ?? fData['longitude'])
-                                      ?.toDouble();
-                                  jLat ??=
-                                      (jobData['lat'] ?? jobData['latitude'])
-                                          ?.toDouble();
-                                  jLng ??=
-                                      (jobData['lng'] ?? jobData['longitude'])
-                                          ?.toDouble();
-                                  if (fLat != null &&
-                                      fLng != null &&
-                                      jLat != null &&
-                                      jLng != null) {
-                                    km =
-                                        Geolocator.distanceBetween(
-                                          jLat,
-                                          jLng,
-                                          fLat,
-                                          fLng,
-                                        ) /
-                                        1000;
-                                  }
+                                var fData =
+                                    fundiSnap.data!.data()
+                                        as Map<String, dynamic>;
+                                var fGeo =
+                                    fData['liveLocation'] ??
+                                    fData['location'] ??
+                                    fData['geopoint'];
+                                var jGeo =
+                                    jobData['geopoint'] ??
+                                    jobData['location'] ??
+                                    jobData['liveLocation'];
+                                double? fLat, fLng, jLat, jLng;
+                                if (fGeo is GeoPoint) {
+                                  fLat = fGeo.latitude;
+                                  fLng = fGeo.longitude;
+                                }
+                                if (jGeo is GeoPoint) {
+                                  jLat = jGeo.latitude;
+                                  jLng = jGeo.longitude;
+                                }
+                                fLat ??= (fData['lat'] ?? fData['latitude'])
+                                    ?.toDouble();
+                                fLng ??= (fData['lng'] ?? fData['longitude'])
+                                    ?.toDouble();
+                                jLat ??= (jobData['lat'] ?? jobData['latitude'])
+                                    ?.toDouble();
+                                jLng ??=
+                                    (jobData['lng'] ?? jobData['longitude'])
+                                        ?.toDouble();
+                                if (fLat != null &&
+                                    fLng != null &&
+                                    jLat != null &&
+                                    jLng != null) {
+                                  km =
+                                      Geolocator.distanceBetween(
+                                        jLat,
+                                        jLng,
+                                        fLat,
+                                        fLng,
+                                      ) /
+                                      1000;
                                 }
                               } catch (_) {}
+                              if (km <= 0.05) return const SizedBox.shrink();
                               return Text(
-                                km > 0 ? ' (${km.toStringAsFixed(1)} km)' : '',
+                                ' (${km.toStringAsFixed(1)} km)',
                                 style: GoogleFonts.montserrat(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 11,
