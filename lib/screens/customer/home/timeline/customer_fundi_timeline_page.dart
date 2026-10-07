@@ -110,6 +110,17 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
           bool isCancelled = status.toLowerCase().contains('cancel');
           bool canClientCancel = !isStarted && !isCancelled;
 
+          // Extract fixed job location for banner
+          var jobLoc =
+              job['location'] ?? widget.jobData['location'] ?? 'Job site';
+          var jobGeo =
+              job['geopoint'] ?? job['location'] ?? widget.jobData['geopoint'];
+          String jobLatLng = '';
+          if (jobGeo is GeoPoint) {
+            jobLatLng =
+                '${jobGeo.latitude.toStringAsFixed(4)}, ${jobGeo.longitude.toStringAsFixed(4)}';
+          }
+
           List<Widget> timeline = TimelineStepsBuilder.build(
             context: context,
             job: job,
@@ -118,6 +129,55 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
             jobId: widget.jobId,
             releasing: _releasing,
             onReleasing: (v) => setState(() => _releasing = v),
+          );
+
+          // Fixed location banner - ALWAYS at top
+          Widget locationBanner = Container(
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blue.shade300, width: 1.2),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.push_pin, color: Colors.blue.shade700, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Job site (fixed when you posted)',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$jobLoc${jobLatLng.isNotEmpty ? ' • $jobLatLng' : ''}',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Fundi ${widget.fundiName} will come HERE, even if you move to a different location. This location does not follow you.',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           );
 
           // STATE 1: You countered 2000 -> 1000, waiting for fundi
@@ -170,11 +230,8 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ],
               ),
             );
-            timeline = [waitingCounter, ...timeline];
-          }
-
-          // STATE 2: Fundi accepted your 1000 counter - NOW YOU MUST LOCK 1050
-          if (isRenegApprovedNeedsTopup) {
+            timeline = [locationBanner, waitingCounter, ...timeline];
+          } else if (isRenegApprovedNeedsTopup) {
             int approvedExtra = _toInt(
               reneg?['approvedExtra'] ??
                   reneg?['counterExtraLabor'] ??
@@ -231,8 +288,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                         backgroundColor: Colors.blue.shade800,
                       ),
                       onPressed: () {
-                        // TODO: call your existing escrow topup function - pass approvedToLock
-                        // Example: EscrowService.topup(jobId: widget.jobId, amount: approvedToLock)
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
@@ -253,8 +308,13 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
                 ],
               ),
             );
-            // Put topup card at TOP and hide the fake "escrow locked - waiting for fundi to travel"
-            timeline = [waitingTopup, ...timeline.where((w) => true)];
+            timeline = [
+              locationBanner,
+              waitingTopup,
+              ...timeline.where((w) => true),
+            ];
+          } else {
+            timeline = [locationBanner, ...timeline];
           }
 
           Widget list = ReversedTimelineList.buildList(timeline);

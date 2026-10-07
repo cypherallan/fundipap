@@ -28,8 +28,8 @@ class _PostJobScreenState extends State<PostJobScreen>
   Widget build(BuildContext context) {
     var uid = FirebaseAuth.instance.currentUser!.uid;
     return DefaultTabController(
-      length: 4, // was 5, Pending removed
-      initialIndex: widget.initialTabIndex.clamp(0, 3), // adjust
+      length: 4,
+      initialIndex: widget.initialTabIndex.clamp(0, 3),
       child: Column(
         children: [
           Container(
@@ -51,27 +51,63 @@ class _PostJobScreenState extends State<PostJobScreen>
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PostNewJobScreen()),
-                ),
-                icon: const Icon(Icons.add, color: Colors.black),
-                label: Text(
-                  'Post New Job',
-                  style: GoogleFonts.montserrat(
-                    fontWeight: FontWeight.w800,
-                    color: Colors.black,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PostNewJobScreen(),
+                      ),
+                    ),
+                    icon: const Icon(Icons.add, color: Colors.black),
+                    label: Text(
+                      'Post New Job',
+                      style: GoogleFonts.montserrat(
+                        fontWeight: FontWeight.w800,
+                        color: Colors.black,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: FundipapColors.primaryYellow,
+                    ),
                   ),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: FundipapColors.primaryYellow,
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.location_on,
+                        color: Colors.blue.shade700,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Fundi will navigate to the location you set when posting the job.',
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blue.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
           Expanded(
