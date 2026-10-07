@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../../theme/app_theme.dart';
 import '../../../../../widgets/fundi_badge_chip.dart';
@@ -70,7 +71,7 @@ class PendingBidCard extends StatelessWidget {
             ),
           ),
           content: Text(
-            '${bid.bid['fundiName'] ?? 'Fundi'} accepted your KES ${((bid.bid['agreedPrice'] ?? bid.bid['clientCounterAmount'] ?? 0) as num).toInt()} counter. Do you want to cancel and keep the job pending for other fundis?',
+            '${bid.bid['fundiName'] ?? 'Fundi'} accepted your KES ${((bid.bid['agreedPrice'] ?? bid.bid['clientCounterAmount'] ?? 0) as num).toInt()} counter. Do you want to cancel?',
             style: GoogleFonts.inter(fontSize: 12),
           ),
           actions: [
@@ -92,19 +93,15 @@ class PendingBidCard extends StatelessWidget {
         ),
       );
       if (ok != true) return;
-
       try {
-        if (navContext.mounted) {
+        if (navContext.mounted)
           showDialog(
             context: navContext,
             barrierDismissible: false,
             builder: (_) => const Center(child: CircularProgressIndicator()),
           );
-        }
         final bidId = bid.bidDoc.id;
         final fundiId = (bid.bid['fundiId'] ?? bidId).toString();
-
-        // remove accepted state
         await FirebaseFirestore.instance
             .collection('jobs')
             .doc(jobId)
@@ -119,13 +116,10 @@ class PendingBidCard extends StatelessWidget {
           'counterAcceptedBids': FieldValue.arrayRemove([bidId]),
           'lastCounterAcceptedBy': FieldValue.delete(),
         });
-
         if (navContext.mounted) Navigator.pop(navContext);
         if (navContext.mounted)
           ScaffoldMessenger.of(navContext).showSnackBar(
-            const SnackBar(
-              content: Text('Cancelled. Job stays pending for other fundis.'),
-            ),
+            const SnackBar(content: Text('Cancelled. Job stays pending.')),
           );
       } catch (e) {
         if (navContext.mounted) Navigator.pop(navContext);
@@ -135,10 +129,6 @@ class PendingBidCard extends StatelessWidget {
           ).showSnackBar(SnackBar(content: Text('Failed: $e')));
       }
     }
-
-    String distanceText = bid.distanceKm > 0
-        ? ' (${bid.distanceKm.toStringAsFixed(1)} km)'
-        : '';
 
     final status = (bid.bid['status'] ?? '').toString();
     final counterBy = (bid.bid['counterBy'] ?? bid.bid['lastCounterBy'] ?? '')
@@ -150,7 +140,6 @@ class PendingBidCard extends StatelessWidget {
         status == 'counter_accepted_by_fundi' ||
         status == 'counter_accepted' ||
         status == 'counter_accepted_by_fundi_pending';
-
     final myCounterAmt =
         ((bid.bid['clientCounterAmount'] ?? bid.bid['lastCounterAmount'] ?? 0)
                 as num)
@@ -166,6 +155,7 @@ class PendingBidCard extends StatelessWidget {
                 as num)
             .toInt();
     final fundiName = (bid.bid['fundiName'] ?? 'Fundi').toString();
+    final fundiId = (bid.bid['fundiId'] ?? bid.bidDoc.id).toString();
 
     Color bg = const Color(0xFFF8F8F8);
     Color border = Colors.black12;
@@ -212,13 +202,80 @@ class PendingBidCard extends StatelessWidget {
                         children: [
                           Flexible(
                             child: Text(
-                              '$fundiName$distanceText',
+                              fundiName,
                               style: GoogleFonts.montserrat(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 12,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
+                          ),
+                          const SizedBox(width: 4),
+                          // LIVE DISTANCE STREAM
+                          StreamBuilder<DocumentSnapshot>(
+                            stream: FirebaseFirestore.instance
+                                .collection('fundis')
+                                .doc(fundiId)
+                                .snapshots(),
+                            builder: (_, fundiSnap) {
+                              double km = bid.distanceKm;
+                              try {
+                                if (fundiSnap.hasData &&
+                                    fundiSnap.data!.exists) {
+                                  var fData =
+                                      fundiSnap.data!.data()
+                                          as Map<String, dynamic>;
+                                  var fGeo =
+                                      fData['liveLocation'] ??
+                                      fData['location'] ??
+                                      fData['geopoint'];
+                                  var jGeo =
+                                      jobData['geopoint'] ??
+                                      jobData['location'] ??
+                                      jobData['liveLocation'];
+                                  double? fLat, fLng, jLat, jLng;
+                                  if (fGeo is GeoPoint) {
+                                    fLat = fGeo.latitude;
+                                    fLng = fGeo.longitude;
+                                  }
+                                  if (jGeo is GeoPoint) {
+                                    jLat = jGeo.latitude;
+                                    jLng = jGeo.longitude;
+                                  }
+                                  fLat ??= (fData['lat'] ?? fData['latitude'])
+                                      ?.toDouble();
+                                  fLng ??= (fData['lng'] ?? fData['longitude'])
+                                      ?.toDouble();
+                                  jLat ??=
+                                      (jobData['lat'] ?? jobData['latitude'])
+                                          ?.toDouble();
+                                  jLng ??=
+                                      (jobData['lng'] ?? jobData['longitude'])
+                                          ?.toDouble();
+                                  if (fLat != null &&
+                                      fLng != null &&
+                                      jLat != null &&
+                                      jLng != null) {
+                                    km =
+                                        Geolocator.distanceBetween(
+                                          jLat,
+                                          jLng,
+                                          fLat,
+                                          fLng,
+                                        ) /
+                                        1000;
+                                  }
+                                }
+                              } catch (_) {}
+                              return Text(
+                                km > 0 ? ' (${km.toStringAsFixed(1)} km)' : '',
+                                style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                  color: Colors.black54,
+                                ),
+                              );
+                            },
                           ),
                           if (bid.verified)
                             const Padding(
@@ -305,7 +362,6 @@ class PendingBidCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-
             if (isAcceptedCounter)
               Column(
                 children: [
@@ -353,8 +409,7 @@ class PendingBidCard extends StatelessWidget {
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
-                          onPressed:
-                              openConfirm, // FIX: goes to ConfirmFundiPage to see 5350 breakdown
+                          onPressed: openConfirm,
                           child: Text(
                             'PROCEED WITH ${fundiName.toUpperCase()}',
                             style: GoogleFonts.montserrat(

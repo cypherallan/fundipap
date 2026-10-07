@@ -34,17 +34,21 @@ BadgeLevel parseBadge(String? s) {
 
 double getFundiLat(Map<String, dynamic>? f) {
   if (f == null) return 0;
+  if (f['liveLocation'] is GeoPoint)
+    return (f['liveLocation'] as GeoPoint).latitude;
+  if (f['location'] is GeoPoint) return (f['location'] as GeoPoint).latitude;
   if (f['lat'] != null) return (f['lat'] as num).toDouble();
   if (f['latitude'] != null) return (f['latitude'] as num).toDouble();
-  if (f['location'] is GeoPoint) return (f['location'] as GeoPoint).latitude;
   return 0;
 }
 
 double getFundiLng(Map<String, dynamic>? f) {
   if (f == null) return 0;
+  if (f['liveLocation'] is GeoPoint)
+    return (f['liveLocation'] as GeoPoint).longitude;
+  if (f['location'] is GeoPoint) return (f['location'] as GeoPoint).longitude;
   if (f['lng'] != null) return (f['lng'] as num).toDouble();
   if (f['longitude'] != null) return (f['longitude'] as num).toDouble();
-  if (f['location'] is GeoPoint) return (f['location'] as GeoPoint).longitude;
   return 0;
 }
 
@@ -53,7 +57,8 @@ int calcProfilePct(Map<String, dynamic>? data) {
   int total = 5, done = 0;
   if ((data['name'] ?? '').toString().isNotEmpty) done++;
   if ((data['phone'] ?? '').toString().isNotEmpty) done++;
-  if ((data['photoUrl'] ?? data['profileImage'] ?? '').toString().isNotEmpty) done++;
+  if ((data['photoUrl'] ?? data['profileImage'] ?? '').toString().isNotEmpty)
+    done++;
   if ((data['location'] ?? data['address'] ?? '').toString().isNotEmpty) done++;
   if ((data['email'] ?? '').toString().isNotEmpty) done++;
   return ((done / total) * 100).round();
@@ -63,40 +68,75 @@ Future<List<BidWithFundi>> enrichBids(
   List<QueryDocumentSnapshot> bids,
   Position? userPos,
 ) async {
-  return Future.wait(bids.map((b) async {
-    var m = b.data() as Map<String, dynamic>;
-    var fid = (m['fundiId'] ?? m['uid'] ?? '').toString();
-    Map<String, dynamic>? f;
-    if (fid.isNotEmpty) {
-      var d = await FirebaseFirestore.instance.collection('users').doc(fid).get();
-      f = d.data();
-    }
-    double dist = 0;
-    if (userPos != null && f != null) {
-      double fLat = getFundiLat(f);
-      double fLng = getFundiLng(f);
-      if (fLat != 0 && fLng != 0) {
-        dist = Geolocator.distanceBetween(
-              userPos.latitude,
-              userPos.longitude,
-              fLat,
-              fLng,
-            ) /
-            1000;
+  return Future.wait(
+    bids.map((b) async {
+      var m = b.data() as Map<String, dynamic>;
+      var fid = (m['fundiId'] ?? m['uid'] ?? '').toString();
+      Map<String, dynamic>? f;
+      Map<String, dynamic>? fundiLive;
+
+      if (fid.isNotEmpty) {
+        // users for badge/rating
+        var d = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(fid)
+            .get();
+        f = d.data();
+        // fundis for LIVE location - force server
+        try {
+          var liveDoc = await FirebaseFirestore.instance
+              .collection('fundis')
+              .doc(fid)
+              .get(const GetOptions(source: Source.server));
+          fundiLive = liveDoc.data();
+        } catch (_) {
+          fundiLive = f;
+        }
       }
-    }
-    return BidWithFundi(
-      bidDoc: b,
-      bid: m,
-      level: parseBadge(f?['badgeLevel']),
-      verified: f?['isVerifiedFundi'] == true,
-      referrals: f?['referralCount'] ?? 0,
-      jobsDone: f?['completedJobs'] ?? 0,
-      rating: (f?['avgRating'] ?? 0).toDouble(),
-      penalty: f?['penaltyScore'] ?? 0,
-      distanceKm: dist,
-    );
-  }));
+
+      double dist = 0;
+      if (userPos != null) {
+        // prefer live fundi location
+        var locSource = fundiLive ?? f;
+        double fLat = getFundiLat(locSource);
+        double fLng = getFundiLng(locSource);
+        // also check liveLocation GeoPoint
+        if (locSource != null) {
+          var geo =
+              locSource['liveLocation'] ??
+              locSource['location'] ??
+              locSource['geopoint'];
+          if (geo is GeoPoint) {
+            fLat = geo.latitude;
+            fLng = geo.longitude;
+          }
+        }
+
+        if (fLat != 0 && fLng != 0) {
+          dist =
+              Geolocator.distanceBetween(
+                userPos.latitude,
+                userPos.longitude,
+                fLat,
+                fLng,
+              ) /
+              1000;
+        }
+      }
+
+      return BidWithFundi(
+        bidDoc: b,
+        bid: m,
+        level: parseBadge(f?['badgeLevel']),
+        verified: f?['isVerifiedFundi'] == true,
+        referrals: f?['referralCount'] ?? 0,
+        jobsDone: f?['completedJobs'] ?? 0,
+        rating: (f?['avgRating'] ?? 0).toDouble(),
+        penalty: f?['penaltyScore'] ?? 0,
+        distanceKm: dist,
+      );
+    }),
+  );
 }
 
 Future<void> payEscrow(String jobId, double amount) async {
@@ -110,7 +150,11 @@ Future<void> payEscrow(String jobId, double amount) async {
 }
 
 Future<void> deleteJob(String jobId) async {
-  var bids = await FirebaseFirestore.instance.collection('jobs').doc(jobId).collection('bids').get();
+  var bids = await FirebaseFirestore.instance
+      .collection('jobs')
+      .doc(jobId)
+      .collection('bids')
+      .get();
   for (var d in bids.docs) await d.reference.delete();
   await FirebaseFirestore.instance.collection('jobs').doc(jobId).delete();
 }
