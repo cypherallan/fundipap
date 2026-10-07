@@ -30,15 +30,17 @@ class FundiVisitCustomerTab extends StatelessWidget {
           )
           .snapshots(),
       builder: (_, snap) {
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
-        if (snap.data!.docs.isEmpty)
+        }
+        if (snap.data!.docs.isEmpty) {
           return Center(
             child: Text(
               'No assigned jobs to visit',
               style: GoogleFonts.inter(),
             ),
           );
+        }
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: snap.data!.docs.length,
@@ -128,37 +130,51 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
 
   void _extractClientLatLng() {
     try {
+      // Check all possible job location fields - JOB location, NOT client live location
       var geo =
+          widget.job['geopoint'] ??
+          widget.job['location'] ??
           widget.job['clientLocation'] ??
           widget.job['customerLocation'] ??
-          widget.job['locationGeoPoint'];
+          widget.job['locationGeoPoint'] ??
+          widget.job['liveLocation'] ??
+          widget.job['geopointCustomer'];
+
       if (geo is GeoPoint) {
         clientLat = geo.latitude;
         clientLng = geo.longitude;
       } else if (geo is Map) {
-        clientLat = (geo['lat'] ?? geo['latitude'])?.toDouble();
-        clientLng = (geo['lng'] ?? geo['longitude'])?.toDouble();
+        clientLat = (geo['lat'] ?? geo['latitude'] ?? geo['geopoint']?['lat'])
+            ?.toDouble();
+        clientLng = (geo['lng'] ?? geo['longitude'] ?? geo['geopoint']?['lng'])
+            ?.toDouble();
       }
+
+      // Fallback to flat lat/lng fields in job doc
       clientLat ??=
           (widget.job['customerLat'] ??
                   widget.job['clientLat'] ??
-                  widget.job['lat'])
+                  widget.job['lat'] ??
+                  widget.job['latitude'] ??
+                  widget.job['jobLat'])
               ?.toDouble();
       clientLng ??=
           (widget.job['customerLng'] ??
                   widget.job['clientLng'] ??
-                  widget.job['lng'])
+                  widget.job['lng'] ??
+                  widget.job['longitude'] ??
+                  widget.job['jobLng'])
               ?.toDouble();
-      // NO FALLBACK TO -0.0917,34.7680 - removed!
     } catch (e) {
-      error = 'Error parsing client location: $e';
+      error = 'Error parsing job location: $e';
     }
   }
 
   Future<void> _startTracking() async {
     var perm = await Geolocator.checkPermission();
-    if (perm == LocationPermission.denied)
+    if (perm == LocationPermission.denied) {
       perm = await Geolocator.requestPermission();
+    }
     if (perm == LocationPermission.deniedForever) {
       setState(() {
         error = 'Location denied forever. Enable from settings.';
