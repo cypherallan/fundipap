@@ -108,7 +108,6 @@ mixin FundiMyJobsActionsMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
-  // FIXED: was only setting siteVisitDone -> loop back to START SITE VISIT
   Future<void> markSiteVisited(String jobId) async {
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'siteVisited': true,

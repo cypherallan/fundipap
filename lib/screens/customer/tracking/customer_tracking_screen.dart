@@ -93,7 +93,11 @@ class CustomerTrackingScreen extends StatelessWidget {
             if (dist == 0 || (local - dist).abs() > 200) dist = local;
           }
 
-          double fee = calculateTransportFee(dist);
+          double fee =
+              (data['transportFee'] ??
+                      job['transportFee'] ??
+                      calculateTransportFee(dist))
+                  .toDouble();
           String display = dist < 1000
               ? '${dist.toStringAsFixed(0)}m away'
               : '${(dist / 1000).toStringAsFixed(2)}km away';

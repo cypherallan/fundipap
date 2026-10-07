@@ -19,6 +19,14 @@ bool toBool(dynamic v, [bool fb = false]) {
   return fb;
 }
 
+double toDouble(dynamic v, [double fb = 0.0]) {
+  if (v == null) return fb;
+  if (v is double) return v;
+  if (v is int) return v.toDouble();
+  if (v is num) return v.toDouble();
+  return double.tryParse(v.toString()) ?? fb;
+}
+
 BadgeLevel parseBadge(String? s) {
   switch ((s ?? '').toLowerCase()) {
     case 'gold':
@@ -34,9 +42,8 @@ BadgeLevel parseBadge(String? s) {
 
 double getFundiLat(Map<String, dynamic>? f) {
   if (f == null) return 0;
-  if (f['liveLocation'] is GeoPoint) {
+  if (f['liveLocation'] is GeoPoint)
     return (f['liveLocation'] as GeoPoint).latitude;
-  }
   if (f['location'] is GeoPoint) return (f['location'] as GeoPoint).latitude;
   if (f['lat'] != null) return (f['lat'] as num).toDouble();
   if (f['latitude'] != null) return (f['latitude'] as num).toDouble();
@@ -45,9 +52,8 @@ double getFundiLat(Map<String, dynamic>? f) {
 
 double getFundiLng(Map<String, dynamic>? f) {
   if (f == null) return 0;
-  if (f['liveLocation'] is GeoPoint) {
+  if (f['liveLocation'] is GeoPoint)
     return (f['liveLocation'] as GeoPoint).longitude;
-  }
   if (f['location'] is GeoPoint) return (f['location'] as GeoPoint).longitude;
   if (f['lng'] != null) return (f['lng'] as num).toDouble();
   if (f['longitude'] != null) return (f['longitude'] as num).toDouble();
@@ -109,7 +115,6 @@ Future<List<BidWithFundi>> enrichBids(
             fLng = geo.longitude;
           }
         }
-
         if (fLat != 0 && fLng != 0) {
           dist =
               Geolocator.distanceBetween(
@@ -122,15 +127,44 @@ Future<List<BidWithFundi>> enrichBids(
         }
       }
 
+      // FIXED FINAL: read from fundis first, then users
+      var src = fundiLive ?? f;
+      double rating = toDouble(
+        src?['averageRating'] ??
+            src?['avgRating'] ??
+            src?['rating'] ??
+            f?['averageRating'] ??
+            0,
+      );
+      int referrals = toInt(
+        src?['referrals'] ??
+            src?['referralCount'] ??
+            src?['totalReferrals'] ??
+            f?['referrals'] ??
+            0,
+      );
+      int jobsDone = toInt(
+        src?['jobsDone'] ??
+            src?['completedJobs'] ??
+            src?['jobsCompleted'] ??
+            f?['jobsDone'] ??
+            0,
+      );
+      int penalty = toInt(
+        src?['penaltyScore'] ?? src?['penalty'] ?? f?['penaltyScore'] ?? 0,
+      );
+
       return BidWithFundi(
         bidDoc: b,
         bid: m,
-        level: parseBadge(f?['badgeLevel']),
-        verified: f?['isVerifiedFundi'] == true,
-        referrals: f?['referralCount'] ?? 0,
-        jobsDone: f?['completedJobs'] ?? 0,
-        rating: (f?['avgRating'] ?? 0).toDouble(),
-        penalty: f?['penaltyScore'] ?? 0,
+        level: parseBadge(src?['badgeLevel'] ?? f?['badgeLevel']),
+        verified:
+            (src?['isVerifiedFundi'] == true) ||
+            (f?['isVerifiedFundi'] == true),
+        referrals: referrals,
+        jobsDone: jobsDone,
+        rating: rating,
+        penalty: penalty,
         distanceKm: dist,
       );
     }),

@@ -37,17 +37,69 @@ class FundiConfirmedTab extends StatelessWidget {
     String jobId,
     Map<String, dynamic> job,
   ) async {
+    // 1. get fundi current pos FIRST
+    Position? pos;
+    try {
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied)
+        perm = await Geolocator.requestPermission();
+      pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+    } catch (_) {}
+
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'travelling': true,
       'siteVisitStarted': true,
       'travellingAt': FieldValue.serverTimestamp(),
       'siteVisitStartedAt': FieldValue.serverTimestamp(),
       'status': 'travelling',
-      'siteVisitDone': false, // reset in case old
+      'siteVisitDone': false,
       'siteVisited': false,
       'updatedAt': FieldValue.serverTimestamp(),
+      if (pos != null) 'fundiLiveLat': pos.latitude,
+      if (pos != null) 'fundiLiveLng': pos.longitude,
     });
+
     if (!context.mounted) return;
+
+    // 2. Prompt to open Maps immediately with both points
+    double cLat = (job['customerLat'] ?? job['lat'] ?? -0.0917).toDouble();
+    double cLng = (job['customerLng'] ?? job['lng'] ?? 34.7680).toDouble();
+    // handle GeoPoint too
+    if (job['clientLocation'] is GeoPoint) {
+      cLat = (job['clientLocation'] as GeoPoint).latitude;
+      cLng = (job['clientLocation'] as GeoPoint).longitude;
+    }
+
+    bool openMaps =
+        await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: Text('Start Navigation?'),
+            content: Text('Open Google Maps with route to client?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text('Later'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text('Open Maps'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (openMaps) {
+      String url = pos != null
+          ? 'https://www.google.com/maps/dir/?api=1&origin=${pos.latitude},${pos.longitude}&destination=$cLat,$cLng&travelmode=driving'
+          : 'https://www.google.com/maps/dir/?api=1&destination=$cLat,$cLng';
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    }
+
+    // 3. Still open your tracking screen so fundiLive continues updating
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -180,7 +232,6 @@ class FundiConfirmedTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
 
-                  // 1. NO ESCROW -> waiting only, NO START SITE VISIT BUTTON
                   if (!escrowDone)
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -241,7 +292,6 @@ class FundiConfirmedTab extends StatelessWidget {
                         ),
                       ),
                     ] else if (!siteDone && !isTravelling) ...[
-                      // START SITE VISIT - only when escrowDone && !siteDone && !travelling
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
@@ -311,7 +361,6 @@ class FundiConfirmedTab extends StatelessWidget {
                         ),
                       ),
                     ] else if (siteDone) ...[
-                      // SITE DONE -> START JOB / NEW PRICE - NEVER show START SITE VISIT again
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
@@ -482,14 +531,22 @@ class _VisitCustomerScreenState extends State<_VisitCustomerScreen> {
   }
 
   Future<void> _openMaps() async {
-    double lat = (widget.job['customerLat'] ?? widget.job['lat'] ?? -0.0917)
+    double cLat = (widget.job['customerLat'] ?? widget.job['lat'] ?? -0.0917)
         .toDouble();
-    double lng = (widget.job['customerLng'] ?? widget.job['lng'] ?? 34.7680)
+    double cLng = (widget.job['customerLng'] ?? widget.job['lng'] ?? 34.7680)
         .toDouble();
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
-    );
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (widget.job['clientLocation'] is GeoPoint) {
+      cLat = (widget.job['clientLocation'] as GeoPoint).latitude;
+      cLng = (widget.job['clientLocation'] as GeoPoint).longitude;
+    }
+    String url;
+    if (currentPos != null) {
+      url =
+          'https://www.google.com/maps/dir/?api=1&origin=${currentPos!.latitude},${currentPos!.longitude}&destination=$cLat,$cLng&travelmode=driving';
+    } else {
+      url = 'https://www.google.com/maps/dir/?api=1&destination=$cLat,$cLng';
+    }
+    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
 
   Future<void> _confirmVisited() async {

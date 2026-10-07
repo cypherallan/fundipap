@@ -113,12 +113,12 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
   String error = '';
   double? clientLat;
   double? clientLng;
+  bool isMarking = false;
 
   double calculateTransportFee(double meters) {
     if (meters <= 1000) return 100; // YOUR RULE: <=1km = 100 round trip
     double km = meters / 1000;
-    return 100 +
-        ((km - 1) * 60); // <-- your >1km formula, 60 = per km after first
+    return 100 + ((km - 1) * 60);
   }
 
   @override
@@ -130,7 +130,6 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
 
   void _extractClientLatLng() {
     try {
-      // Check all possible job location fields - JOB location, NOT client live location
       var geo =
           widget.job['geopoint'] ??
           widget.job['location'] ??
@@ -150,7 +149,6 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
             ?.toDouble();
       }
 
-      // Fallback to flat lat/lng fields in job doc
       clientLat ??=
           (widget.job['customerLat'] ??
                   widget.job['clientLat'] ??
@@ -182,14 +180,15 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
       });
       return;
     }
+
     sub =
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
-            distanceFilter: 5,
+            distanceFilter: 5, // strict check every 5m
           ),
         ).listen(
-          (p) {
+          (p) async {
             double? d;
             if (clientLat != null && clientLng != null) {
               d = Geolocator.distanceBetween(
@@ -199,6 +198,7 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
                 clientLng!,
               );
             }
+
             if (mounted) {
               setState(() {
                 pos = p;
@@ -210,12 +210,41 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
                 }
               });
             }
+
+            // LIVE TRACKING FOR CUSTOMER - this makes TRACK LIVE work
+            try {
+              await FirebaseFirestore.instance
+                  .collection('jobs')
+                  .doc(widget.jobId)
+                  .update({
+                    'fundiLiveLat': p.latitude,
+                    'fundiLiveLng': p.longitude,
+                    'fundiLiveAt': FieldValue.serverTimestamp(),
+                    'fundiLiveDistance': d,
+                    'travelling': true,
+                  });
+            } catch (_) {}
+
+            // AUTO-DETECT: prompt when within 100m
+            if (d != null && d <= 100 && mounted && !isMarking) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: Colors.green.shade700,
+                  content: Text(
+                    'You are ${d.toStringAsFixed(0)}m away - You can now mark arrived',
+                  ),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
           },
           onError: (e) {
-            setState(() {
-              error = 'GPS error: $e';
-              loading = false;
-            });
+            if (mounted) {
+              setState(() {
+                error = 'GPS error: $e';
+                loading = false;
+              });
+            }
           },
         );
   }
@@ -227,9 +256,13 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
       ).showSnackBar(const SnackBar(content: Text('Client GPS missing')));
       return;
     }
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=$clientLat,$clientLng&travelmode=driving',
-    );
+    final uri = pos != null
+        ? Uri.parse(
+            'https://www.google.com/maps/dir/?api=1&origin=${pos!.latitude},${pos!.longitude}&destination=$clientLat,$clientLng&travelmode=driving',
+          )
+        : Uri.parse(
+            'https://www.google.com/maps/dir/?api=1&destination=$clientLat,$clientLng&travelmode=driving',
+          );
     try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
@@ -240,33 +273,44 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
   }
 
   Future<void> _markVisited() async {
-    if (clientLat != null && distance != null && distance! > 100) {
-      bool? ok = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: Text('${distance!.toStringAsFixed(0)}m away'),
+    // FRESH strict check - no stale distance
+    if (pos == null || clientLat == null || clientLng == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Getting GPS... wait')));
+      return;
+    }
+
+    double freshDistance = Geolocator.distanceBetween(
+      pos!.latitude,
+      pos!.longitude,
+      clientLat!,
+      clientLng!,
+    );
+
+    // HARD BLOCK if >100m - cannot bypass even if app was backgrounded
+    if (freshDistance > 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade700,
           content: Text(
-            'You are ${distance!.toStringAsFixed(0)}m from client point. Confirm anyway?\nClient: $clientLat,$clientLng\nYou: ${pos?.latitude},${pos?.longitude}',
+            'BLOCKED: You are ${freshDistance.toStringAsFixed(0)}m away. Must be within 100m.',
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('CONFIRM ANYWAY'),
-            ),
-          ],
+          duration: Duration(seconds: 4),
         ),
       );
-      if (ok != true) return;
+      setState(() => distance = freshDistance);
+      return;
     }
-    await _forceConfirm();
+
+    await _forceConfirm(freshDistance);
   }
 
-  Future<void> _forceConfirm() async {
-    double fee = distance != null ? calculateTransportFee(distance!) : 100;
+  Future<void> _forceConfirm(double finalDistance) async {
+    if (isMarking) return;
+    setState(() => isMarking = true);
+
+    double fee = calculateTransportFee(finalDistance);
     await FirebaseFirestore.instance
         .collection('jobs')
         .doc(widget.jobId)
@@ -274,18 +318,22 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
           'siteVisited': true,
           'siteVisitDone': true,
           'siteVisitedAt': FieldValue.serverTimestamp(),
-          'fundiLatAtVisit': pos?.latitude, 'fundiLngAtVisit': pos?.longitude,
-          'transportDistanceMeters': distance, 'transportFee': fee, // SAVE FEE
+          'fundiLatAtVisit': pos?.latitude,
+          'fundiLngAtVisit': pos?.longitude,
+          'transportDistanceMeters': finalDistance,
+          'transportFee': fee,
+          'arrivalDistance': finalDistance, // proof
           'travelling': false,
           'status': 'site_visit',
           'updatedAt': FieldValue.serverTimestamp(),
           'customerHasUnread': true,
         });
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Site visited ✓ Transport: KES ${fee.toStringAsFixed(0)}',
+          'Site visited ✓ Transport: KES ${fee.toStringAsFixed(0)} at ${finalDistance.toStringAsFixed(0)}m',
         ),
       ),
     );
@@ -300,9 +348,11 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    bool canMark = pos != null;
+    bool canMark =
+        pos != null && distance != null && distance! <= 100 && !isMarking;
     bool within100 = distance != null && distance! <= 100;
     double fee = distance != null ? calculateTransportFee(distance!) : 100;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -347,14 +397,14 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
                     Column(
                       children: [
                         Text(
-                          '${distance?.toStringAsFixed(0) ?? '--'}m away',
+                          '${distance?.toStringAsFixed(0) ?? '--'}m away ${within100 ? "✓ Within 100m" : "✗ Must be ≤100m"}',
                           style: GoogleFonts.montserrat(
                             fontWeight: FontWeight.w700,
                             color: within100 ? Colors.green : Colors.red,
                           ),
                         ),
                         Text(
-                          'Transport: KES ${fee.toStringAsFixed(0)} ${distance != null && distance! <= 1000 ? '(100 round trip - <=1km rule)' : ''}',
+                          'Transport: KES ${fee.toStringAsFixed(0)} ${distance != null && distance! <= 1000 ? '(100 round trip - ≤1km rule)' : ''}',
                           style: GoogleFonts.inter(fontWeight: FontWeight.w700),
                         ),
                         Text(
@@ -379,9 +429,9 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
             ),
             if (error.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 10),
+                padding: EdgeInsets.only(top: 10),
                 child: Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: Colors.red.shade50,
                     borderRadius: BorderRadius.circular(10),
@@ -400,10 +450,10 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: FundipapColors.blackGray,
                   foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 50),
+                  minimumSize: Size(double.infinity, 50),
                 ),
                 onPressed: _openMaps,
-                icon: const Icon(Icons.directions),
+                icon: Icon(Icons.directions),
                 label: Text(
                   'Get Directions',
                   style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
@@ -415,24 +465,33 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
               width: double.infinity,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: within100
+                  backgroundColor: canMark
                       ? FundipapColors.primaryYellow
-                      : Colors.orange,
+                      : Colors.grey.shade400,
                   foregroundColor: Colors.black,
-                  minimumSize: const Size(double.infinity, 50),
+                  minimumSize: Size(double.infinity, 50),
                 ),
                 onPressed: canMark ? _markVisited : null,
-                icon: Icon(within100 ? Icons.check_circle : Icons.location_off),
+                icon: Icon(canMark ? Icons.check_circle : Icons.location_off),
                 label: Text(
-                  within100
+                  canMark
                       ? 'Mark as Site Visited - KES $fee'
                       : distance != null
-                      ? 'Confirm Arrival (${distance!.toStringAsFixed(0)}m) - KES ${fee.toStringAsFixed(0)}'
-                      : 'Move closer',
+                      ? 'BLOCKED: ${distance!.toStringAsFixed(0)}m away - Move within 100m'
+                      : 'Getting GPS...',
                   style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
                 ),
               ),
             ),
+            if (!canMark && !loading)
+              Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'FundiPap blocks marking until GPS confirms ≤100m. Coming back to app does NOT bypass.',
+                  style: GoogleFonts.inter(fontSize: 11, color: Colors.red),
+                  textAlign: TextAlign.center,
+                ),
+              ),
           ],
         ),
       ),
