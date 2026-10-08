@@ -24,8 +24,15 @@ class CustomerPendingSection extends StatelessWidget {
       'open',
       'pending',
       'bidding',
+      'countered',
+      'countered_by_client',
+      'countered_by_fundi',
+      'client_counter',
+      'counter_pending',
       'counter_accepted',
       'counter_accepted_by_fundi',
+      'assigned',
+      'confirmed',
     ];
 
     return StreamBuilder<QuerySnapshot>(
