@@ -27,33 +27,49 @@ class JobCancelService {
   ];
 
   static bool _isOpenStatus(String status) {
+    final s = status.toLowerCase();
     return [
-      'open',
-      'bidding',
-      'pending',
-      'searching',
-      'new',
-    ].contains(status.toLowerCase());
+          'open',
+          'bidding',
+          'pending',
+          'searching',
+          'new',
+          'negotiating',
+          'countered',
+          'counter_pending',
+          'pending_client_accept',
+          'counter_pending_client',
+          'bid_pending',
+          'offer_pending',
+        ].contains(s) ||
+        s.contains('counter') ||
+        s.contains('negotiat');
   }
 
   static bool _canFundiCancel(Map<String, dynamic> job) {
     String status = (job['status'] ?? '').toString().toLowerCase();
-    // OPEN jobs - fundi can always withdraw his bid
+    // OPEN / NEGOTIATING / COUNTERED - fundi can always withdraw his bid before escrow
     if (_isOpenStatus(status)) return true;
 
-    bool travelling = job['travelling'] == true || status == 'travelling';
+    bool travelling =
+        job['travelling'] == true ||
+        status == 'travelling' ||
+        job['siteVisitStarted'] == true;
     bool siteDone =
         job['siteVisitDone'] == true ||
         job['siteVisited'] == true ||
         job['fundiArrivedAt'] != null;
-    bool started = [
-      'in_progress',
-      'pending_completion',
-      'job_completed',
-    ].contains(status);
+    bool started =
+        [
+          'in_progress',
+          'pending_completion',
+          'job_completed',
+          'completed',
+        ].contains(status) ||
+        job['workStartedAt'] != null;
     if (started) return false;
     if (travelling || siteDone) return false;
-    return ['assigned', 'confirmed'].contains(status);
+    return ['assigned', 'confirmed', 'escrow_held'].contains(status);
   }
 
   static bool _isFundiPriceRequestPending(Map<String, dynamic> job) {
