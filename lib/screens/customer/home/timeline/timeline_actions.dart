@@ -6,6 +6,7 @@ import '../../rating/rate_fundi_screen.dart';
 class TimelineActions {
   static Future<void> payEscrow(String jobId, double amount) async {
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'status': 'confirmed', // <-- ADD THIS
       'escrowStatus': 'held',
       'escrowAmount': amount,
       'escrowPaidAt': FieldValue.serverTimestamp(),

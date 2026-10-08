@@ -32,7 +32,6 @@ class CustomerPendingSection extends StatelessWidget {
       'counter_accepted',
       'counter_accepted_by_fundi',
       'assigned',
-      'confirmed',
     ];
 
     return StreamBuilder<QuerySnapshot>(
