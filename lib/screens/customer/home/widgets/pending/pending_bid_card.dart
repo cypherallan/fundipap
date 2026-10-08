@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -211,52 +212,46 @@ class PendingBidCard extends StatelessWidget {
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
-                          // LIVE DISTANCE STREAM
-                          StreamBuilder<DocumentSnapshot>(
-                            stream: FirebaseFirestore.instance
-                                .collection('fundis')
-                                .doc(fundiId)
-                                .snapshots(),
-                            builder: (_, fundiSnap) {
-                              if (!fundiSnap.hasData ||
-                                  !fundiSnap.data!.exists) {
+                          // FIXED: RTDB LIVE DISTANCE
+                          StreamBuilder<DatabaseEvent>(
+                            stream: FirebaseDatabase.instance
+                                .ref('live_locations/$fundiId')
+                                .onValue,
+                            builder: (_, liveSnap) {
+                              if (!liveSnap.hasData ||
+                                  liveSnap.data!.snapshot.value == null) {
                                 return const SizedBox.shrink();
                               }
                               double km = 0;
                               try {
-                                var fData =
-                                    fundiSnap.data!.data()
-                                        as Map<String, dynamic>;
-                                var fGeo =
-                                    fData['liveLocation'] ??
-                                    fData['location'] ??
-                                    fData['geopoint'];
+                                var live = Map<String, dynamic>.from(
+                                  liveSnap.data!.snapshot.value as Map,
+                                );
+                                double fLat = (live['lat'] as num).toDouble();
+                                double fLng = (live['lng'] as num).toDouble();
+
+                                // client job location
+                                double? jLat, jLng;
                                 var jGeo =
                                     jobData['geopoint'] ??
                                     jobData['location'] ??
-                                    jobData['liveLocation'];
-                                double? fLat, fLng, jLat, jLng;
-                                if (fGeo is GeoPoint) {
-                                  fLat = fGeo.latitude;
-                                  fLng = fGeo.longitude;
-                                }
+                                    jobData['customerLocation'];
                                 if (jGeo is GeoPoint) {
                                   jLat = jGeo.latitude;
                                   jLng = jGeo.longitude;
                                 }
-                                fLat ??= (fData['lat'] ?? fData['latitude'])
-                                    ?.toDouble();
-                                fLng ??= (fData['lng'] ?? fData['longitude'])
-                                    ?.toDouble();
-                                jLat ??= (jobData['lat'] ?? jobData['latitude'])
-                                    ?.toDouble();
-                                jLng ??=
-                                    (jobData['lng'] ?? jobData['longitude'])
+                                jLat ??=
+                                    (jobData['customerLat'] ??
+                                            jobData['clientLat'] ??
+                                            jobData['lat'])
                                         ?.toDouble();
-                                if (fLat != null &&
-                                    fLng != null &&
-                                    jLat != null &&
-                                    jLng != null) {
+                                jLng ??=
+                                    (jobData['customerLng'] ??
+                                            jobData['clientLng'] ??
+                                            jobData['lng'])
+                                        ?.toDouble();
+
+                                if (jLat != null && jLng != null) {
                                   km =
                                       Geolocator.distanceBetween(
                                         jLat,

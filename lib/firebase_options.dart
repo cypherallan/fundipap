@@ -4,16 +4,6 @@ import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
-/// Default [FirebaseOptions] for use with your Firebase apps.
-///
-/// Example:
-/// ```dart
-/// import 'firebase_options.dart';
-/// // ...
-/// await Firebase.initializeApp(
-///   options: DefaultFirebaseOptions.currentPlatform,
-/// );
-/// ```
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
@@ -46,21 +36,26 @@ class DefaultFirebaseOptions {
     messagingSenderId: '25675889394',
     projectId: 'fundipap-global',
     storageBucket: 'fundipap-global.firebasestorage.app',
+    databaseURL: 'https://fundipap-global-default-rtdb.firebaseio.com',
   );
+
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDTjnsYDSfupv3mS5L7PAnJ9dh95sdOHz4',
     appId: '1:25675889394:ios:b19620dcb6f39c782bae6b',
     messagingSenderId: '25675889394',
     projectId: 'fundipap-global',
     storageBucket: 'fundipap-global.firebasestorage.app',
+    databaseURL: 'https://fundipap-global-default-rtdb.firebaseio.com',
     iosBundleId: 'com.example.fundipap',
   );
+
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDTjnsYDSfupv3mS5L7PAnJ9dh95sdOHz4',
     appId: '1:25675889394:ios:b19620dcb6f39c782bae6b',
     messagingSenderId: '25675889394',
     projectId: 'fundipap-global',
     storageBucket: 'fundipap-global.firebasestorage.app',
+    databaseURL: 'https://fundipap-global-default-rtdb.firebaseio.com',
     iosBundleId: 'com.example.fundipap',
   );
 
@@ -71,7 +66,9 @@ class DefaultFirebaseOptions {
     projectId: 'fundipap-global',
     authDomain: 'fundipap-global.firebaseapp.com',
     storageBucket: 'fundipap-global.firebasestorage.app',
+    databaseURL: 'https://fundipap-global-default-rtdb.firebaseio.com',
   );
+
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyCk4qqt4g6zU0Xfucp8uIvcdljFhiY-FSA',
     appId: '1:25675889394:web:7dd4c0ac3b0a607a2bae6b',
@@ -79,5 +76,6 @@ class DefaultFirebaseOptions {
     projectId: 'fundipap-global',
     authDomain: 'fundipap-global.firebaseapp.com',
     storageBucket: 'fundipap-global.firebasestorage.app',
+    databaseURL: 'https://fundipap-global-default-rtdb.firebaseio.com',
   );
 }

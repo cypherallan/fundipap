@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "25675889394",
+    "firebase_url": "https://fundipap-global-default-rtdb.firebaseio.com",
     "project_id": "fundipap-global",
     "storage_bucket": "fundipap-global.firebasestorage.app"
   },
