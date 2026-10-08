@@ -17,8 +17,6 @@ class TransportCalculator {
   }) async {
     try {
       double? jobLat, jobLng;
-
-      // 1. Job location - check all your real keys
       for (var k in [
         'geopoint',
         'location',
@@ -45,7 +43,6 @@ class TransportCalculator {
       double? fundiLat = overrideFundiLat;
       double? fundiLng = overrideFundiLng;
 
-      // 2. RTDB LIVE - same as card - 30.6km source
       if (fundiLat == null) {
         try {
           final snap = await _rtdb.ref('live_locations/$fundiId').get();
@@ -56,21 +53,11 @@ class TransportCalculator {
           }
         } catch (_) {}
       }
+      fundiLat ??= (jobData['fundiLiveLat'] ?? jobData['fundiLatAtVisit'])
+          ?.toDouble();
+      fundiLng ??= (jobData['fundiLiveLng'] ?? jobData['fundiLngAtVisit'])
+          ?.toDouble();
 
-      // 3. Job's live fields
-      fundiLat ??=
-          (jobData['fundiLiveLat'] ??
-                  jobData['fundiLatAtVisit'] ??
-                  jobData['fundiLatitude'])
-              ?.toDouble();
-      fundiLng ??=
-          (jobData['fundiLiveLng'] ??
-                  jobData['fundiLng'] ??
-                  jobData['fundiLngAtVisit'] ??
-                  jobData['fundiLongitude'])
-              ?.toDouble();
-
-      // 4. fundis collection (your throttled)
       if (fundiLat == null) {
         try {
           var doc = await FirebaseFirestore.instance
@@ -81,27 +68,6 @@ class TransportCalculator {
           if (f['location'] is GeoPoint) {
             fundiLat = (f['location'] as GeoPoint).latitude;
             fundiLng = (f['location'] as GeoPoint).longitude;
-          } else if (f['geopoint'] is GeoPoint) {
-            fundiLat = (f['geopoint'] as GeoPoint).latitude;
-            fundiLng = (f['geopoint'] as GeoPoint).longitude;
-          }
-        } catch (_) {}
-      }
-
-      // 5. users fallback (old)
-      if (fundiLat == null) {
-        try {
-          var doc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(fundiId)
-              .get();
-          var f = doc.data() ?? {};
-          if (f['lastLocation'] is GeoPoint) {
-            fundiLat = (f['lastLocation'] as GeoPoint).latitude;
-            fundiLng = (f['lastLocation'] as GeoPoint).longitude;
-          } else if (f['currentLocation'] is GeoPoint) {
-            fundiLat = (f['currentLocation'] as GeoPoint).latitude;
-            fundiLng = (f['currentLocation'] as GeoPoint).longitude;
           }
         } catch (_) {}
       }
@@ -111,7 +77,7 @@ class TransportCalculator {
           fundiLat == null ||
           fundiLng == null ||
           jobLat == 0) {
-        return {'km': 0.0, 'fee': 100, 'mode': 'boda', 'error': 'no coords'};
+        return {'km': 0.0, 'fee': 100, 'mode': 'boda', 'meters': 0};
       }
 
       double meters = Geolocator.distanceBetween(
@@ -124,20 +90,18 @@ class TransportCalculator {
 
       int fee;
       String mode;
-      if (km <= 1) {
-        fee = 100;
+      if (km < 1.0) {
+        fee = 100; // your fixed RT
         mode = 'boda';
-      } else if (km <= 3) {
+      } else if (km <= 5.0) {
         mode = 'boda';
-        fee = (100 + ((km - 1) * 60)).round();
-      } else if (km <= 10) {
-        mode = 'tuk';
-        fee = (100 + ((km - 1) * 60)).round();
+        fee = (km * 60).round(); // 30 one-way *2 RT
+        if (fee < 100) fee = 100;
       } else {
-        mode = 'pickup';
-        fee = (100 + ((km - 1) * 60)).round();
+        mode = 'matatu';
+        fee = (km * 10).round(); // 5 one-way *2 RT = matatu average
+        if (fee < 150) fee = 150; // minimum matatu RT
       }
-      if (fee < 100) fee = 100;
 
       return {'km': km, 'fee': fee, 'mode': mode, 'meters': meters};
     } catch (e) {
