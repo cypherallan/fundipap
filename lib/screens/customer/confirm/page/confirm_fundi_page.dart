@@ -9,6 +9,8 @@ import '../profile/confirm_fundi_profile_card.dart';
 import '../profile/confirm_fundi_details_section.dart';
 import '../bidding/confirm_fundi_bid_card.dart';
 import '../profile/confirm_fundi_reviews.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 class ConfirmFundiPage extends StatefulWidget {
   final String jobId;
@@ -82,10 +84,31 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
 
   Future<void> _loadTransport() async {
     try {
+      double? liveLat, liveLng;
+      // TRY RTDB FIRST - same source as card
+      try {
+        final rtdb = FirebaseDatabase.instanceFor(
+          app: Firebase.app(),
+          databaseURL: 'https://fundipap-global-default-rtdb.firebaseio.com',
+        );
+        final snap = await rtdb
+            .ref('live_locations/${widget.bidData['fundiId']}')
+            .get();
+        if (snap.exists) {
+          var m = Map<String, dynamic>.from(snap.value as Map);
+          liveLat = (m['lat'] as num).toDouble();
+          liveLng = (m['lng'] as num).toDouble();
+        }
+      } catch (_) {}
+
+      // fallback to TransportCalculator if RTDB empty
       var t = await TransportCalculator.calc(
         jobData: widget.jobData,
         fundiId: widget.bidData['fundiId'],
+        overrideFundiLat: liveLat,
+        overrideFundiLng: liveLng,
       );
+
       if (!mounted) return;
       int lab = _getEffectiveLabor();
       int trans = t['fee'] as int;
@@ -485,6 +508,7 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                 ...widget.bidData,
                 'transportFee': effectiveTransport,
                 'distanceKm': distanceKm,
+                'transportMode': transportMode,
                 'agreedPrice': labor,
                 'clientCounterAmount': labor,
                 'effectiveLabor': labor,

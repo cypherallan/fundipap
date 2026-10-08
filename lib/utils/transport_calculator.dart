@@ -1,16 +1,27 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:geolocator/geolocator.dart';
 
 class TransportCalculator {
+  static FirebaseDatabase get _rtdb => FirebaseDatabase.instanceFor(
+    app: Firebase.app(),
+    databaseURL: 'https://fundipap-global-default-rtdb.firebaseio.com',
+  );
+
   static Future<Map<String, dynamic>> calc({
     required Map<String, dynamic> jobData,
     required String fundiId,
+    double? overrideFundiLat,
+    double? overrideFundiLng,
   }) async {
     try {
       double? jobLat, jobLng;
 
-      // 1. Try all GeoPoint keys you actually use
+      // 1. Job location - check all your real keys
       for (var k in [
+        'geopoint',
+        'location',
         'locationGeo',
         'locationGeoPoint',
         'clientLocation',
@@ -24,7 +35,6 @@ class TransportCalculator {
           break;
         }
       }
-      // 2. Try all double keys you actually use
       jobLat ??= double.tryParse(
         '${jobData['customerLat'] ?? jobData['clientLat'] ?? jobData['lat'] ?? jobData['latitude'] ?? ''}',
       );
@@ -32,23 +42,53 @@ class TransportCalculator {
         '${jobData['customerLng'] ?? jobData['clientLng'] ?? jobData['lng'] ?? jobData['longitude'] ?? ''}',
       );
 
-      double? fundiLat, fundiLng;
+      double? fundiLat = overrideFundiLat;
+      double? fundiLng = overrideFundiLng;
 
-      // 3. Best source is job's live fundi location, not users collection (stale)
-      fundiLat =
+      // 2. RTDB LIVE - same as card - 30.6km source
+      if (fundiLat == null) {
+        try {
+          final snap = await _rtdb.ref('live_locations/$fundiId').get();
+          if (snap.exists) {
+            var m = Map<String, dynamic>.from(snap.value as Map);
+            fundiLat = (m['lat'] as num).toDouble();
+            fundiLng = (m['lng'] as num).toDouble();
+          }
+        } catch (_) {}
+      }
+
+      // 3. Job's live fields
+      fundiLat ??=
           (jobData['fundiLiveLat'] ??
-                  jobData['fundiLat'] ??
                   jobData['fundiLatAtVisit'] ??
                   jobData['fundiLatitude'])
               ?.toDouble();
-      fundiLng =
+      fundiLng ??=
           (jobData['fundiLiveLng'] ??
                   jobData['fundiLng'] ??
                   jobData['fundiLngAtVisit'] ??
                   jobData['fundiLongitude'])
               ?.toDouble();
 
-      // 4. Fallback to users collection if not in job
+      // 4. fundis collection (your throttled)
+      if (fundiLat == null) {
+        try {
+          var doc = await FirebaseFirestore.instance
+              .collection('fundis')
+              .doc(fundiId)
+              .get();
+          var f = doc.data() ?? {};
+          if (f['location'] is GeoPoint) {
+            fundiLat = (f['location'] as GeoPoint).latitude;
+            fundiLng = (f['location'] as GeoPoint).longitude;
+          } else if (f['geopoint'] is GeoPoint) {
+            fundiLat = (f['geopoint'] as GeoPoint).latitude;
+            fundiLng = (f['geopoint'] as GeoPoint).longitude;
+          }
+        } catch (_) {}
+      }
+
+      // 5. users fallback (old)
       if (fundiLat == null) {
         try {
           var doc = await FirebaseFirestore.instance
@@ -62,13 +102,6 @@ class TransportCalculator {
           } else if (f['currentLocation'] is GeoPoint) {
             fundiLat = (f['currentLocation'] as GeoPoint).latitude;
             fundiLng = (f['currentLocation'] as GeoPoint).longitude;
-          } else {
-            fundiLat = double.tryParse(
-              '${f['lat'] ?? f['latitude'] ?? f['lastLat'] ?? ''}',
-            );
-            fundiLng = double.tryParse(
-              '${f['lng'] ?? f['longitude'] ?? f['lastLng'] ?? ''}',
-            );
           }
         } catch (_) {}
       }
@@ -78,7 +111,7 @@ class TransportCalculator {
           fundiLat == null ||
           fundiLng == null ||
           jobLat == 0) {
-        return {'km': 0.0, 'fee': 0, 'mode': 'boda', 'error': 'no coords'};
+        return {'km': 0.0, 'fee': 100, 'mode': 'boda', 'error': 'no coords'};
       }
 
       double meters = Geolocator.distanceBetween(
@@ -89,7 +122,6 @@ class TransportCalculator {
       );
       double km = meters / 1000;
 
-      // YOUR RULE: <=1km = 100 round trip
       int fee;
       String mode;
       if (km <= 1) {
@@ -109,7 +141,7 @@ class TransportCalculator {
 
       return {'km': km, 'fee': fee, 'mode': mode, 'meters': meters};
     } catch (e) {
-      return {'km': 0.0, 'fee': 0, 'mode': 'boda', 'error': e.toString()};
+      return {'km': 0.0, 'fee': 100, 'mode': 'boda', 'error': e.toString()};
     }
   }
 }

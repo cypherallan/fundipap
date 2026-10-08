@@ -18,17 +18,6 @@ class ConfirmFundiBidCard extends StatelessWidget {
     return int.tryParse(v.toString()) ?? fb;
   }
 
-  int _calcTransport(Map<String, dynamic> job, Map<String, dynamic> bid) {
-    double dist = 0.5;
-    if (job['distanceKm'] != null) dist = (job['distanceKm'] as num).toDouble();
-    if (bid['distanceKm'] != null) dist = (bid['distanceKm'] as num).toDouble();
-    if (bid['transportFee'] != null) return _toInt(bid['transportFee']);
-    if (job['transportFee'] != null && _toInt(job['transportFee']) > 0)
-      return _toInt(job['transportFee']);
-    if (dist <= 1.0) return 100;
-    return (dist * 80).round().clamp(100, 2000);
-  }
-
   @override
   Widget build(BuildContext context) {
     final status = (bidData['status'] ?? '').toString();
@@ -52,7 +41,6 @@ class ConfirmFundiBidCard extends StatelessWidget {
     int originalFundiAsk = _toInt(
       bidData['price'] ?? bidData['bidAmount'] ?? bidData['amount'] ?? 0,
     );
-
     int clientOffer = _toInt(
       jobData['systemPriceAvg'] ??
           jobData['budget'] ??
@@ -62,7 +50,13 @@ class ConfirmFundiBidCard extends StatelessWidget {
     );
     String note = (bidData['note'] ?? '').toString();
 
-    int transport = _calcTransport(jobData, bidData);
+    // USE PARENT'S RTDB VALUES DIRECTLY - don't recalculate
+    int transport = _toInt(bidData['transportFee'], 100);
+    double distanceKm = (bidData['distanceKm'] as num?)?.toDouble() ?? 0.0;
+    String mode =
+        (bidData['transportMode'] ?? jobData['transportMode'] ?? 'boda')
+            .toString();
+
     int clientAppFee = (effectiveLabor * 0.05).round();
     int totalToLock = effectiveLabor + transport + clientAppFee;
 
@@ -185,14 +179,17 @@ class ConfirmFundiBidCard extends StatelessWidget {
             child: Column(
               children: [
                 _row('Labour:', 'KES $effectiveLabor'),
-                _row('Transport (min 100):', 'KES $transport', highlight: true),
+                _row(
+                  'Transport ($mode ${distanceKm.toStringAsFixed(1)}km):',
+                  'KES $transport',
+                  highlight: true,
+                ),
                 _row(
                   'App Maintenance (5% of $effectiveLabor):',
                   'KES $clientAppFee',
                 ),
                 const Divider(height: 12),
                 _row('TOTAL TO LOCK:', 'KES $totalToLock', bold: true),
-                const SizedBox(height: 4),
                 if (isAcceptedCounter)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),

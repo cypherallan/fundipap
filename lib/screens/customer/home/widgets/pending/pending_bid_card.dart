@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -10,7 +11,7 @@ import '../../models/customer_home_models.dart';
 import '../../../confirm/page/confirm_fundi_page.dart';
 import '../../timeline/customer_fundi_timeline_page.dart';
 
-class PendingBidCard extends StatelessWidget {
+class PendingBidCard extends StatefulWidget {
   final BidWithFundi bid;
   final String jobId;
   final Map<String, dynamic> jobData;
@@ -27,20 +28,34 @@ class PendingBidCard extends StatelessWidget {
   });
 
   @override
+  State<PendingBidCard> createState() => _PendingBidCardState();
+}
+
+class _PendingBidCardState extends State<PendingBidCard> {
+  double? _lastKm; // keeps distance stable, stops glitch
+
+  FirebaseDatabase get _rtdb => FirebaseDatabase.instanceFor(
+    app: Firebase.app(),
+    databaseURL: 'https://fundipap-global-default-rtdb.firebaseio.com',
+  );
+
+  @override
   Widget build(BuildContext context) {
+    //... keep your openConfirm and cancelAccepted methods exactly same...
     Future<void> openConfirm() async {
-      if (sheetContextForClose != null && sheetContextForClose!.mounted) {
-        Navigator.pop(sheetContextForClose!);
+      if (widget.sheetContextForClose != null &&
+          widget.sheetContextForClose!.mounted) {
+        Navigator.pop(widget.sheetContextForClose!);
       }
-      final navContext = parentContextForNav ?? context;
+      final navContext = widget.parentContextForNav ?? context;
       final confirmed = await Navigator.push<bool>(
         navContext,
         MaterialPageRoute(
           builder: (_) => ConfirmFundiPage(
-            jobId: jobId,
-            jobData: jobData,
-            bidId: bid.bidDoc.id,
-            bidData: bid.bid,
+            jobId: widget.jobId,
+            jobData: widget.jobData,
+            bidId: widget.bid.bidDoc.id,
+            bidData: widget.bid.bid,
           ),
         ),
       );
@@ -49,10 +64,10 @@ class PendingBidCard extends StatelessWidget {
           navContext,
           MaterialPageRoute(
             builder: (_) => CustomerFundiTimelinePage(
-              jobId: jobId,
-              fundiName: bid.bid['fundiName'] ?? 'Fundi',
-              trade: (jobData['category'] ?? '').toString(),
-              jobData: jobData,
+              jobId: widget.jobId,
+              fundiName: widget.bid.bid['fundiName'] ?? 'Fundi',
+              trade: (widget.jobData['category'] ?? '').toString(),
+              jobData: widget.jobData,
             ),
           ),
         );
@@ -60,7 +75,7 @@ class PendingBidCard extends StatelessWidget {
     }
 
     Future<void> cancelAccepted() async {
-      final navContext = parentContextForNav ?? context;
+      final navContext = widget.parentContextForNav ?? context;
       final bool? ok = await showDialog<bool>(
         context: navContext,
         builder: (ctx) => AlertDialog(
@@ -72,7 +87,7 @@ class PendingBidCard extends StatelessWidget {
             ),
           ),
           content: Text(
-            '${bid.bid['fundiName'] ?? 'Fundi'} accepted your KES ${((bid.bid['agreedPrice'] ?? bid.bid['clientCounterAmount'] ?? 0) as num).toInt()} counter. Do you want to cancel?',
+            '${widget.bid.bid['fundiName'] ?? 'Fundi'} accepted your KES ${((widget.bid.bid['agreedPrice'] ?? widget.bid.bid['clientCounterAmount'] ?? 0) as num).toInt()} counter. Do you want to cancel?',
             style: GoogleFonts.inter(fontSize: 12),
           ),
           actions: [
@@ -101,22 +116,25 @@ class PendingBidCard extends StatelessWidget {
             barrierDismissible: false,
             builder: (_) => const Center(child: CircularProgressIndicator()),
           );
-        final bidId = bid.bidDoc.id;
-        final fundiId = (bid.bid['fundiId'] ?? bidId).toString();
+        final bidId = widget.bid.bidDoc.id;
+        final fundiId = (widget.bid.bid['fundiId'] ?? bidId).toString();
         await FirebaseFirestore.instance
             .collection('jobs')
-            .doc(jobId)
+            .doc(widget.jobId)
             .collection('bids')
             .doc(bidId)
             .update({
               'status': 'cancelled_by_client',
               'clientCancelledAt': FieldValue.serverTimestamp(),
             });
-        await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
-          'counterAcceptedBy': FieldValue.arrayRemove([fundiId]),
-          'counterAcceptedBids': FieldValue.arrayRemove([bidId]),
-          'lastCounterAcceptedBy': FieldValue.delete(),
-        });
+        await FirebaseFirestore.instance
+            .collection('jobs')
+            .doc(widget.jobId)
+            .update({
+              'counterAcceptedBy': FieldValue.arrayRemove([fundiId]),
+              'counterAcceptedBids': FieldValue.arrayRemove([bidId]),
+              'lastCounterAcceptedBy': FieldValue.delete(),
+            });
         if (navContext.mounted) Navigator.pop(navContext);
         if (navContext.mounted)
           ScaffoldMessenger.of(navContext).showSnackBar(
@@ -131,9 +149,10 @@ class PendingBidCard extends StatelessWidget {
       }
     }
 
-    final status = (bid.bid['status'] ?? '').toString();
-    final counterBy = (bid.bid['counterBy'] ?? bid.bid['lastCounterBy'] ?? '')
-        .toString();
+    final status = (widget.bid.bid['status'] ?? '').toString();
+    final counterBy =
+        (widget.bid.bid['counterBy'] ?? widget.bid.bid['lastCounterBy'] ?? '')
+            .toString();
     final isCountered = status == 'countered';
     final isMyCounter = isCountered && counterBy == 'client';
     final isFundiCounter = isCountered && counterBy == 'fundi';
@@ -142,21 +161,26 @@ class PendingBidCard extends StatelessWidget {
         status == 'counter_accepted' ||
         status == 'counter_accepted_by_fundi_pending';
     final myCounterAmt =
-        ((bid.bid['clientCounterAmount'] ?? bid.bid['lastCounterAmount'] ?? 0)
+        ((widget.bid.bid['clientCounterAmount'] ??
+                    widget.bid.bid['lastCounterAmount'] ??
+                    0)
                 as num)
             .toInt();
     final fundiCounterAmt =
-        ((bid.bid['fundiCounterAmount'] ?? bid.bid['lastCounterAmount'] ?? 0)
+        ((widget.bid.bid['fundiCounterAmount'] ??
+                    widget.bid.bid['lastCounterAmount'] ??
+                    0)
                 as num)
             .toInt();
     final acceptedAmt =
-        ((bid.bid['agreedPrice'] ??
-                    bid.bid['clientCounterAmount'] ??
+        ((widget.bid.bid['agreedPrice'] ??
+                    widget.bid.bid['clientCounterAmount'] ??
                     myCounterAmt)
                 as num)
             .toInt();
-    final fundiName = (bid.bid['fundiName'] ?? 'Fundi').toString();
-    final fundiId = (bid.bid['fundiId'] ?? bid.bidDoc.id).toString();
+    final fundiName = (widget.bid.bid['fundiName'] ?? 'Fundi').toString();
+    final fundiId = (widget.bid.bid['fundiId'] ?? widget.bid.bidDoc.id)
+        .toString();
 
     Color bg = const Color(0xFFF8F8F8);
     Color border = Colors.black12;
@@ -212,59 +236,56 @@ class PendingBidCard extends StatelessWidget {
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
-                          // FIXED: RTDB LIVE DISTANCE
+                          // FIXED DISTANCE - no glitch
                           StreamBuilder<DatabaseEvent>(
-                            stream: FirebaseDatabase.instance
+                            stream: _rtdb
                                 .ref('live_locations/$fundiId')
                                 .onValue,
                             builder: (_, liveSnap) {
-                              if (!liveSnap.hasData ||
-                                  liveSnap.data!.snapshot.value == null) {
-                                return const SizedBox.shrink();
+                              if (liveSnap.hasData &&
+                                  liveSnap.data!.snapshot.value != null) {
+                                try {
+                                  var live = Map<String, dynamic>.from(
+                                    liveSnap.data!.snapshot.value as Map,
+                                  );
+                                  double fLat = (live['lat'] as num).toDouble();
+                                  double fLng = (live['lng'] as num).toDouble();
+                                  double? jLat, jLng;
+                                  var jGeo =
+                                      widget.jobData['geopoint'] ??
+                                      widget.jobData['location'] ??
+                                      widget.jobData['customerLocation'];
+                                  if (jGeo is GeoPoint) {
+                                    jLat = jGeo.latitude;
+                                    jLng = jGeo.longitude;
+                                  }
+                                  jLat ??=
+                                      (widget.jobData['customerLat'] ??
+                                              widget.jobData['clientLat'] ??
+                                              widget.jobData['lat'])
+                                          ?.toDouble();
+                                  jLng ??=
+                                      (widget.jobData['customerLng'] ??
+                                              widget.jobData['clientLng'] ??
+                                              widget.jobData['lng'])
+                                          ?.toDouble();
+                                  if (jLat != null && jLng != null) {
+                                    double km =
+                                        Geolocator.distanceBetween(
+                                          jLat,
+                                          jLng,
+                                          fLat,
+                                          fLng,
+                                        ) /
+                                        1000;
+                                    if (km > 0.05) _lastKm = km;
+                                  }
+                                } catch (_) {}
                               }
-                              double km = 0;
-                              try {
-                                var live = Map<String, dynamic>.from(
-                                  liveSnap.data!.snapshot.value as Map,
-                                );
-                                double fLat = (live['lat'] as num).toDouble();
-                                double fLng = (live['lng'] as num).toDouble();
-
-                                // client job location
-                                double? jLat, jLng;
-                                var jGeo =
-                                    jobData['geopoint'] ??
-                                    jobData['location'] ??
-                                    jobData['customerLocation'];
-                                if (jGeo is GeoPoint) {
-                                  jLat = jGeo.latitude;
-                                  jLng = jGeo.longitude;
-                                }
-                                jLat ??=
-                                    (jobData['customerLat'] ??
-                                            jobData['clientLat'] ??
-                                            jobData['lat'])
-                                        ?.toDouble();
-                                jLng ??=
-                                    (jobData['customerLng'] ??
-                                            jobData['clientLng'] ??
-                                            jobData['lng'])
-                                        ?.toDouble();
-
-                                if (jLat != null && jLng != null) {
-                                  km =
-                                      Geolocator.distanceBetween(
-                                        jLat,
-                                        jLng,
-                                        fLat,
-                                        fLng,
-                                      ) /
-                                      1000;
-                                }
-                              } catch (_) {}
-                              if (km <= 0.05) return const SizedBox.shrink();
+                              if (_lastKm == null)
+                                return const SizedBox.shrink();
                               return Text(
-                                '(${km.toStringAsFixed(1)} km)',
+                                '(${_lastKm!.toStringAsFixed(1)} km)',
                                 style: GoogleFonts.montserrat(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 11,
@@ -273,7 +294,7 @@ class PendingBidCard extends StatelessWidget {
                               );
                             },
                           ),
-                          if (bid.verified)
+                          if (widget.bid.verified)
                             const Icon(
                               Icons.verified,
                               size: 14,
@@ -309,7 +330,7 @@ class PendingBidCard extends StatelessWidget {
                             color: Colors.amber.shade700,
                           ),
                           Text(
-                            '${bid.rating.toStringAsFixed(1)}',
+                            '${widget.bid.rating.toStringAsFixed(1)}',
                             style: GoogleFonts.inter(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
@@ -317,7 +338,7 @@ class PendingBidCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            '${bid.referrals} referrals • ${bid.jobsDone} jobs',
+                            '${widget.bid.referrals} referrals • ${widget.bid.jobsDone} jobs',
                             style: GoogleFonts.inter(
                               fontSize: 10,
                               color: Colors.black54,
@@ -329,10 +350,10 @@ class PendingBidCard extends StatelessWidget {
                   ),
                 ),
                 FundiBadgeChip(
-                  level: bid.level,
-                  isVerified: bid.verified,
-                  referralCount: bid.referrals,
-                  jobsDone: bid.jobsDone,
+                  level: widget.bid.level,
+                  isVerified: widget.bid.verified,
+                  referralCount: widget.bid.referrals,
+                  jobsDone: widget.bid.jobsDone,
                 ),
               ],
             ),
@@ -345,7 +366,7 @@ class PendingBidCard extends StatelessWidget {
                   style: GoogleFonts.inter(fontSize: 11, color: Colors.black54),
                 ),
                 Text(
-                  'KES ${bid.bid['price'] ?? bid.bid['amount'] ?? bid.bid['bidAmount'] ?? 0}',
+                  'KES ${widget.bid.bid['price'] ?? widget.bid.bid['amount'] ?? widget.bid.bid['bidAmount'] ?? 0}',
                   style: GoogleFonts.montserrat(
                     fontWeight: FontWeight.w800,
                     fontSize: 14,
