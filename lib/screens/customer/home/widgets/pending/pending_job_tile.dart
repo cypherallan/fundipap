@@ -137,23 +137,38 @@ class PendingJobTile extends StatelessWidget {
                       .doc(jobId)
                       .collection('bids')
                       .snapshots(),
-                  builder: (_, s) => Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF2F2F2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '${s.data?.docs.length ?? 0} bids',
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                  builder: (_, s) {
+                    int count = 0;
+                    if (s.hasData) {
+                      count = s.data!.docs.where((d) {
+                        var data = d.data() as Map<String, dynamic>;
+                        String st = (data['status'] ?? '')
+                            .toString()
+                            .toLowerCase();
+                        if (data['deletedForFundi'] == true) return false;
+                        return !st.contains('cancel') &&
+                            st != 'withdrawn' &&
+                            st != 'deleted';
+                      }).length;
+                    }
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
                       ),
-                    ),
-                  ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF2F2F2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '$count bids',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

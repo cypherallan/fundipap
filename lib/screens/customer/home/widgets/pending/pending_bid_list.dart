@@ -38,7 +38,18 @@ class PendingBidList extends StatelessWidget {
           .snapshots(),
       builder: (_, bSnap) {
         if (!bSnap.hasData) return const LinearProgressIndicator();
-        if (bSnap.data!.docs.isEmpty) {
+
+        // FIX: filter out cancelled/withdrawn bids at source - only that specific bid removed
+        var validDocs = bSnap.data!.docs.where((d) {
+          var data = d.data() as Map<String, dynamic>;
+          String st = (data['status'] ?? '').toString().toLowerCase();
+          if (data['deletedForFundi'] == true) return false;
+          if (st.contains('cancel') || st == 'withdrawn' || st == 'deleted')
+            return false;
+          return true;
+        }).toList();
+
+        if (validDocs.isEmpty) {
           return Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -58,7 +69,7 @@ class PendingBidList extends StatelessWidget {
           );
         }
         return FutureBuilder<List<BidWithFundi>>(
-          future: enrichBids(bSnap.data!.docs, userPos),
+          future: enrichBids(validDocs, userPos),
           builder: (_, s) {
             if (!s.hasData) return const LinearProgressIndicator();
             var list = s.data!;

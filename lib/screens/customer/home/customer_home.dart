@@ -65,6 +65,16 @@ class _CustomerHomeState extends State<CustomerHome> {
         )
         .snapshots()
         .listen((jobsSnap) {
+          var currentJobIds = jobsSnap.docs.map((d) => d.id).toSet();
+          // remove bids for jobs that are now cancelled/closed
+          _bidsSubs.keys
+              .where((id) => !currentJobIds.contains(id))
+              .toList()
+              .forEach((id) {
+                _bidsSubs[id]?.cancel();
+                _bidsSubs.remove(id);
+                _bids.removeWhere((b) => b['jobId'] == id);
+              });
           for (var jobDoc in jobsSnap.docs) {
             var jobId = jobDoc.id;
             if (_bidsSubs.containsKey(jobId)) continue;
@@ -78,7 +88,14 @@ class _CustomerHomeState extends State<CustomerHome> {
                   for (var b in bidsSnap.docs) {
                     var bidRaw = b.data();
                     var bid = Map<String, dynamic>.from(bidRaw);
+                    String bStatus = (bid['status'] ?? '')
+                        .toString()
+                        .toLowerCase();
                     if (bid['deletedForFundi'] == true) continue;
+                    if (bStatus.contains('cancel') ||
+                        bStatus == 'withdrawn' ||
+                        bStatus == 'deleted')
+                      continue;
                     var jobRaw = jobDoc.data();
                     _bids.add({
                       'jobId': jobId,
@@ -304,6 +321,9 @@ class _CustomerHomeState extends State<CustomerHome> {
     Map<String, List<Map<String, dynamic>>> bidsByJob = {};
     for (var b in _bids) {
       if (activeJobIds.contains(b['jobId'])) continue;
+      String bs = (b['status'] ?? '').toString().toLowerCase();
+      if (bs.contains('cancel') || bs == 'withdrawn' || bs == 'deleted')
+        continue;
       var jobDataRaw = b['jobData'] as Map;
       var jobDataSafe = Map<String, dynamic>.from(jobDataRaw);
       if ((jobDataSafe['status'] ?? '').toString() == 'completed') continue;

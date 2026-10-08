@@ -110,12 +110,13 @@ class _PendingBidCardState extends State<PendingBidCard> {
       );
       if (ok != true) return;
       try {
-        if (navContext.mounted)
+        if (navContext.mounted) {
           showDialog(
             context: navContext,
             barrierDismissible: false,
             builder: (_) => const Center(child: CircularProgressIndicator()),
           );
+        }
         final bidId = widget.bid.bidDoc.id;
         final fundiId = (widget.bid.bid['fundiId'] ?? bidId).toString();
         await FirebaseFirestore.instance
@@ -136,20 +137,30 @@ class _PendingBidCardState extends State<PendingBidCard> {
               'lastCounterAcceptedBy': FieldValue.delete(),
             });
         if (navContext.mounted) Navigator.pop(navContext);
-        if (navContext.mounted)
+        if (navContext.mounted) {
           ScaffoldMessenger.of(navContext).showSnackBar(
             const SnackBar(content: Text('Cancelled. Job stays pending.')),
           );
+        }
       } catch (e) {
         if (navContext.mounted) Navigator.pop(navContext);
-        if (navContext.mounted)
+        if (navContext.mounted) {
           ScaffoldMessenger.of(
             navContext,
           ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+        }
       }
     }
 
     final status = (widget.bid.bid['status'] ?? '').toString();
+    final statusLower = status.toLowerCase();
+    // FIX: hide cancelled / withdrawn bids from client bid list
+    if (statusLower.contains('cancel') ||
+        statusLower == 'withdrawn' ||
+        statusLower == 'deleted' ||
+        statusLower == 'cancelled_by_client') {
+      return const SizedBox.shrink();
+    }
     final counterBy =
         (widget.bid.bid['counterBy'] ?? widget.bid.bid['lastCounterBy'] ?? '')
             .toString();

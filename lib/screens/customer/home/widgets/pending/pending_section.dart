@@ -59,6 +59,11 @@ class CustomerPendingSection extends StatelessWidget {
             if (snap2.hasData) for (var d in snap2.data!.docs) map[d.id] = d;
             var jobs = map.values.toList();
 
+            jobs = jobs.where((d) {
+              var data = d.data() as Map<String, dynamic>;
+              return data['cancelled'] != true && data['autoCancelled'] != true;
+            }).toList();
+
             jobs.sort((a, b) {
               var ad = a.data() as Map<String, dynamic>;
               var bd = b.data() as Map<String, dynamic>;
