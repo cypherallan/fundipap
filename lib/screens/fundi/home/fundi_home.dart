@@ -172,7 +172,14 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
     for (var doc in docs) {
       var job = doc.data() as Map<String, dynamic>;
       var status = (job['status'] ?? '').toString().toLowerCase();
-      if (status.contains('cancel') || job['reposted'] == true) {
+      bool isCancelled =
+          status.contains('cancel') ||
+          _toBool(job['cancelled']) ||
+          _toBool(job['autoCancelled']) ||
+          job['reposted'] == true ||
+          status == 'cancelled_after_arrival' ||
+          status == 'auto_cancelled_no_arrival';
+      if (isCancelled) {
         _excludedJobIds.add(doc.id);
         _jobsMap.remove(doc.id);
         continue;
@@ -241,8 +248,14 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
         .where('assignedFundiId', isEqualTo: uid)
         .where(
           'status',
-          whereNotIn: ['cancelled', 'closed'],
-        ) // REMOVED completed
+          whereNotIn: [
+            'cancelled',
+            'cancelled_after_arrival',
+            'closed',
+            'auto_cancelled_no_arrival',
+            'auto_cancelled',
+          ],
+        )
         .snapshots()
         .listen((snap) {
           for (var d in snap.docs) {
@@ -371,6 +384,25 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
           assignedMap[b['jobId']] ??
           (b['jobData'] as Map<String, dynamic>? ?? <String, dynamic>{});
       var bidDataForNotif = (b['bidData'] as Map<String, dynamic>?) ?? b;
+
+      // FIX: ghost Bid sent after cancel - if job not in assignedMap and bid was accepted/withdrawn, skip
+      bool isInAssigned = assignedMap.containsKey(b['jobId']);
+      String bStatus = (bidDataForNotif['status'] ?? '')
+          .toString()
+          .toLowerCase();
+      if (!isInAssigned &&
+          (bStatus == 'accepted' ||
+              bStatus == 'withdrawn' ||
+              bStatus.contains('cancel')))
+        continue;
+
+      var jobStatusNotif = (jobDataForNotif['status'] ?? '')
+          .toString()
+          .toLowerCase();
+      if (jobStatusNotif.contains('cancel') ||
+          _toBool(jobDataForNotif['cancelled']) ||
+          _toBool(jobDataForNotif['autoCancelled']))
+        continue;
       FundiWaitingState? ws = getFundiWaitingState(
         job: jobDataForNotif,
         bid: bidDataForNotif,

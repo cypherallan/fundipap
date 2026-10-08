@@ -72,6 +72,15 @@ FundiWaitingState? getFundiWaitingState({
       .toLowerCase();
   bool escrowDone = ['held', 'paid', 'released'].contains(escrowStatus);
 
+  // FIX: must be here at top - before isCompletedLike
+  if (jobStatus.contains('cancel') ||
+      _toBool(job['cancelled']) ||
+      _toBool(job['autoCancelled']) ||
+      jobStatus == 'auto_cancelled' ||
+      jobStatus == 'cancelled_after_arrival' ||
+      jobStatus == 'auto_cancelled_no_arrival')
+    return null;
+
   int labour = _toInt(
     job['laborCost'] ??
         job['agreedPrice'] ??
@@ -85,8 +94,9 @@ FundiWaitingState? getFundiWaitingState({
 
   Map<String, dynamic>? renegoEarly;
   var rawRenegoEarly = job['renegotiation'];
-  if (rawRenegoEarly is Map)
+  if (rawRenegoEarly is Map) {
     renegoEarly = Map<String, dynamic>.from(rawRenegoEarly);
+  }
   String earlyPhase = (renegoEarly?['currentPhase'] ?? '')
       .toString()
       .toLowerCase();
@@ -356,7 +366,6 @@ FundiWaitingState? getFundiWaitingState({
       price: extra,
     );
   }
-  if (jobStatus.contains('cancel')) return null;
 
   String bidStatus = (bid['status'] ?? '').toString();
   String lastBy = (bid['lastCounterBy'] ?? bid['counterBy'] ?? '').toString();
@@ -422,6 +431,8 @@ FundiWaitingState? getFundiWaitingState({
       !escrowDone &&
       !siteDone &&
       !travelling &&
+      !_toBool(job['cancelled']) &&
+      !_toBool(job['autoCancelled']) &&
       ['assigned', 'confirmed', 'negotiating', 'accepted'].contains(jobStatus);
   bool isAwaitingExtra =
       jobStatus == 'awaiting_extra_escrow' &&
@@ -504,3 +515,4 @@ FundiWaitingState? getFundiWaitingState({
   }
   return null;
 }
+//
