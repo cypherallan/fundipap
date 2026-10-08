@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../bidding/confirm_fundi_bid_card.dart';
 import '../profile/confirm_fundi_reviews.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
+import '../../../../services/job_cancel_watcher.dart'; // ADD THIS
 
 class ConfirmFundiPage extends StatefulWidget {
   final String jobId;
@@ -29,7 +31,8 @@ class ConfirmFundiPage extends StatefulWidget {
 }
 
 class _ConfirmFundiPageState extends State<ConfirmFundiPage>
-    with ConfirmFundiActionsMixin {
+    with ConfirmFundiActionsMixin, JobCancelWatcher {
+  // ADD JobCancelWatcher
   @override
   Map<String, dynamic>? fundi;
   @override
@@ -65,6 +68,12 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
   @override
   void initState() {
     super.initState();
+    // WATCH FOR FUNDI CANCEL / WITHDRAW
+    watchCancellation(
+      jobId: widget.jobId,
+      bidId: widget.bidId,
+      context: context,
+    );
     loadFundi().then((_) => _loadTransport());
   }
 
@@ -85,7 +94,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
   Future<void> _loadTransport() async {
     try {
       double? liveLat, liveLng;
-      // TRY RTDB FIRST - same source as card
       try {
         final rtdb = FirebaseDatabase.instanceFor(
           app: Firebase.app(),
@@ -101,7 +109,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         }
       } catch (_) {}
 
-      // fallback to TransportCalculator if RTDB empty
       var t = await TransportCalculator.calc(
         jobData: widget.jobData,
         fundiId: widget.bidData['fundiId'],

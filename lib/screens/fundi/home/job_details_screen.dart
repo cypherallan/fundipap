@@ -407,6 +407,56 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
             .doc(jobId)
             .snapshots(),
         builder: (ctx, jobSnap) {
+          // FIX: job deleted
+          if (jobSnap.hasData &&
+              (!jobSnap.data!.exists || jobSnap.data!.data() == null)) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.delete_outline,
+                      size: 48,
+                      color: Colors.black26,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'This job is no longer available',
+                      style: GoogleFonts.montserrat(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'It may have been deleted by the client',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: Colors.black54,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () =>
+                          Navigator.of(context).popUntil((r) => r.isFirst),
+                      child: Text(
+                        'Go Home',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
           final Map<String, dynamic> jData =
               (jobSnap.data?.data() as Map<String, dynamic>?) ?? widget.job;
           final String realTitle =
@@ -798,6 +848,10 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                 .doc(jobId)
                 .snapshots(),
             builder: (ctx, jobSnap) {
+              if (jobSnap.hasData &&
+                  (!jobSnap.data!.exists || jobSnap.data!.data() == null)) {
+                return const SizedBox.shrink(); // hide BID NOW button when deleted
+              }
               var jData =
                   (jobSnap.data?.data() as Map<String, dynamic>?) ?? widget.job;
               return StreamBuilder<DocumentSnapshot>(

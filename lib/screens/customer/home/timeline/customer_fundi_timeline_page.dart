@@ -7,6 +7,7 @@ import '../timeline/widgets/timeline_chat_sheet.dart';
 import '../timeline/widgets/timeline_cancel_wrapper.dart';
 import '../timeline/widgets/timeline_reversed_list.dart';
 import '../../home/timeline/widgets/timeline_steps_builder.dart';
+import '../../../../services/job_cancel_watcher.dart';
 
 class CustomerFundiTimelinePage extends StatefulWidget {
   final String jobId;
@@ -25,8 +26,15 @@ class CustomerFundiTimelinePage extends StatefulWidget {
       _CustomerFundiTimelinePageState();
 }
 
-class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage> {
+class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
+    with JobCancelWatcher {
   bool _releasing = false;
+  @override
+  void initState() {
+    super.initState();
+    // WATCH: if fundi cancels this assigned job while client is inside timeline
+    watchCancellation(jobId: widget.jobId, context: context);
+  }
 
   int _toInt(dynamic v, [int fb = 0]) {
     if (v == null) return fb;
