@@ -370,74 +370,106 @@ class JobCancelService {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.black12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Escrow Breakdown',
-                        style: GoogleFonts.montserrat(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
+                if (isClient)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Escrow Breakdown',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      _row('Labour (locked):', 'KES $labourForCalc'),
-                      if (priceRequestPending &&
-                          !extraLocked &&
-                          newLabour != oldLabour)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
+                        const SizedBox(height: 8),
+                        _row('Labour (locked):', 'KES $labourForCalc'),
+                        if (priceRequestPending &&
+                            !extraLocked &&
+                            newLabour != oldLabour)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              'Fundi requested new labour KES $newLabour (not yet locked)',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                color: Colors.orange.shade800,
+                              ),
+                            ),
+                          ),
+                        _row('Transport:', 'KES $transport'),
+                        _row('Total locked:', 'KES $totalLocked', bold: true),
+                        const Divider(),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: FundipapColors.primaryYellow.withOpacity(
+                              0.15,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            children: [
+                              _row(
+                                'App maintenance (5% labour):',
+                                'KES $platformFee',
+                                color: Colors.red.shade700,
+                                bold: true,
+                              ),
+                              _row(
+                                'You get back:',
+                                'KES $clientRefund',
+                                color: Colors.green.shade700,
+                                bold: true,
+                              ),
+                              if (fundiGets > 0)
+                                _row(
+                                  'Fundi gets (transport):',
+                                  'KES $fundiGets',
+                                  color: Colors.blue.shade700,
+                                  bold: true,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: Colors.red.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
                           child: Text(
-                            'Fundi requested new labour KES $newLabour (not yet locked)',
+                            'You are cancelling before site visit. No payment will be released to you. Full escrow will be refunded to client.',
                             style: GoogleFonts.inter(
-                              fontSize: 10,
-                              color: Colors.orange.shade800,
+                              fontSize: 11,
+                              color: Colors.red.shade800,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
-                      _row('Transport:', 'KES $transport'),
-                      _row('Total locked:', 'KES $totalLocked', bold: true),
-                      const Divider(),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: FundipapColors.primaryYellow.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          children: [
-                            _row(
-                              'App maintenance (5% labour):',
-                              'KES $platformFee',
-                              color: Colors.red.shade700,
-                              bold: true,
-                            ),
-                            _row(
-                              isClient ? 'You get back:' : 'Client gets back:',
-                              'KES $clientRefund',
-                              color: Colors.green.shade700,
-                              bold: true,
-                            ),
-                            if (fundiGets > 0)
-                              _row(
-                                'Fundi gets (transport):',
-                                'KES $fundiGets',
-                                color: Colors.blue.shade700,
-                                bold: true,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
                 const SizedBox(height: 12),
                 Text(
                   'Why are you cancelling? *',
