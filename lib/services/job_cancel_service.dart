@@ -702,10 +702,14 @@ class JobCancelService {
               .toString();
       String clientId = (job['customerId'] ?? job['clientId'] ?? '').toString();
 
+      // HARD FIX: don't trust param, derive from uid
+      bool actualIsClient = clientId.isNotEmpty ? clientId == uid : isClient;
+      bool actualIsFundi = !actualIsClient;
+
       await db.collection('jobs').doc(jobId).update({
         'status': arrived ? 'cancelled_after_arrival' : 'cancelled',
         'cancelled': true,
-        'cancelledBy': isClient ? 'client' : 'fundi',
+        'cancelledBy': actualIsClient ? 'client' : 'fundi',
         'cancelledById': uid,
         'cancelReason': reason,
         'cancelDetails': details,
@@ -728,10 +732,10 @@ class JobCancelService {
           'platformFee': platformFee,
           'clientRefund': clientRefund,
           'fundiGets': fundiGets,
-          'cancelledBy': isClient ? 'client' : 'fundi',
+          'cancelledBy': actualIsClient ? 'client' : 'fundi',
           'arrived': arrived,
           'wasPriceRequestPending': wasPriceRequestPending,
-          'refundReason': isClient
+          'refundReason': actualIsClient
               ? (wasPriceRequestPending
                     ? 'Client cancel after fundi price request pending - uses old escrow $total'
                     : 'Client cancel - 5% on labour only')
@@ -754,7 +758,7 @@ class JobCancelService {
         'jobId': jobId,
         'fundiId': fundiId,
         'clientId': clientId,
-        'cancelledBy': isClient ? 'client' : 'fundi',
+        'cancelledBy': actualIsClient ? 'client' : 'fundi',
         'arrived': arrived,
         'wasPriceRequestPending': wasPriceRequestPending,
         'labour': labour,
@@ -766,7 +770,7 @@ class JobCancelService {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // NEW: save to fundi cancelledJobs subcollection like notifications
+      // save to fundi cancelledJobs subcollection like notifications
       if (fundiId.isNotEmpty) {
         try {
           await db
@@ -781,7 +785,7 @@ class JobCancelService {
                     job['customerName'] ?? job['clientName'] ?? 'Client',
                 'cancelReason': reason,
                 'type': 'assigned_cancelled',
-                'cancelledBy': isClient ? 'client' : 'fundi',
+                'cancelledBy': actualIsClient ? 'client' : 'fundi',
                 'transportPayout': fundiGets,
                 'cancelledAt': FieldValue.serverTimestamp(),
                 'createdAt': FieldValue.serverTimestamp(),
@@ -789,7 +793,7 @@ class JobCancelService {
         } catch (_) {}
       }
 
-      if (!isClient && fundiId.isNotEmpty) {
+      if (actualIsFundi && fundiId.isNotEmpty) {
         await FundiPenaltyService.onFundiCancel(
           fundiId: fundiId,
           jobId: jobId,
@@ -803,7 +807,7 @@ class JobCancelService {
           SnackBar(
             content: Text(
               escrowWasLocked
-                  ? (isClient
+                  ? (actualIsClient
                         ? 'Cancelled. You get KES $clientRefund, fee KES $platformFee'
                         : 'Cancelled. Client refunded KES $clientRefund')
                   : 'Job cancelled - no fee, no escrow was locked',
@@ -813,13 +817,14 @@ class JobCancelService {
         );
       }
     } catch (e) {
-      if (context.mounted)
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Cancel failed: $e'),
             backgroundColor: Colors.red,
           ),
         );
+      }
     }
   }
 

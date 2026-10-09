@@ -7,6 +7,7 @@ class TimelineCancelWrapper extends StatelessWidget {
   final bool canCancel;
   final String jobId;
   final Map<String, dynamic> job;
+  final bool isClient; // <- ADD THIS
 
   const TimelineCancelWrapper({
     super.key,
@@ -14,6 +15,7 @@ class TimelineCancelWrapper extends StatelessWidget {
     required this.canCancel,
     required this.jobId,
     required this.job,
+    required this.isClient, // <- ADD THIS
   });
 
   @override
@@ -83,7 +85,7 @@ class TimelineCancelWrapper extends StatelessWidget {
                     context: context,
                     jobId: jobId,
                     job: job,
-                    isClient: false,
+                    isClient: isClient, // <- USE PARAM, not false
                   );
                 }
               },

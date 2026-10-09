@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -58,14 +59,73 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
     _bidCancelSub?.cancel();
     if (!mounted) return;
 
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    String cancelledBy = (data['cancelledBy'] ?? '').toString().toLowerCase();
+    bool autoCancelled = data['autoCancelled'] == true;
     String reason = (data['fundiCancelReason'] ?? data['cancelReason'] ?? '')
         .toString();
-    String title = isBidOnly
-        ? 'Fundi withdrew bid'
-        : 'Fundi cancelled this job';
-    String msg = isBidOnly
-        ? 'This fundi withdrew his bid for this job.'
-        : 'Fundi cancelled this job${reason.isNotEmpty ? ': $reason' : ''}.';
+
+    String clientId = (data['customerId'] ?? data['clientId'] ?? '').toString();
+    String fundiId =
+        (data['assignedFundi'] ??
+                data['assignedFundiId'] ??
+                data['fundiId'] ??
+                '')
+            .toString();
+    // if bid doc, fundiId is in data itself
+    if (fundiId.isEmpty) fundiId = (data['fundiId'] ?? '').toString();
+
+    bool viewerIsClient = clientId.isNotEmpty
+        ? clientId == uid
+        : cancelledBy != 'client'
+        ? true
+        : false;
+    // fallback: if we can't tell from ids, use cancelledBy logic with uid vs fundiId
+    if (clientId.isEmpty && fundiId.isNotEmpty) {
+      viewerIsClient = fundiId != uid;
+    }
+
+    String title;
+    String msg;
+
+    if (isBidOnly) {
+      if (viewerIsClient) {
+        title = 'Fundi withdrew bid';
+        msg = 'This fundi withdrew his bid for this job.';
+      } else {
+        title = 'You withdrew your bid';
+        msg = 'You withdrew your bid.';
+      }
+    } else if (autoCancelled || cancelledBy == 'system') {
+      title = 'Job auto-cancelled';
+      msg = reason.isNotEmpty
+          ? 'This job was auto-cancelled: $reason'
+          : 'This job was auto-cancelled.';
+    } else if (cancelledBy == 'client') {
+      if (viewerIsClient) {
+        title = 'You cancelled this job';
+        msg = reason.isNotEmpty && reason != 'Cancelled before escrow'
+            ? 'You cancelled: $reason'
+            : 'You cancelled this job before escrow. No fee charged.';
+      } else {
+        title = 'Client cancelled this job';
+        msg = reason.isNotEmpty && reason != 'Cancelled before escrow'
+            ? 'Client cancelled: $reason'
+            : 'Client cancelled this job before escrow.';
+      }
+    } else {
+      // fundi cancelled
+      if (viewerIsClient) {
+        title = 'Fundi cancelled this job';
+        msg =
+            'Fundi cancelled this job${reason.isNotEmpty ? ': $reason' : ''}.';
+      } else {
+        title = 'You cancelled this job';
+        msg = reason.isNotEmpty
+            ? 'You cancelled: $reason'
+            : 'You cancelled this job.';
+      }
+    }
 
     showDialog(
       context: context,
@@ -87,8 +147,8 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
               foregroundColor: Colors.white,
             ),
             onPressed: () {
-              Navigator.of(context).pop(); // close dialog
-              Navigator.of(context).popUntil((r) => r.isFirst); // back to home
+              Navigator.of(context).pop();
+              Navigator.of(context).popUntil((r) => r.isFirst);
             },
             child: Text(
               'OK',

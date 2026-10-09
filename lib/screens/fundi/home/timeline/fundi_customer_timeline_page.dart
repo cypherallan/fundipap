@@ -423,6 +423,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                     canCancel: canFundiCancelNow,
                     jobId: widget.jobId,
                     job: job,
+                    isClient: false,
                     child: ListView.separated(
                       padding: const EdgeInsets.all(12),
                       itemCount: timeline.length,
