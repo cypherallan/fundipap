@@ -18,7 +18,16 @@ class TimelineCancelWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!canCancel) return child;
+    final status = (job['status'] ?? '').toString().toLowerCase();
+    final isCancelled = status.contains('cancel');
+    final isCompleted =
+        status == 'completed' ||
+        status == 'job_completed' ||
+        status == 'released';
+    if (isCancelled || isCompleted) return child;
+
+    final bool isBlocked = !canCancel;
+
     return Column(
       children: [
         Expanded(child: child),
@@ -38,15 +47,46 @@ class TimelineCancelWrapper extends StatelessWidget {
             height: 48,
             child: OutlinedButton(
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: Colors.red.shade400),
-                foregroundColor: Colors.red.shade700,
+                side: BorderSide(
+                  color: isBlocked ? Colors.grey.shade400 : Colors.red.shade400,
+                ),
+                foregroundColor: isBlocked
+                    ? Colors.grey.shade600
+                    : Colors.red.shade700,
               ),
-              onPressed: () => JobCancelService.showCancelDialog(
-                context: context,
-                jobId: jobId,
-                job: job,
-                isClient: false,
-              ),
+              onPressed: () {
+                if (isBlocked) {
+                  showDialog(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: Text(
+                        'Cannot cancel now',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                      content: Text(
+                        'You cannot cancel this job now.',
+                        style: GoogleFonts.inter(fontSize: 12),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('OK'),
+                        ),
+                      ],
+                    ),
+                  );
+                } else {
+                  JobCancelService.showCancelDialog(
+                    context: context,
+                    jobId: jobId,
+                    job: job,
+                    isClient: false,
+                  );
+                }
+              },
               child: Text(
                 'CANCEL JOB',
                 style: GoogleFonts.montserrat(
