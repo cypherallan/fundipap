@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/animated_waiting_card.dart';
 import 'fundi_bid_dialog.dart';
+import '../../../services/job_cancel_watcher.dart';
 
 class JobDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> job;
@@ -26,7 +27,9 @@ class JobDetailsScreen extends StatefulWidget {
   State<JobDetailsScreen> createState() => _JobDetailsScreenState();
 }
 
-class _JobDetailsScreenState extends State<JobDetailsScreen> {
+// change this line
+class _JobDetailsScreenState extends State<JobDetailsScreen>
+    with JobCancelWatcher {
   int _toInt(dynamic v, [int fb = 0]) {
     if (v == null) return fb;
     if (v is int) return v;
@@ -39,6 +42,17 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       _toInt(b['price'] ?? b['amount'] ?? b['bidAmount'] ?? 0);
 
   int _transport(Map<String, dynamic> j) => _toInt(j['transportFee'] ?? 100);
+
+  @override
+  void initState() {
+    super.initState();
+    final jobId = (widget.job['id'] ?? widget.job['jobId'] ?? '').toString();
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      watchCancellation(jobId: jobId, bidId: uid, context: context);
+    });
+  }
 
   Widget _detailRow(String label, String value) {
     if (value.isEmpty || value == 'null') return const SizedBox.shrink();

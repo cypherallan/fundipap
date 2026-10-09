@@ -5,10 +5,10 @@ import '../../../theme/app_theme.dart';
 class FundiJobCard extends StatelessWidget {
   final Map<String, dynamic> data;
   final bool isMatch;
-  final VoidCallback? onBid; // <-- changed to nullable so we can disable
+  final VoidCallback? onBid;
   final VoidCallback onTap;
   final double? distanceKm;
-  final bool hasBid; // <-- ADDED
+  final bool hasBid;
 
   const FundiJobCard({
     super.key,
@@ -17,7 +17,7 @@ class FundiJobCard extends StatelessWidget {
     required this.onBid,
     required this.onTap,
     this.distanceKm,
-    this.hasBid = false, // <-- default false
+    this.hasBid = false,
   });
 
   @override
@@ -34,6 +34,20 @@ class FundiJobCard extends StatelessWidget {
         ? '${distanceKm!.toStringAsFixed(1)}km away'
         : 'Calculating...';
 
+    // NEW: detect cancellation directly from job data
+    bool isCancelled =
+        (data['cancelled'] == true) ||
+        (data['autoCancelled'] == true) ||
+        (data['status'] ?? '').toString().toLowerCase().contains('cancel');
+    String cancelledBy = (data['cancelledBy'] ?? '').toString().toLowerCase();
+    bool clientCancelled = isCancelled && cancelledBy == 'client';
+    bool fundiCancelled = isCancelled && cancelledBy == 'fundi';
+    bool systemCancelled =
+        isCancelled &&
+        (cancelledBy == 'system' || data['autoCancelled'] == true);
+    String cancelReason =
+        (data['fundiCancelReason'] ?? data['cancelReason'] ?? '').toString();
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -41,13 +55,17 @@ class FundiJobCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: hasBid
+          color: isCancelled
+              ? Colors.red.shade50
+              : hasBid
               ? const Color(0xFFF0FFF0)
               : isMatch
               ? Colors.white
               : Colors.white.withOpacity(0.92),
           borderRadius: BorderRadius.circular(16),
-          border: hasBid
+          border: isCancelled
+              ? Border.all(color: Colors.red.shade300, width: 1.2)
+              : hasBid
               ? Border.all(color: FundipapColors.greenSuccess, width: 1.5)
               : isMatch
               ? Border.all(color: FundipapColors.primaryYellow, width: 1.5)
@@ -63,6 +81,65 @@ class FundiJobCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // CANCELLED BANNER FOR FUNDI
+            if (isCancelled) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: clientCancelled
+                      ? Colors.orange.shade100
+                      : fundiCancelled
+                      ? Colors.grey.shade200
+                      : Colors.red.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: clientCancelled
+                        ? Colors.orange.shade300
+                        : Colors.red.shade300,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      clientCancelled
+                          ? Icons.person_off
+                          : fundiCancelled
+                          ? Icons.cancel_outlined
+                          : Icons.warning_amber,
+                      size: 14,
+                      color: clientCancelled
+                          ? Colors.orange.shade800
+                          : Colors.red.shade700,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        clientCancelled
+                            ? 'Client cancelled this job${cancelReason.isNotEmpty && cancelReason != 'Cancelled before escrow' ? ': $cancelReason' : ''}'
+                            : fundiCancelled
+                            ? 'You cancelled this job'
+                            : systemCancelled
+                            ? 'Job auto-cancelled: $cancelReason'
+                            : 'This job was cancelled',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: clientCancelled
+                              ? Colors.orange.shade900
+                              : Colors.red.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             // Client row
             Row(
               children: [
@@ -158,7 +235,7 @@ class FundiJobCard extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (hasBid) ...[
+                if (hasBid && !isCancelled) ...[
                   const SizedBox(width: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -209,8 +286,29 @@ class FundiJobCard extends StatelessWidget {
               style: GoogleFonts.inter(fontSize: 10, color: Colors.black54),
             ),
             const SizedBox(height: 10),
-            // BID BUTTON OR WAITING MESSAGE
-            if (hasBid)
+            // BID BUTTON OR CANCELLED STATE
+            if (isCancelled)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.black12),
+                ),
+                child: Text(
+                  clientCancelled
+                      ? 'Client cancelled - moved to cancelled tab'
+                      : 'Cancelled',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black54,
+                  ),
+                ),
+              )
+            else if (hasBid)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 10),

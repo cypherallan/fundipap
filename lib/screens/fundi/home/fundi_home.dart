@@ -168,29 +168,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
     }
   }
 
-  void _mergeAssigned(List<DocumentSnapshot> docs) {
-    for (var doc in docs) {
-      var job = doc.data() as Map<String, dynamic>;
-      var status = (job['status'] ?? '').toString().toLowerCase();
-      bool isCancelled =
-          status.contains('cancel') ||
-          _toBool(job['cancelled']) ||
-          _toBool(job['autoCancelled']) ||
-          job['reposted'] == true ||
-          status == 'cancelled_after_arrival' ||
-          status == 'auto_cancelled_no_arrival';
-      if (isCancelled) {
-        _excludedJobIds.add(doc.id);
-        _jobsMap.remove(doc.id);
-        continue;
-      }
-      _excludedJobIds.remove(doc.id);
-      _jobsMap[doc.id] = doc;
-    }
-    _assignedJobs = _jobsMap.values.toList();
-    if (mounted) setState(() {});
-  }
-
   void _initNotificationListeners() {
     _bidsSub?.cancel();
     _assignedSub?.cancel();
@@ -246,22 +223,27 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
     _assignedSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('assignedFundiId', isEqualTo: uid)
-        .where(
-          'status',
-          whereNotIn: [
-            'cancelled',
-            'cancelled_after_arrival',
-            'closed',
-            'auto_cancelled_no_arrival',
-            'auto_cancelled',
-          ],
-        )
         .snapshots()
         .listen((snap) {
+          _jobsMap.clear();
+          // keep excluded list but rebuild
           for (var d in snap.docs) {
-            d.data();
+            var job = d.data();
+            var status = (job['status'] ?? '').toString().toLowerCase();
+            bool isCancelled =
+                status.contains('cancel') ||
+                _toBool(job['cancelled']) ||
+                _toBool(job['autoCancelled']) ||
+                job['reposted'] == true;
+            if (isCancelled) {
+              _excludedJobIds.add(d.id);
+              continue;
+            }
+            _excludedJobIds.remove(d.id);
+            _jobsMap[d.id] = d;
           }
-          _mergeAssigned(snap.docs);
+          _assignedJobs = _jobsMap.values.toList();
+          if (mounted) setState(() {});
         });
   }
 

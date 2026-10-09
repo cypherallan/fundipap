@@ -35,8 +35,16 @@ class FundiHomeJobList extends StatelessWidget {
           .collection('jobs')
           .where(
             'status',
-            whereIn: ['open', 'accepted', 'assigned', 'confirmed'],
-          ) // keep visible until escrow held
+            whereIn: [
+              'open',
+              'accepted',
+              'assigned',
+              'confirmed',
+              'cancelled',
+              'cancelled_after_arrival',
+              'auto_cancelled_no_arrival',
+            ],
+          )
           .snapshots(),
       builder: (context, snap) {
         if (!snap.hasData) {
@@ -50,19 +58,17 @@ class FundiHomeJobList extends StatelessWidget {
             .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
             .toList();
 
-        // FIXED: hide only when escrow locked, cancelled, or old reposted doc
+        // keep cancelled docs here - we will filter after checking bid
         docs = docs.where((m) {
           var status = (m['status'] ?? '').toString().toLowerCase();
           var escrow = (m['escrowStatus'] ?? 'pending')
               .toString()
               .toLowerCase();
-          if (status.contains('cancel') ||
-              status.contains('complete') ||
-              status == 'closed')
-            return false;
           if (m['reposted'] == true) return false;
+          // don't hide cancelled yet - let inner builder decide if fundi bid
+          if (status.contains('complete') || status == 'closed') return false;
           if (['held', 'paid', 'locked', 'released'].contains(escrow))
-            return false; // client locked money = remove from near you
+            return false;
           return true;
         }).toList();
 
@@ -95,13 +101,22 @@ class FundiHomeJobList extends StatelessWidget {
         return ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          itemCount: docs.length > 10 ? 10 : docs.length,
+          itemCount: docs.length > 20 ? 20 : docs.length,
           itemBuilder: (_, i) {
             var data = docs[i];
             int score = relevanceScore(data);
             bool isMatch = score > 0;
             double? km = FundiHomeLogic.distanceKm(currentPos, data);
             var uid = FirebaseAuth.instance.currentUser!.uid;
+
+            // detect cancelled at job level
+            bool jobIsCancelled =
+                (data['cancelled'] == true) ||
+                (data['autoCancelled'] == true) ||
+                (data['status'] ?? '').toString().toLowerCase().contains(
+                  'cancel',
+                );
+
             return StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('jobs')
@@ -119,7 +134,12 @@ class FundiHomeJobList extends StatelessWidget {
                     bidData?['rejectionReason'] ??
                     bidData?['rejectionCategory'] ??
                     'No reason given';
+
                 if (deletedForFundi) return const SizedBox.shrink();
+
+                // if job cancelled and fundi never bid - hide from Near You
+                if (jobIsCancelled && !hasBid) return const SizedBox.shrink();
+
                 if (isRejected) {
                   return GestureDetector(
                     onTap: () async {
@@ -259,12 +279,15 @@ class FundiHomeJobList extends StatelessWidget {
                     ),
                   );
                 }
+
                 return FundiJobCard(
                   data: data,
                   isMatch: isMatch,
                   distanceKm: km,
                   hasBid: hasBid,
-                  onBid: hasBid ? null : () => onBid(context, data),
+                  onBid: hasBid || jobIsCancelled
+                      ? null
+                      : () => onBid(context, data),
                   onTap: () {
                     Navigator.push(
                       context,
