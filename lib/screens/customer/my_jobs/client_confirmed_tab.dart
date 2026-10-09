@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../confirm/approval/client_price_approval_screen.dart';
-import '../../../services/job_cancel_service.dart'; // <-- NEW
+import '../../customer/services/cancel/client_cancel_service.dart';
 
 class ClientConfirmedTab extends StatelessWidget {
   final List<QueryDocumentSnapshot> docs;
@@ -377,11 +377,10 @@ class ClientConfirmedTab extends StatelessWidget {
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      onPressed: () => JobCancelService.showCancelDialog(
+                      onPressed: () => ClientCancelService.showCancelDialog(
                         context: context,
                         jobId: jobId,
                         job: job,
-                        isClient: true,
                       ),
                     ),
                   ),

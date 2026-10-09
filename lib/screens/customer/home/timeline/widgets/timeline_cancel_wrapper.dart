@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../../../services/job_cancel_service.dart';
+import '../../../services/cancel/client_cancel_service.dart';
+import '../../../../fundi/services/cancel/fundi_cancel_service.dart';
 
 class TimelineCancelWrapper extends StatelessWidget {
   final Widget child;
   final bool canCancel;
   final String jobId;
   final Map<String, dynamic> job;
-  final bool isClient; // <- ADD THIS
+  final bool isClient;
 
   const TimelineCancelWrapper({
     super.key,
@@ -15,7 +16,7 @@ class TimelineCancelWrapper extends StatelessWidget {
     required this.canCancel,
     required this.jobId,
     required this.job,
-    required this.isClient, // <- ADD THIS
+    required this.isClient,
   });
 
   @override
@@ -69,7 +70,7 @@ class TimelineCancelWrapper extends StatelessWidget {
                         ),
                       ),
                       content: Text(
-                        'You cannot cancel this job now.',
+                        'You cannot cancel this job now - fundi already travelling / site visited.',
                         style: GoogleFonts.inter(fontSize: 12),
                       ),
                       actions: [
@@ -81,12 +82,19 @@ class TimelineCancelWrapper extends StatelessWidget {
                     ),
                   );
                 } else {
-                  JobCancelService.showCancelDialog(
-                    context: context,
-                    jobId: jobId,
-                    job: job,
-                    isClient: isClient, // <- USE PARAM, not false
-                  );
+                  if (isClient) {
+                    ClientCancelService.showCancelDialog(
+                      context: context,
+                      jobId: jobId,
+                      job: job,
+                    );
+                  } else {
+                    FundiCancelService.showCancelDialog(
+                      context: context,
+                      jobId: jobId,
+                      job: job,
+                    );
+                  }
                 }
               },
               child: Text(

@@ -6,7 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../theme/app_theme.dart';
 import 'fundi_add_part_receipt.dart';
 import 'fundi_request_new_price_screen.dart';
-import '../../../services/job_cancel_service.dart'; // <-- NEW
+import '../services/cancel/fundi_cancel_service.dart';
 
 class FundiConfirmedTab extends StatelessWidget {
   final Stream<QuerySnapshot> jobsStream;
@@ -457,11 +457,10 @@ class FundiConfirmedTab extends StatelessWidget {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        onPressed: () => JobCancelService.showCancelDialog(
+                        onPressed: () => FundiCancelService.showCancelDialog(
                           context: context,
                           jobId: jobId,
                           job: job,
-                          isClient: false,
                         ),
                       ),
                     ),

@@ -3,7 +3,7 @@ import '../../../../../theme/app_theme.dart';
 import '../../../../../widgets/animated_waiting_card.dart';
 import '../widgets/timeline_card.dart';
 import '../widgets/chat_sheet.dart';
-import '../widgets/cancel_button.dart';
+import '../../../../customer/home/timeline/widgets/timeline_cancel_wrapper.dart';
 import '../fundi_timeline_actions.dart';
 import '../fundi_timeline_context.dart';
 
@@ -76,13 +76,12 @@ Widget buildEscrowWaitingView(
         ),
       ],
     ),
-    body: c.canFundiCancel
-        ? Column(
-            children: [
-              Expanded(child: list),
-              fixedCancelBtn(context, c.jobId, c.job),
-            ],
-          )
-        : list,
+    body: TimelineCancelWrapper(
+      canCancel: c.canFundiCancel,
+      jobId: c.jobId,
+      job: c.job,
+      isClient: false,
+      child: list,
+    ),
   );
 }
