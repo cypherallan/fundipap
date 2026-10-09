@@ -104,7 +104,7 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Colors.green,
-          content: Text('You are Online - receiving jobs near you (like Uber)'),
+          content: Text('You are Online - receiving jobs near you'),
         ),
       );
     }

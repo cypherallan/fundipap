@@ -109,28 +109,28 @@ class ClientCancelService {
         context: context,
         builder: (_) => AlertDialog(
           title: Text(
-            'Cancel this job?',
+            'Remove this fundi?',
             style: GoogleFonts.montserrat(
               fontWeight: FontWeight.w800,
               fontSize: 14,
             ),
           ),
           content: Text(
-            'Are you sure you want to cancel this job? No money has been locked to escrow yet, so there is no fee.',
+            'You have NOT locked money to escrow yet. This fundi will be removed and job goes back to OPEN for other fundis. No fee.',
             style: GoogleFonts.inter(fontSize: 12),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: Text('No, Keep Job'),
+              child: Text('Keep Fundi'),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red.shade700,
+                backgroundColor: Colors.orange.shade700,
                 foregroundColor: Colors.white,
               ),
               onPressed: () => Navigator.pop(context, true),
-              child: Text('Yes, Cancel Job'),
+              child: Text('Yes, Remove'),
             ),
           ],
         ),

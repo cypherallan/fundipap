@@ -330,7 +330,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
             canCancel: canClientCancel,
             jobId: widget.jobId,
             job: job,
-            isClient: false,
+            isClient: true,
             child: list,
           );
         },
