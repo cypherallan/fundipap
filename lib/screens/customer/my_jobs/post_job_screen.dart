@@ -136,9 +136,12 @@ class _PostJobScreenState extends State<PostJobScreen>
                           .where(
                             (d) => [
                               'assigned',
+                              'confirmed', // <-- ADD THIS
+                              'travelling',
                               'site_visit',
                               'in_progress',
                               'pending_completion',
+                              'job_completed',
                             ].contains((d.data() as Map)['status']),
                           )
                           .toList(),

@@ -116,6 +116,13 @@ class _CustomerHomeState extends State<CustomerHome> {
           }
         });
 
+    final Map<String, DocumentSnapshot> activeMap = {};
+
+    void _updateActive() {
+      if (mounted) setState(() => _activeJobs = activeMap.values.toList());
+    }
+
+    _activeSub?.cancel();
     _activeSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('customerId', isEqualTo: uid)
@@ -128,19 +135,35 @@ class _CustomerHomeState extends State<CustomerHome> {
             'site_visit',
             'in_progress',
             'pending_completion',
-            'job_completed',
             'completed',
+            'waiting_for_client_to_buy_parts',
+            'fundi_buying_parts',
+            'job_completed',
+          ],
+        )
+        .snapshots()
+        .listen((snap) {
+          for (var d in snap.docs) activeMap[d.id] = d;
+          _updateActive();
+        });
+
+    // extra listener for renegotiation waiting states
+    FirebaseFirestore.instance
+        .collection('jobs')
+        .where('customerId', isEqualTo: uid)
+        .where(
+          'status',
+          whereIn: [
             'awaiting_extra_escrow',
             'renegotiation_countered_by_client',
             'countered_by_client',
-            'waiting_for_client_to_buy_parts',
-            'fundi_buying_parts',
             'renegotiation_countered',
           ],
         )
         .snapshots()
         .listen((snap) {
-          if (mounted) setState(() => _activeJobs = snap.docs);
+          for (var d in snap.docs) activeMap[d.id] = d;
+          _updateActive();
         });
   }
 

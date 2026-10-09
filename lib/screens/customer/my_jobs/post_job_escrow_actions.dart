@@ -11,25 +11,40 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
     double amount,
   ) async {
     try {
+      // 1. Update jobs
       await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+        'status': 'confirmed',
         'escrowStatus': 'held',
         'escrowAmount': amount,
         'escrowHeldAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      // 2. Update escrowTransactions - use set merge so it never fails
+      await FirebaseFirestore.instance
+          .collection('escrowTransactions')
+          .doc(jobId)
+          .set({
+            'status': 'held',
+            'escrowStatus': 'held',
+            'paidAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('KES ${amount.toInt()} held in escrow (simulated)'),
+            content: Text('KES ${amount.toInt()} held - Job Confirmed!'),
             backgroundColor: FundipapColors.greenSuccess,
           ),
         );
       }
     } catch (e) {
-      if (context.mounted)
+      if (context.mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 
