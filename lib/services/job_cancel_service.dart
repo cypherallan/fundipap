@@ -706,6 +706,113 @@ class JobCancelService {
       bool actualIsClient = clientId.isNotEmpty ? clientId == uid : isClient;
       bool actualIsFundi = !actualIsClient;
 
+      // BEFORE ESCROW -> PER-FUNDI CANCEL, REOPEN JOB
+      if (!escrowWasLocked) {
+        await db.collection('jobs').doc(jobId).update({
+          'status': 'open',
+          'cancelled': false,
+          'autoCancelled': false,
+          'cancelledBy': actualIsClient ? 'client' : 'fundi',
+          'cancelledById': uid,
+          'cancelReason': reason,
+          'cancelDetails': details,
+          'assignedFundiId': FieldValue.delete(),
+          'assignedFundi': FieldValue.delete(),
+          'assignedFundiName': FieldValue.delete(),
+          'fundiId': FieldValue.delete(),
+          'escrowStatus': 'pending',
+          'lastClientCancelForFundi': fundiId,
+          'lastCancelledAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        // mark only that fundi's bid as cancelled
+        if (fundiId.isNotEmpty) {
+          try {
+            await db
+                .collection('jobs')
+                .doc(jobId)
+                .collection('bids')
+                .doc(fundiId)
+                .set({
+                  'status': actualIsClient
+                      ? 'cancelled_by_client'
+                      : 'withdrawn',
+                  'cancelled': true,
+                  'cancelledBy': actualIsClient ? 'client' : 'fundi',
+                  'cancelledAt': FieldValue.serverTimestamp(),
+                  'updatedAt': FieldValue.serverTimestamp(),
+                }, SetOptions(merge: true));
+          } catch (_) {}
+        }
+
+        await db.collection('cancellationLogs').add({
+          'jobId': jobId,
+          'fundiId': fundiId,
+          'clientId': clientId,
+          'cancelledBy': actualIsClient ? 'client' : 'fundi',
+          'arrived': arrived,
+          'wasPriceRequestPending': wasPriceRequestPending,
+          'labour': labour,
+          'transport': transport,
+          'platformFee': 0,
+          'reason': reason,
+          'details': details,
+          'escrowWasLocked': false,
+          'reopened': true,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
+        if (fundiId.isNotEmpty) {
+          try {
+            await db
+                .collection('fundis')
+                .doc(fundiId)
+                .collection('cancelledJobs')
+                .doc(jobId)
+                .set({
+                  'jobId': jobId,
+                  'title': job['title'] ?? 'Job',
+                  'clientName':
+                      job['customerName'] ?? job['clientName'] ?? 'Client',
+                  'cancelReason': reason,
+                  'type': 'assigned_cancelled',
+                  'cancelledBy': actualIsClient ? 'client' : 'fundi',
+                  'transportPayout': 0,
+                  'reopened': true,
+                  'cancelledAt': FieldValue.serverTimestamp(),
+                  'createdAt': FieldValue.serverTimestamp(),
+                }, SetOptions(merge: true));
+          } catch (_) {}
+        }
+
+        if (actualIsFundi && fundiId.isNotEmpty) {
+          await FundiPenaltyService.onFundiCancel(
+            fundiId: fundiId,
+            jobId: jobId,
+            reason: reason,
+          );
+          await FundiBadgeService.recalcAndUpdate(fundiId);
+        }
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                actualIsClient
+                    ? 'Cancelled for this fundi. Job moved back to open for others.'
+                    : 'You withdrew. Job open for other fundis.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          // CLOSE PAGE AND GO HOME
+          Navigator.of(context).popUntil((r) => r.isFirst);
+        }
+        return;
+      }
+
+      // AFTER ESCROW LOCKED -> GLOBAL CANCEL
       await db.collection('jobs').doc(jobId).update({
         'status': arrived ? 'cancelled_after_arrival' : 'cancelled',
         'cancelled': true,
@@ -717,32 +824,30 @@ class JobCancelService {
         'clientRefund': clientRefund,
         'fundiPayout': fundiGets,
         'transportFeeStatus': fundiGets > 0 ? 'released' : 'refunded',
-        'escrowStatus': escrowWasLocked ? 'refunded' : 'pending',
+        'escrowStatus': 'refunded',
         'wasPriceRequestPending': wasPriceRequestPending,
         'cancelledAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      if (escrowWasLocked) {
-        await db.collection('escrowTransactions').doc(jobId).set({
-          'jobId': jobId,
-          'labour': labour,
-          'transport': transport,
-          'total': total,
-          'platformFee': platformFee,
-          'clientRefund': clientRefund,
-          'fundiGets': fundiGets,
-          'cancelledBy': actualIsClient ? 'client' : 'fundi',
-          'arrived': arrived,
-          'wasPriceRequestPending': wasPriceRequestPending,
-          'refundReason': actualIsClient
-              ? (wasPriceRequestPending
-                    ? 'Client cancel after fundi price request pending - uses old escrow $total'
-                    : 'Client cancel - 5% on labour only')
-              : 'Fundi cancel before travelling',
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
+      await db.collection('escrowTransactions').doc(jobId).set({
+        'jobId': jobId,
+        'labour': labour,
+        'transport': transport,
+        'total': total,
+        'platformFee': platformFee,
+        'clientRefund': clientRefund,
+        'fundiGets': fundiGets,
+        'cancelledBy': actualIsClient ? 'client' : 'fundi',
+        'arrived': arrived,
+        'wasPriceRequestPending': wasPriceRequestPending,
+        'refundReason': actualIsClient
+            ? (wasPriceRequestPending
+                  ? 'Client cancel after fundi price request pending - uses old escrow $total'
+                  : 'Client cancel - 5% on labour only')
+            : 'Fundi cancel before travelling',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       if (fundiGets > 0 && fundiId.isNotEmpty) {
         await db.collection('transportTransactions').doc(jobId).set({
@@ -766,11 +871,10 @@ class JobCancelService {
         'platformFee': platformFee,
         'reason': reason,
         'details': details,
-        'escrowWasLocked': escrowWasLocked,
+        'escrowWasLocked': true,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // save to fundi cancelledJobs subcollection like notifications
       if (fundiId.isNotEmpty) {
         try {
           await db
@@ -806,15 +910,14 @@ class JobCancelService {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              escrowWasLocked
-                  ? (actualIsClient
-                        ? 'Cancelled. You get KES $clientRefund, fee KES $platformFee'
-                        : 'Cancelled. Client refunded KES $clientRefund')
-                  : 'Job cancelled - no fee, no escrow was locked',
+              actualIsClient
+                  ? 'Cancelled. You get KES $clientRefund, fee KES $platformFee'
+                  : 'Cancelled. Client refunded KES $clientRefund',
             ),
             backgroundColor: Colors.green,
           ),
         );
+        Navigator.of(context).popUntil((r) => r.isFirst);
       }
     } catch (e) {
       if (context.mounted) {
