@@ -99,12 +99,18 @@ class ClientCancelCalculator {
           0,
     );
     int extraLabour = _toInt(
-      reneg?['acceptedCounterExtraLabor'] ??
+      reneg?['extraLabor'] ??
+          reneg?['acceptedCounterExtraLabor'] ??
           reneg?['approvedExtra'] ??
           reneg?['counterExtraLabor'] ??
+          job['extraLaborAmount'] ??
           job['extraTopupAmount'] ??
           0,
     );
+    if (extraLabour == 0) {
+      int tl = _toInt(job['extraToLock'] ?? reneg?['extraToLock'] ?? 0);
+      if (tl > 0) extraLabour = (tl / 1.05).round();
+    }
     int totalLabour = _toInt(
       reneg?['newLaborTotal'] ??
           reneg?['counterLabor'] ??
@@ -132,7 +138,10 @@ class ClientCancelCalculator {
           (oldLabour + transport + oldFee),
     );
     int extraTotal = _toInt(
-      reneg?['approvedExtraToLock'] ??
+      reneg?['extraToLock'] ??
+          reneg?['approvedExtraToLock'] ??
+          job['extraToLock'] ??
+          job['extraEscrowAmount'] ??
           job['extraTopupToLock'] ??
           (extraLabour + extraFee),
     );
@@ -228,7 +237,8 @@ class ClientCancelCalculator {
       feeForCalc = oldFee;
       totalLockedDisplay = actualEscrowInDb;
       logs.add('CANCEL 2: FUNDI REQUESTED 2000 PENDING -> use OLD locked');
-    } else if (!extraLocked && extraLabour > 0 && !priceRequestPending) {
+    } else if ((!extraLocked && extraLabour > 0 && !priceRequestPending) ||
+        (needsTopup && !extraLocked)) {
       stage = ClientCancelStage.clientCounterAcceptedNotPaid;
       labourForCalc = oldLabour;
       feeForCalc = oldFee;
