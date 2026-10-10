@@ -132,25 +132,33 @@ class ClientCancelCalculator {
     int extraFee = (extraLabour * feeRate).round();
     int totalFee = (totalLabour * feeRate).round();
 
+    // FIX: prefer reneg oldTotal, not job totalCost which may be stale
     int oldTotal = _toInt(
-      job['totalCost'] ??
-          reneg?['oldTotalClientPays'] ??
+      reneg?['oldTotalClientPays'] ??
+          job['totalCost'] ??
           (oldLabour + transport + oldFee),
     );
-    int extraTotal = _toInt(
-      reneg?['extraToLock'] ??
-          reneg?['approvedExtraToLock'] ??
-          job['extraToLock'] ??
-          job['extraEscrowAmount'] ??
-          job['extraTopupToLock'] ??
-          (extraLabour + extraFee),
-    );
+    // FIX: compute extraTotal from labour+fee, don't trust corrupted extraToLock=6450
+    int extraTotal = extraLabour + extraFee;
+    if (extraTotal == 0) {
+      extraTotal = _toInt(
+        job['extraEscrowAmount'] ??
+            reneg?['extraToLock'] ??
+            job['extraToLock'] ??
+            0,
+      );
+    }
+    // FIX: prefer reneg newTotal which is 8550, not job totalClientPays 6450
     int totalShouldBe = _toInt(
-      job['totalClientPays'] ??
+      reneg?['newTotalClientPays'] ??
+          reneg?['newTotal'] ??
           reneg?['counterTotalClientPays'] ??
-          reneg?['newTotalClientPays'] ??
           (oldTotal + extraTotal),
     );
+    // fallback if reneg missing
+    if (totalShouldBe == oldTotal && extraTotal > 0) {
+      totalShouldBe = oldTotal + extraTotal;
+    }
 
     int actualEscrowInDb = _toInt(job['escrowAmount'] ?? 0);
     bool extraPaid = (job['extraEscrowStatus'] ?? '').toString() == 'paid';
@@ -188,25 +196,29 @@ class ClientCancelCalculator {
       'extraPaid=$extraPaid needsTopup=$needsTopup escrowLocked=$escrowLocked priceRequestPending=$priceRequestPending arrived=$arrived status=$status',
     );
 
-    // STRICT FIX: if client paid extra (1050), it's locked even if needsTopup flag is stale
+    // extra is locked if paid - ignore stale needsTopup flag
     bool extraLocked = extraLabour > 0 && extraPaid;
 
-    // Case 1: DB bug where escrowAmount = 1050 instead of 6450
-    if (extraLocked && actualEscrowInDb == extraTotal) {
+    // BUG FIX 1: your doc has escrowAmount=2100 but reneg newTotal=8550
+    if (extraLocked &&
+        actualEscrowInDb == extraTotal &&
+        actualEscrowInDb != totalShouldBe) {
       logs.add(
-        'BUG FIX: escrowAmount is extraTotal $extraTotal, but totalClientPays is $totalShouldBe - treating as EXTRA LOCKED',
+        'BUG FIX: escrowAmount is extraTotal $extraTotal, but correct totalShouldBe is $totalShouldBe - using $totalShouldBe',
       );
       actualEscrowInDb = totalShouldBe;
     }
 
-    // Case 2: If needsTopup true but escrow is still oldTotal, then NOT locked
-    if (actualEscrowInDb == oldTotal && needsTopup) {
-      logs.add('needsTopup=true and escrow still oldTotal - not locked yet');
-      extraLocked = false;
+    // BUG FIX 2: your dump has extraToLock=6450 corrupted, but actual is 2100
+    if (extraLocked && _toInt(job['extraToLock'] ?? 0) == oldTotal) {
+      logs.add(
+        'BUG FIX: job extraToLock is oldTotal ${job['extraToLock']}, ignoring',
+      );
     }
 
-    // Case 3: If escrow is still 1050 after fix attempt, not locked
-    if (actualEscrowInDb == extraTotal) {
+    // If needsTopup true but escrow still oldTotal, then NOT locked yet
+    if (actualEscrowInDb == oldTotal && needsTopup && !extraPaid) {
+      logs.add('needsTopup=true and escrow still oldTotal - not locked yet');
       extraLocked = false;
     }
 

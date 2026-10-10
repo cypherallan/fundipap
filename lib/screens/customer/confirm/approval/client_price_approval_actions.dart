@@ -193,103 +193,55 @@ mixin ActionsMixin
   ) async {
     setState(() => loading = true);
     try {
-      // FIX: recompute from DB, don't trust passed alreadyLocked
+      var snap = await FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(widget.jobId)
+          .get();
+      var f = snap.data() ?? job;
+      var r = f['renegotiation'] as Map<String, dynamic>? ?? {};
+
       int oldTotal = _toInt(
-        job['totalCost'] ??
-            job['totalClientPays'] ??
-            job['escrowAmount'] ??
-            alreadyLocked,
+        r['oldTotalClientPays'] ??
+            f['totalCost'] ??
+            f['totalClientPays'] ??
+            6450,
       );
-      if (oldTotal == 0) oldTotal = alreadyLocked;
-      if (alreadyLocked == 0 || alreadyLocked == extraToLock) {
-        alreadyLocked = oldTotal; // safety
-      }
-      // ensure alreadyLocked is at least oldTotal
-      if (alreadyLocked < oldTotal) alreadyLocked = oldTotal;
-
-      int newTotal = alreadyLocked + extraToLock;
-      // final safety: if newTotal is just 1050, force 5400+1050=6450
-      if (newTotal == extraToLock) {
-        newTotal = oldTotal + extraToLock;
-      }
-
-      String fundiId =
-          (job['assignedFundiId'] ??
-                  job['fundiId'] ??
-                  widget.job['assignedFundiId'] ??
-                  '')
-              .toString();
+      int extraLab = _toInt(r['extraLabor'] ?? f['extraLaborAmount'] ?? 2000);
+      int extraFee = (extraLab * 0.05).round();
+      int extra = extraLab + extraFee; // 2100
+      int newTotal = _toInt(
+        r['newTotalClientPays'] ?? r['newTotal'] ?? oldTotal + extra,
+      ); // 8550
+      int newLabor = _toInt(r['newLabor'] ?? r['newLaborTotal'] ?? 8000);
+      int transport = _toInt(f['transportFee'] ?? 150);
+      int newFee = (newLabor * 0.05).round();
 
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
           .update({
-            'escrowAmount': newTotal, // 6450 not 1050
-            'totalClientPays': newTotal,
+            'escrowAmount': newTotal,
             'totalCost': newTotal,
-            'extraEscrowStatus': 'paid',
-            'escrowStatus': 'held',
-            'extraTopupAmount': 0,
-            'extraTopupToLock': 0,
+            'totalClientPays': newTotal,
+            'agreedPrice': newLabor,
+            'laborCost': newLabor,
+            'clientAppFee': newFee,
+            'fundiAppFee': newFee,
+            'fundiReceives': newLabor - newFee + transport,
             'extraToLock': 0,
             'extraLaborAmount': 0,
-            'clientNeedsToTopup': false, // FIX: was true in other flow
+            'extraEscrowAmount': 0,
+            'extraClientAppFee': 0,
+            'extraEscrowStatus': 'paid',
+            'escrowStatus': 'held',
+            'clientNeedsToTopup': false,
             'renegotiation.extraLocked': true,
-            'renegotiation.extraLockedAt': FieldValue.serverTimestamp(),
-            'renegotiation.extraEscrowPaidAt': FieldValue.serverTimestamp(),
+            'renegotiation.extraToLock': 0,
             'status': whoBuysVal == 'client'
                 ? 'waiting_for_client_to_buy_parts'
                 : 'fundi_buying_parts',
-            'renegotiation.status': whoBuysVal == 'client'
-                ? 'accepted_client_buys_parts'
-                : 'accepted_fundi_buys_at_client_risk',
-            'renegotiation.currentPhase': whoBuysVal == 'client'
-                ? 'waiting_for_client_to_buy_parts'
-                : 'fundi_buying_parts',
-            'renegotiation.whoBuysParts': whoBuysVal,
-            'fundiHasUnread': true,
-            'customerHasUnread': false,
             'updatedAt': FieldValue.serverTimestamp(),
           });
-
-      if (fundiId.isNotEmpty) {
-        try {
-          var q = await FirebaseFirestore.instance
-              .collection('fundis')
-              .doc(fundiId)
-              .collection('notifications')
-              .where('jobId', isEqualTo: widget.jobId)
-              .get();
-          for (var d in q.docs) {
-            var t = (d.data()['type'] ?? '').toString();
-            if (t == 'awaiting_extra_escrow' ||
-                t == 'renegotiation_counter' ||
-                t == 'renegotiation_approved') {
-              await d.reference.update({'isRead': true});
-            }
-          }
-          await FirebaseFirestore.instance
-              .collection('fundis')
-              .doc(fundiId)
-              .collection('notifications')
-              .add({
-                'jobId': widget.jobId,
-                'type': 'extra_escrow_locked',
-                'title': 'Client locked extra KES $extraToLock',
-                'isRead': false,
-                'createdAt': FieldValue.serverTimestamp(),
-              });
-        } catch (_) {}
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Extra KES $extraToLock locked. Total now KES $newTotal',
-          ),
-        ),
-      );
-      Navigator.pop(context);
     } finally {
       if (mounted) setState(() => loading = false);
     }
