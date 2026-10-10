@@ -434,7 +434,16 @@ class ClientCancelService {
               backgroundColor: Colors.orange,
             ),
           );
-          Navigator.of(context, rootNavigator: true).popUntil((r) => r.isFirst);
+          Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (_) => HomeNavigator(
+                role: 'client',
+                email: FirebaseAuth.instance.currentUser?.email ?? '',
+                initialIndex: 0,
+              ),
+            ),
+            (r) => false,
+          );
         }
         return;
       }
