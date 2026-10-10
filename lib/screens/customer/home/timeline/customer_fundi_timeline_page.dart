@@ -295,14 +295,69 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue.shade800,
                       ),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Locking extra KES $approvedToLock...',
-                            ),
-                          ),
-                        );
+                      onPressed: () async {
+                        try {
+                          int oldLabour = _toInt(
+                            job['currentLabour'] ?? job['agreedPrice'] ?? 5000,
+                          );
+                          var reneg =
+                              job['renegotiation'] as Map<String, dynamic>?;
+                          if (reneg != null && reneg['oldLabor'] != null)
+                            oldLabour = _toInt(reneg['oldLabor']);
+
+                          int transport = _toInt(
+                            job['transportFee'] ??
+                                job['escrowTransport'] ??
+                                150,
+                          );
+
+                          int newTotalLabour = oldLabour + approvedExtra;
+                          int newTotalFee = (newTotalLabour * 0.05).round();
+                          int newEscrowTotal =
+                              newTotalLabour + transport + newTotalFee;
+
+                          await FirebaseFirestore.instance
+                              .collection('jobs')
+                              .doc(widget.jobId)
+                              .update({
+                                'escrowAmount': newEscrowTotal,
+                                'totalClientPays': newEscrowTotal,
+                                'currentLabour': newTotalLabour,
+                                'agreedPrice': newTotalLabour,
+                                'laborCost': newTotalLabour,
+                                'escrowStatus': 'held',
+                                'extraEscrowStatus': 'paid',
+                                'clientNeedsToTopup': false,
+                                'renegotiation.status': 'locked',
+                                'renegotiation.newLaborTotal': newTotalLabour,
+                                'renegotiation.newTotalClientPays':
+                                    newEscrowTotal,
+                                'renegotiation.counterTotalClientPays':
+                                    newEscrowTotal,
+                                'renegotiation.counterLabor': newTotalLabour,
+                                'renegotiation.extraLocked': newEscrowTotal,
+                                'renegotiation.lockedAt':
+                                    FieldValue.serverTimestamp(),
+                                'updatedAt': FieldValue.serverTimestamp(),
+                              });
+
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Extra locked! Total locked now KES $newEscrowTotal',
+                                ),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Lock failed: $e')),
+                            );
+                          }
+                        }
                       },
                       child: Text(
                         'LOCK EXTRA KES $approvedToLock',

@@ -119,7 +119,14 @@ class _CustomerHomeState extends State<CustomerHome> {
     final Map<String, DocumentSnapshot> activeMap = {};
 
     void _updateActive() {
-      if (mounted) setState(() => _activeJobs = activeMap.values.toList());
+      // FILTER OUT CANCELLED
+      var filtered = activeMap.values.where((d) {
+        var j = d.data() as Map<String, dynamic>?;
+        if (j == null) return false;
+        String s = (j['status'] ?? '').toString().toLowerCase();
+        return !s.contains('cancel'); // hide cancelled
+      }).toList();
+      if (mounted) setState(() => _activeJobs = filtered);
     }
 
     _activeSub?.cancel();
@@ -143,7 +150,53 @@ class _CustomerHomeState extends State<CustomerHome> {
         )
         .snapshots()
         .listen((snap) {
-          for (var d in snap.docs) activeMap[d.id] = d;
+          // REMOVE docs that left the query (cancelled)
+          var currentIds = snap.docs.map((d) => d.id).toSet();
+          activeMap.removeWhere(
+            (id, _) =>
+                !snap.docs.any((d) => d.id == id) && !currentIds.contains(id),
+          );
+          // Also remove any that became cancelled in this batch
+          for (var d in snap.docs) {
+            var data = d.data();
+            String s = (data['status'] ?? '').toString().toLowerCase();
+            if (s.contains('cancel')) {
+              activeMap.remove(d.id);
+            } else {
+              activeMap[d.id] = d;
+            }
+          }
+          // Clean any old cancelled that still in map
+          activeMap.removeWhere((_, doc) {
+            var data = doc.data() as Map<String, dynamic>?;
+            String s = (data?['status'] ?? '').toString().toLowerCase();
+            return s.contains('cancel');
+          });
+          _updateActive();
+        });
+
+    // extra listener for renegotiation waiting states
+    FirebaseFirestore.instance
+        .collection('jobs')
+        .where('customerId', isEqualTo: uid)
+        .where(
+          'status',
+          whereIn: [
+            'awaiting_extra_escrow',
+            'renegotiation_countered_by_client',
+            'countered_by_client',
+            'renegotiation_countered',
+          ],
+        )
+        .snapshots()
+        .listen((snap) {
+          for (var d in snap.docs) {
+            var data = d.data();
+            String s = (data['status'] ?? '').toString().toLowerCase();
+            if (!s.contains('cancel')) {
+              activeMap[d.id] = d;
+            }
+          }
           _updateActive();
         });
 

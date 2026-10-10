@@ -57,43 +57,76 @@ class ClientCancelService {
       return;
     }
 
+    // ---- FIXED CALC - ORDER MATTERS ----
+    var reneg = job['renegotiation'] as Map<String, dynamic>?;
     int oldLabour = _toInt(
-      job['currentLabour'] ??
-          job['agreedPrice'] ??
+      reneg?['oldLabor'] ??
           job['acceptedBidAmount'] ??
-          job['fundiBidAmount'] ??
-          job['budget'] ??
+          job['currentLabour'] ??
+          job['agreedPrice'] ??
           0,
     );
-    var reneg = job['renegotiation'] as Map<String, dynamic>?;
-    if (reneg != null && reneg['oldLabor'] != null)
-      oldLabour = _toInt(reneg['oldLabor']);
-    int newLabour = oldLabour;
-    if (reneg != null && reneg['newLaborTotal'] != null)
-      newLabour = _toInt(reneg['newLaborTotal']);
-    int transport = _toInt(job['transportFee'] ?? job['escrowTransport'] ?? 0);
+    int extraLabour = _toInt(
+      reneg?['acceptedCounterExtraLabor'] ??
+          reneg?['approvedExtra'] ??
+          reneg?['counterExtraLabor'] ??
+          job['extraTopupAmount'] ??
+          0,
+    );
+    int totalLabour = _toInt(
+      reneg?['newLaborTotal'] ??
+          reneg?['counterLabor'] ??
+          job['laborCost'] ??
+          job['agreedPrice'] ??
+          0,
+    );
+    if (totalLabour < oldLabour + extraLabour)
+      totalLabour = oldLabour + extraLabour;
+    if (totalLabour == 0) totalLabour = oldLabour;
+
+    int transport = _toInt(
+      job['transportFee'] ??
+          job['escrowTransport'] ??
+          reneg?['counterTransportFee'] ??
+          0,
+    );
     int escrowAmount = _toInt(job['escrowAmount'] ?? 0);
-    int totalLocked = escrowAmount > 0
-        ? escrowAmount
-        : (oldLabour + transport + (oldLabour * feeRate).round());
-    int newTotalExpected =
-        newLabour + transport + (newLabour * feeRate).round();
+
+    int oldFee = (oldLabour * feeRate).round();
+    int extraFee = (extraLabour * feeRate).round();
+    int totalFee = (totalLabour * feeRate).round();
+
+    int oldTotal = _toInt(
+      job['totalCost'] ??
+          reneg?['oldTotalClientPays'] ??
+          (oldLabour + transport + oldFee),
+    );
+    int extraTotal = _toInt(
+      reneg?['approvedExtraToLock'] ??
+          job['extraTopupToLock'] ??
+          (extraLabour + extraFee),
+    );
+    int totalLocked = _toInt(
+      job['totalClientPays'] ??
+          reneg?['counterTotalClientPays'] ??
+          reneg?['newTotalClientPays'] ??
+          (oldTotal + extraTotal),
+    );
+
+    bool extraPaid = (job['extraEscrowStatus'] ?? '').toString() == 'paid';
+    String renegStatus = (reneg?['status'] ?? '').toString().toLowerCase();
     bool extraLocked =
-        escrowAmount >= newTotalExpected && newLabour != oldLabour;
-    int labourForCalc = oldLabour;
-    if (priceRequestPending) {
-      labourForCalc = extraLocked ? newLabour : oldLabour;
-    } else {
-      labourForCalc =
-          (reneg != null &&
-              reneg['newLaborTotal'] != null &&
-              !priceRequestPending)
-          ? newLabour
-          : oldLabour;
-      if (reneg != null &&
-          (reneg['status'] ?? '').toString().contains('accepted'))
-        labourForCalc = newLabour;
+        extraLabour > 0 &&
+        (extraPaid ||
+            totalLocked >= oldTotal + extraTotal ||
+            renegStatus.contains('locked') ||
+            renegStatus == 'client');
+
+    if (escrowAmount == extraTotal && extraLocked) {
+      escrowAmount = totalLocked; // fix your DB bug 1050 -> 6400
     }
+
+    int labourForCalc = totalLabour;
 
     String escrowStatusStr = (job['escrowStatus'] ?? '').toString();
     bool escrowLocked =
@@ -156,20 +189,10 @@ class ClientCancelService {
       return;
     }
 
-    int platformFee, clientRefund, fundiGets;
-    if (!effectiveArrived) {
-      platformFee = (labourForCalc * feeRate).round();
-      clientRefund = labourForCalc + transport;
-      fundiGets = 0;
-    } else {
-      platformFee = (labourForCalc * feeRate).round();
-      clientRefund = (labourForCalc * 0.95).round();
-      fundiGets = transport;
-    }
-    if (clientRefund + fundiGets > totalLocked) {
-      clientRefund = totalLocked - fundiGets;
-      if (clientRefund < 0) clientRefund = 0;
-    }
+    int platformFee = totalFee;
+    int fundiGets = transport;
+    int clientRefund = totalLocked - platformFee - fundiGets;
+    if (clientRefund < 0) clientRefund = 0;
 
     await showDialog(
       context: context,
@@ -356,7 +379,6 @@ class ClientCancelService {
                   '')
               .toString();
       String clientId = (job['customerId'] ?? job['clientId'] ?? '').toString();
-
       if (!escrowWasLocked) {
         await db.collection('jobs').doc(jobId).update({
           'status': 'open',
@@ -447,7 +469,6 @@ class ClientCancelService {
         }
         return;
       }
-
       await db.collection('jobs').doc(jobId).update({
         'status': arrived ? 'cancelled_after_arrival' : 'cancelled',
         'cancelled': true,
@@ -475,9 +496,7 @@ class ClientCancelService {
         'cancelledBy': 'client',
         'arrived': arrived,
         'wasPriceRequestPending': wasPriceRequestPending,
-        'refundReason': wasPriceRequestPending
-            ? 'Client cancel after fundi price request pending - uses old escrow $total'
-            : 'Client cancel - 5% on labour only',
+        'refundReason': 'Client cancel - 5% on labour only',
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
       if (fundiGets > 0 && fundiId.isNotEmpty) {
