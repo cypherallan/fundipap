@@ -367,11 +367,17 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
           (b['jobData'] as Map<String, dynamic>? ?? <String, dynamic>{});
       var bidDataForNotif = (b['bidData'] as Map<String, dynamic>?) ?? b;
 
-      // FIX: ghost Bid sent after cancel - if job not in assignedMap and bid was accepted/withdrawn, skip
-      bool isInAssigned = assignedMap.containsKey(b['jobId']);
-      String bStatus = (bidDataForNotif['status'] ?? '')
+      // FIX: filter client-cancelled bids
+      String bStatus = (bidDataForNotif['status'] ?? b['status'] ?? '')
           .toString()
           .toLowerCase();
+
+      // If bid was cancelled by client before escrow - don't show as active notification
+      if (bStatus == 'cancelled_by_client') {
+        continue; // moved to cancelled, not pending
+      }
+
+      bool isInAssigned = assignedMap.containsKey(b['jobId']);
       if (!isInAssigned &&
           (bStatus == 'accepted' ||
               bStatus == 'withdrawn' ||

@@ -137,10 +137,17 @@ class FundiHomeJobList extends StatelessWidget {
 
                 if (deletedForFundi) return const SizedBox.shrink();
 
-                // if job cancelled and fundi never bid - hide from Near You
+                // FIX: read status from bidData, not from job data
+                final String? myBidStatus = bidData?['status']?.toString();
+                bool isCancelledByClient = myBidStatus == 'cancelled_by_client';
+                bool isWithdrawn =
+                    myBidStatus == 'withdrawn' || myBidStatus == 'cancelled';
+
+                // if job cancelled and fundi never bid - hide
                 if (jobIsCancelled && !hasBid) return const SizedBox.shrink();
 
                 if (isRejected) {
+                  // ... keep your rejected dialog as is ...
                   return GestureDetector(
                     onTap: () async {
                       await FirebaseFirestore.instance
@@ -280,12 +287,20 @@ class FundiHomeJobList extends StatelessWidget {
                   );
                 }
 
+                // FIXED: green only if bid is active, not cancelled_by_client
+                bool hasBidActive =
+                    hasBid && !isCancelledByClient && !isWithdrawn;
+
+                // inject status into data for card
+                data['bidStatus'] = myBidStatus;
+
                 return FundiJobCard(
                   data: data,
                   isMatch: isMatch,
                   distanceKm: km,
-                  hasBid: hasBid,
-                  onBid: hasBid || jobIsCancelled
+                  hasBid: hasBidActive, // <-- not green when client cancelled
+                  bidStatus: myBidStatus, // <-- orange banner
+                  onBid: hasBidActive || jobIsCancelled || isCancelledByClient
                       ? null
                       : () => onBid(context, data),
                   onTap: () {
@@ -297,7 +312,7 @@ class FundiHomeJobList extends StatelessWidget {
                           distanceKm: km,
                           me: me,
                           completedJobs: completedJobs,
-                          hasBid: hasBid,
+                          hasBid: hasBidActive,
                         ),
                       ),
                     );

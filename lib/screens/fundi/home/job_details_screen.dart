@@ -877,9 +877,60 @@ class _JobDetailsScreenState extends State<JobDetailsScreen>
                     .snapshots(),
                 builder: (ctx2, bidSnap) {
                   var bidData = bidSnap.data?.data() as Map<String, dynamic>?;
+                  String bidStatus = (bidData?['status'] ?? '').toString();
                   bool alreadyBid =
                       widget.hasBid ||
                       (bidSnap.hasData && bidSnap.data!.exists);
+
+                  // FIX: client cancelled this fundi
+                  if (bidStatus == 'cancelled_by_client') {
+                    return Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.orange.shade300),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.person_off,
+                            color: Colors.orange.shade800,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Client cancelled this job for you',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                                color: Colors.orange.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  if (bidStatus == 'withdrawn' || bidStatus == 'cancelled') {
+                    return Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.black12),
+                      ),
+                      child: Text(
+                        'You withdrew from this bid',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                        ),
+                      ),
+                    );
+                  }
                   if (bidData != null) {
                     String bStatus = (bidData['status'] ?? '').toString();
                     String lastBy =

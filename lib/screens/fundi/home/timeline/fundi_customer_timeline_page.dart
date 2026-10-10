@@ -221,9 +221,61 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
             var bid = bidDoc.data() as Map<String, dynamic>;
 
             // FIX: open job cancelled by fundi (deletedForFundi) -> show only cancelled
+            String bidStatus = (bid['status'] ?? '').toString();
+
+            // NEW: client removed this fundi (before escrow)
+            if (bidStatus == 'cancelled_by_client') {
+              return Scaffold(
+                appBar: AppBar(
+                  leading: IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => goBack(context, 2),
+                  ),
+                  title: Text(
+                    widget.clientName,
+                    style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+                  ),
+                  backgroundColor: FundipapColors.blackGray,
+                  foregroundColor: Colors.white,
+                ),
+                body: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.person_off,
+                          size: 64,
+                          color: Colors.orange.shade400,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Client cancelled this job for you',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Client ${widget.clientName} removed you. Job is OPEN for others.',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: Colors.black54,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
             if (bid['deletedForFundi'] == true ||
-                (bid['status'] ?? '').toString() == 'withdrawn' ||
-                (bid['status'] ?? '').toString() == 'cancelled') {
+                bidStatus == 'withdrawn' ||
+                bidStatus == 'cancelled') {
               return Scaffold(
                 appBar: AppBar(
                   leading: IconButton(

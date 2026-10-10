@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class FundiJobCard extends StatelessWidget {
   final Map<String, dynamic> data;
@@ -9,6 +11,7 @@ class FundiJobCard extends StatelessWidget {
   final VoidCallback onTap;
   final double? distanceKm;
   final bool hasBid;
+  final String? bidStatus;
 
   const FundiJobCard({
     super.key,
@@ -18,6 +21,7 @@ class FundiJobCard extends StatelessWidget {
     required this.onTap,
     this.distanceKm,
     this.hasBid = false,
+    this.bidStatus,
   });
 
   @override
@@ -39,8 +43,18 @@ class FundiJobCard extends StatelessWidget {
         (data['cancelled'] == true) ||
         (data['autoCancelled'] == true) ||
         (data['status'] ?? '').toString().toLowerCase().contains('cancel');
+
+    // NEW: check bid-level cancellation
+    bool bidCancelledByClient =
+        (bidStatus ?? data['bidStatus'] ?? '').toString() ==
+        'cancelled_by_client';
+    if (bidCancelledByClient) {
+      isCancelled = true;
+    }
+
     String cancelledBy = (data['cancelledBy'] ?? '').toString().toLowerCase();
-    bool clientCancelled = isCancelled && cancelledBy == 'client';
+    bool clientCancelled =
+        (isCancelled && cancelledBy == 'client') || bidCancelledByClient;
     bool fundiCancelled = isCancelled && cancelledBy == 'fundi';
     bool systemCancelled =
         isCancelled &&
@@ -81,6 +95,8 @@ class FundiJobCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // inside build, after you define clientCancelled
+
             // CANCELLED BANNER FOR FUNDI
             if (isCancelled) ...[
               Container(
@@ -135,6 +151,36 @@ class FundiJobCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    // NEW X BUTTON
+                    if (bidCancelledByClient) ...[
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: () async {
+                          try {
+                            var uid = FirebaseAuth.instance.currentUser!.uid;
+                            await FirebaseFirestore.instance
+                                .collection('jobs')
+                                .doc(data['id'].toString())
+                                .collection('bids')
+                                .doc(uid)
+                                .update({'deletedForFundi': true});
+                          } catch (_) {}
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.black12),
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            size: 12,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

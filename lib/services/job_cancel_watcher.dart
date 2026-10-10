@@ -41,6 +41,22 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
             var d = doc.data();
             if (d == null) return;
             String st = (d['status'] ?? '').toString().toLowerCase();
+
+            // FIX: client removed fundi before escrow
+            if (st == 'cancelled_by_client') {
+              _showCancelledAndClose(
+                context,
+                {
+                  ...d,
+                  'cancelledBy': 'client',
+                  'cancelReason':
+                      d['cancelReason'] ?? 'Cancelled before escrow',
+                },
+                isBidOnly: false, // show as client cancelled, not withdrawn
+              );
+              return;
+            }
+
             if (st.contains('cancel') || st == 'withdrawn' || st == 'deleted') {
               _showCancelledAndClose(context, d, isBidOnly: true);
             }
