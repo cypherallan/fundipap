@@ -429,8 +429,22 @@ class ClientCancelService {
           'fundiId': fundiId,
           'amount': fundiGets,
           'status': 'released',
+          'message':
+              'You have received KES $fundiGets as your transport due to client cancelling after you started site visit. Confirm you received',
           'releasedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
+
+        // Fundi notification - this is what fundi sees
+        await db.collection('notifications').add({
+          'userId': fundiId,
+          'jobId': jobId,
+          'type': 'transport_released',
+          'title': 'Transport released',
+          'message':
+              'You have received KES $fundiGets as your transport due to client cancelling after you started site visit. Confirm you received',
+          'requiresConfirmation': true,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       }
       await db.collection('cancellationLogs').add({
         'jobId': jobId,
@@ -462,6 +476,9 @@ class ClientCancelService {
               'type': 'assigned_cancelled',
               'cancelledBy': 'client',
               'transportPayout': fundiGets,
+              'transportMessage':
+                  'You have received KES $fundiGets as your transport due to client cancelling after you started site visit. Confirm you received',
+              'requiresConfirmation': fundiGets > 0,
               'cancelledAt': FieldValue.serverTimestamp(),
               'createdAt': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));

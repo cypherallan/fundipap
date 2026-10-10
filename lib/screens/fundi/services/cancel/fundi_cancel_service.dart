@@ -447,13 +447,14 @@ class FundiCancelService {
         Navigator.of(context, rootNavigator: true).popUntil((r) => r.isFirst);
       }
     } catch (e) {
-      if (context.mounted)
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Cancel failed: $e'),
             backgroundColor: Colors.red,
           ),
         );
+      }
     }
   }
 
