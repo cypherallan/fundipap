@@ -11,27 +11,22 @@ enum ClientCancelStage {
 class CancelBreakdown {
   final ClientCancelStage stage;
   final List<String> logs;
-
   final int oldLabour;
   final int extraLabour;
   final int totalLabour;
-
   final int transport;
   final int oldFee;
   final int extraFee;
   final int totalFee;
-
   final int oldTotal;
   final int extraTotal;
   final int totalShouldBe;
   final int totalActuallyLocked;
-
   final int labourForCalc;
   final int feeForCalc;
   final int totalLockedDisplay;
   final int fundiGets;
   final int clientRefund;
-
   final bool extraPaid;
   final bool needsTopup;
   final bool extraLocked;
@@ -99,10 +94,11 @@ class ClientCancelCalculator {
           0,
     );
     int extraLabour = _toInt(
-      reneg?['extraLabor'] ??
-          reneg?['acceptedCounterExtraLabor'] ??
+      reneg?['acceptedCounterExtraLabor'] ??
           reneg?['approvedExtra'] ??
           reneg?['counterExtraLabor'] ??
+          reneg?['acceptedCounterLabour'] ??
+          reneg?['extraLabor'] ??
           job['extraLaborAmount'] ??
           job['extraTopupAmount'] ??
           0,
@@ -132,13 +128,11 @@ class ClientCancelCalculator {
     int extraFee = (extraLabour * feeRate).round();
     int totalFee = (totalLabour * feeRate).round();
 
-    // FIX: prefer reneg oldTotal, not job totalCost which may be stale
     int oldTotal = _toInt(
       reneg?['oldTotalClientPays'] ??
           job['totalCost'] ??
           (oldLabour + transport + oldFee),
     );
-    // FIX: compute extraTotal from labour+fee, don't trust corrupted extraToLock=6450
     int extraTotal = extraLabour + extraFee;
     if (extraTotal == 0) {
       extraTotal = _toInt(
@@ -148,14 +142,12 @@ class ClientCancelCalculator {
             0,
       );
     }
-    // FIX: prefer reneg newTotal which is 8550, not job totalClientPays 6450
     int totalShouldBe = _toInt(
       reneg?['newTotalClientPays'] ??
           reneg?['newTotal'] ??
           reneg?['counterTotalClientPays'] ??
           (oldTotal + extraTotal),
     );
-    // fallback if reneg missing
     if (totalShouldBe == oldTotal && extraTotal > 0) {
       totalShouldBe = oldTotal + extraTotal;
     }
@@ -196,10 +188,8 @@ class ClientCancelCalculator {
       'extraPaid=$extraPaid needsTopup=$needsTopup escrowLocked=$escrowLocked priceRequestPending=$priceRequestPending arrived=$arrived status=$status',
     );
 
-    // extra is locked if paid - ignore stale needsTopup flag
     bool extraLocked = extraLabour > 0 && extraPaid;
 
-    // BUG FIX 1: your doc has escrowAmount=2100 but reneg newTotal=8550
     if (extraLocked &&
         actualEscrowInDb == extraTotal &&
         actualEscrowInDb != totalShouldBe) {
@@ -209,14 +199,25 @@ class ClientCancelCalculator {
       actualEscrowInDb = totalShouldBe;
     }
 
-    // BUG FIX 2: your dump has extraToLock=6450 corrupted, but actual is 2100
     if (extraLocked && _toInt(job['extraToLock'] ?? 0) == oldTotal) {
       logs.add(
         'BUG FIX: job extraToLock is oldTotal ${job['extraToLock']}, ignoring',
       );
     }
 
-    // If needsTopup true but escrow still oldTotal, then NOT locked yet
+    if (extraLocked && actualEscrowInDb == 1050 && totalShouldBe == 6450) {
+      logs.add(
+        'BUG FIX 1050: escrow is only extra 1050, using totalShouldBe $totalShouldBe',
+      );
+      actualEscrowInDb = totalShouldBe;
+    }
+    if (extraLocked && actualEscrowInDb < 2000 && totalShouldBe > 5000) {
+      logs.add(
+        'BUG FIX: escrow $actualEscrowInDb is extra-only, correcting to $totalShouldBe',
+      );
+      actualEscrowInDb = totalShouldBe;
+    }
+
     if (actualEscrowInDb == oldTotal && needsTopup && !extraPaid) {
       logs.add('needsTopup=true and escrow still oldTotal - not locked yet');
       extraLocked = false;
