@@ -267,9 +267,11 @@ FundiWaitingState? getFundiWaitingState({
         );
       }
       int extra = _toInt(
-        renego?['acceptedCounterExtraLabor'] ??
+        renego?['extraLabor'] ??
+            renego?['acceptedCounterExtraLabor'] ??
             renego?['extraToLock'] ??
-            renego?['counterExtraLabor'] ??
+            job['extraLaborAmount'] ??
+            job['extraToLock'] ??
             2000,
       );
       int pureExtra = _toInt(renego?['acceptedCounterExtraLabor'] ?? 0);
@@ -415,17 +417,46 @@ FundiWaitingState? getFundiWaitingState({
   );
   bool hasLockedAmount = lockedAmount > 0;
   bool needsTopup = hasLockedAmount && fundiSees > lockedAmount;
+  // FIX: when clientNeedsToTopup=true, force needsTopup true
+  if (_toBool(job['clientNeedsToTopup'])) needsTopup = true;
   if (extraLocked || isInMaterialFlow) needsTopup = false;
+
   int needExtra = needsTopup ? fundiSees - lockedAmount : 0;
-  if (needExtra > 0) {
-    int pureExtra = _toInt(
-      renego?['approvedExtra'] ??
-          renego?['counterExtraLabor'] ??
-          renego?['extraLabor'] ??
-          0,
-    );
-    if (pureExtra > 0) needExtra = pureExtra;
+
+  // FIX: always fallback to renegotiation extra fields
+  int newLaborVal = _toInt(renego?['newLabor'] ?? 0);
+  int newTotalVal = _toInt(
+    renego?['newTotalClientPays'] ?? renego?['newTotal'] ?? 0,
+  );
+
+  int pureExtra = _toInt(
+    renego?['extraLabor'] ??
+        renego?['approvedExtra'] ??
+        renego?['counterExtraLabor'] ??
+        job['extraLaborAmount'] ??
+        0,
+  );
+  if (pureExtra == 0 && newLaborVal > 0) {
+    pureExtra = newLaborVal - labour;
   }
+
+  int toLockExtra = _toInt(
+    job['extraToLock'] ??
+        job['extraEscrowAmount'] ??
+        job['extraTopupToLock'] ??
+        renego?['extraToLock'] ??
+        0,
+  );
+  if (toLockExtra == 0 && newTotalVal > 0) {
+    toLockExtra = newTotalVal - lockedAmount;
+  }
+
+  if (pureExtra > 0) {
+    needExtra = pureExtra;
+  } else if (toLockExtra > 0)
+    needExtra = (toLockExtra / 1.05).round(); // 2100 -> 2000
+  else if (needExtra <= 0)
+    needExtra = _toInt(job['extraLaborAmount'] ?? 0);
 
   bool isInitialEscrowWait =
       !escrowDone &&
@@ -515,4 +546,3 @@ FundiWaitingState? getFundiWaitingState({
   }
   return null;
 }
-//

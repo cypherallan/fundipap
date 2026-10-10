@@ -55,24 +55,26 @@ mixin ActionsMixin
           .collection('jobs')
           .doc(widget.jobId)
           .update({
-            'agreedPrice': newLabor,
-            'laborCost': newLabor,
+            'agreedPrice': oldLabor,
+            'laborCost': oldLabor,
             'transportFee': oldTransport,
-            'clientAppFee': newClientFee,
-            'fundiAppFee': newFundiFee,
-            'totalClientPays': newTotal,
-            'totalCost': newTotal,
-            'fundiReceives': newLabor - newFundiFee + oldTransport,
+            'totalClientPays': alreadyLockedCorrect,
+            'totalCost': alreadyLockedCorrect,
+            'escrowAmount': alreadyLockedCorrect,
             'extraLaborAmount': extraLabor,
             'extraClientAppFee': extraAppFee,
             'extraEscrowAmount': extraToLock,
             'extraToLock': extraToLock,
             'extraEscrowStatus': 'pending',
+            'clientNeedsToTopup': true,
+            'escrowStatus': 'pending_topup',
             'status': 'awaiting_extra_escrow',
             'renegotiation.status':
                 'accepted_client_buys_parts_pending_extra_escrow',
             'renegotiation.whoBuysParts': 'client',
             'renegotiation.currentPhase': 'waiting_for_extra_escrow',
+            'renegotiation.newLabor': newLabor,
+            'renegotiation.newTotal': newTotal,
             'renegotiation.extraLabor': extraLabor,
             'renegotiation.extraToLock': extraToLock,
             'renegotiation.acceptedAt': FieldValue.serverTimestamp(),
@@ -102,6 +104,8 @@ mixin ActionsMixin
       int extraToLock = extraLabor + extraAppFee;
       int newTotal = alreadyLockedCorrect + extraToLock;
       int newFundiReceives = newLabor - newFundiFee + oldTransport;
+      int oldFundiReceives = oldLabor - oldClientFee + oldTransport;
+
       if (extraToLock == 0) {
         await FirebaseFirestore.instance
             .collection('jobs')
@@ -114,9 +118,13 @@ mixin ActionsMixin
               'fundiAppFee': newFundiFee,
               'totalClientPays': alreadyLockedCorrect,
               'totalCost': alreadyLockedCorrect,
+              'escrowAmount': alreadyLockedCorrect,
               'fundiReceives': newLabor - newFundiFee + oldTransport,
               'extraLaborAmount': 0,
               'extraToLock': 0,
+              'extraEscrowStatus': 'not_needed',
+              'clientNeedsToTopup': false,
+              'escrowStatus': 'held',
               'status': 'fundi_buying_parts',
               'renegotiation.status': 'accepted_fundi_buys_at_client_risk',
               'renegotiation.whoBuysParts': 'fundi',
@@ -132,22 +140,28 @@ mixin ActionsMixin
         if (mounted) Navigator.pop(context);
         return;
       }
+
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
           .update({
-            'agreedPrice': newLabor,
-            'laborCost': newLabor,
+            'agreedPrice': oldLabor,
+            'laborCost': oldLabor,
             'transportFee': oldTransport,
-            'clientAppFee': newClientFee,
-            'fundiAppFee': newFundiFee,
-            'totalClientPays': newTotal,
-            'totalCost': newTotal,
-            'fundiReceives': newFundiReceives,
+            'clientAppFee': oldClientFee,
+            'fundiAppFee': oldClientFee,
+            'totalClientPays': alreadyLockedCorrect,
+            'totalCost': alreadyLockedCorrect,
+            'escrowAmount': alreadyLockedCorrect,
+            'fundiReceives': oldFundiReceives,
+
             'extraLaborAmount': extraLabor,
             'extraEscrowAmount': extraToLock,
             'extraToLock': extraToLock,
             'extraEscrowStatus': 'pending',
+            'clientNeedsToTopup': true,
+            'escrowStatus': 'pending_topup',
+
             'status': 'awaiting_extra_escrow',
             'renegotiation.status':
                 'accepted_fundi_buys_at_client_risk_pending_extra_escrow',
@@ -155,9 +169,12 @@ mixin ActionsMixin
             'renegotiation.partsPaidTo': 'shop_direct',
             'renegotiation.currentPhase': 'waiting_for_extra_escrow',
             'renegotiation.oldTransportFee': oldTransport,
+            'renegotiation.oldLabor': oldLabor,
+            'renegotiation.newLabor': newLabor,
             'renegotiation.riskAccepted': true,
             'renegotiation.extraLabor': extraLabor,
             'renegotiation.newTotalClientPays': newTotal,
+            'renegotiation.newFundiReceives': newFundiReceives,
             'renegotiation.extraToLock': extraToLock,
             'renegotiation.acceptedAt': FieldValue.serverTimestamp(),
             'fundiHasUnread': true,
