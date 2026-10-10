@@ -70,7 +70,7 @@ class TimelineCancelWrapper extends StatelessWidget {
                         ),
                       ),
                       content: Text(
-                        'You cannot cancel this job now - fundi already travelling / site visited.',
+                        'You cannot cancel this job now.',
                         style: GoogleFonts.inter(fontSize: 12),
                       ),
                       actions: [
