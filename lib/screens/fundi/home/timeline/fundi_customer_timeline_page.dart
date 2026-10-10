@@ -131,6 +131,19 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
         bool isCancelled = status.contains('cancel');
 
         if (isCancelled) {
+          String cancelledBy = (job['cancelledBy'] ?? '')
+              .toString()
+              .toLowerCase();
+          bool autoCancelled = job['autoCancelled'] == true;
+          String reason =
+              (job['cancelReason'] ?? job['fundiCancelReason'] ?? '')
+                  .toString();
+          bool clientCancelled =
+              cancelledBy == 'client' ||
+              status == 'cancelled_by_client' ||
+              status.contains('cancelled_after_arrival') ||
+              status.contains('cancelled_before_escrow');
+
           return Scaffold(
             appBar: AppBar(
               leading: IconButton(
@@ -150,15 +163,37 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.cancel, size: 64, color: Colors.grey.shade400),
+                    Icon(
+                      clientCancelled ? Icons.person_off : Icons.cancel,
+                      size: 64,
+                      color: clientCancelled
+                          ? Colors.orange.shade400
+                          : Colors.grey.shade400,
+                    ),
                     const SizedBox(height: 16),
                     Text(
-                      'You cancelled this job',
+                      clientCancelled
+                          ? 'Client cancelled this job'
+                          : autoCancelled
+                          ? 'Job auto-cancelled'
+                          : 'You cancelled this job',
                       style: GoogleFonts.montserrat(
                         fontWeight: FontWeight.w800,
                         fontSize: 16,
                       ),
                     ),
+                    if (reason.isNotEmpty &&
+                        reason != 'Cancelled before escrow') ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        reason,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ],
                 ),
               ),

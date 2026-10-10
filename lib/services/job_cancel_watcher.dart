@@ -77,6 +77,7 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
 
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     String cancelledBy = (data['cancelledBy'] ?? '').toString().toLowerCase();
+    String status = (data['status'] ?? '').toString().toLowerCase();
     bool autoCancelled = data['autoCancelled'] == true;
     String reason = (data['fundiCancelReason'] ?? data['cancelReason'] ?? '')
         .toString();
@@ -88,23 +89,30 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
                 data['fundiId'] ??
                 '')
             .toString();
-    // if bid doc, fundiId is in data itself
-    if (fundiId.isEmpty) fundiId = (data['fundiId'] ?? '').toString();
 
     bool viewerIsClient = clientId.isNotEmpty
         ? clientId == uid
-        : cancelledBy != 'client'
-        ? true
+        : fundiId.isNotEmpty
+        ? fundiId != uid
         : false;
-    // fallback: if we can't tell from ids, use cancelledBy logic with uid vs fundiId
-    if (clientId.isEmpty && fundiId.isNotEmpty) {
-      viewerIsClient = fundiId != uid;
-    }
+
+    // FIX: treat missing cancelledBy as client cancel when fundi is viewing
+    // because fundi didn't cancel
+    bool isClientCancel =
+        cancelledBy == 'client' ||
+        status == 'cancelled_by_client' ||
+        status.contains('cancelled_after_arrival') ||
+        status.contains('cancelled_before_escrow') ||
+        (isBidOnly == false &&
+            cancelledBy != 'fundi' &&
+            cancelledBy != 'system' &&
+            !autoCancelled &&
+            status.contains('cancel'));
 
     String title;
     String msg;
 
-    if (isBidOnly) {
+    if (isBidOnly && !isClientCancel) {
       if (viewerIsClient) {
         title = 'Fundi withdrew bid';
         msg = 'This fundi withdrew his bid for this job.';
@@ -117,17 +125,17 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
       msg = reason.isNotEmpty
           ? 'This job was auto-cancelled: $reason'
           : 'This job was auto-cancelled.';
-    } else if (cancelledBy == 'client') {
+    } else if (isClientCancel || cancelledBy == 'client') {
       if (viewerIsClient) {
         title = 'You cancelled this job';
         msg = reason.isNotEmpty && reason != 'Cancelled before escrow'
             ? 'You cancelled: $reason'
-            : 'You cancelled this job before escrow. No fee charged.';
+            : 'You cancelled this job.';
       } else {
         title = 'Client cancelled this job';
         msg = reason.isNotEmpty && reason != 'Cancelled before escrow'
             ? 'Client cancelled: $reason'
-            : 'Client cancelled this job before escrow.';
+            : 'Client cancelled this job. It is now in your cancelled tab.';
       }
     } else {
       // fundi cancelled
