@@ -151,8 +151,8 @@ class FundiJobCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // NEW X BUTTON
-                    if (bidCancelledByClient) ...[
+                    // FIX: show X for ANY cancelled job, not just bid status
+                    if (isCancelled) ...[
                       const SizedBox(width: 4),
                       InkWell(
                         onTap: () async {
@@ -163,7 +163,11 @@ class FundiJobCard extends StatelessWidget {
                                 .doc(data['id'].toString())
                                 .collection('bids')
                                 .doc(uid)
-                                .update({'deletedForFundi': true});
+                                .set({
+                                  'deletedForFundi': true,
+                                  'deletedForFundiAt':
+                                      FieldValue.serverTimestamp(),
+                                }, SetOptions(merge: true));
                           } catch (_) {}
                         },
                         child: Container(

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
+import '../../../../app.dart';
 
 class ClientCancelService {
   static const double feeRate = 0.05;
@@ -522,16 +523,27 @@ class ClientCancelService {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.of(context, rootNavigator: true).popUntil((r) => r.isFirst);
+        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => HomeNavigator(
+              role: 'client',
+              email: FirebaseAuth.instance.currentUser?.email ?? '',
+              initialIndex: 1,
+              initialJobStatusTab: 3,
+            ),
+          ),
+          (r) => false,
+        );
       }
     } catch (e) {
-      if (context.mounted)
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Cancel failed: $e'),
             backgroundColor: Colors.red,
           ),
         );
+      }
     }
   }
 

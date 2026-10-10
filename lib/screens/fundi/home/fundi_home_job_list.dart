@@ -129,7 +129,9 @@ class FundiHomeJobList extends StatelessWidget {
                 var bidData = bidSnap.data!.data() as Map<String, dynamic>?;
                 bool hasBid = bidSnap.data!.exists;
                 bool isRejected = bidData?['status'] == 'rejected';
-                bool deletedForFundi = bidData?['deletedForFundi'] == true;
+                bool deletedForFundi =
+                    bidData?['deletedForFundi'] == true ||
+                    bidData?['deletedForFundiAt'] != null;
                 String reason =
                     bidData?['rejectionReason'] ??
                     bidData?['rejectionCategory'] ??
@@ -218,7 +220,11 @@ class FundiHomeJobList extends StatelessWidget {
                                     .doc(data['id'])
                                     .collection('bids')
                                     .doc(uid)
-                                    .update({'deletedForFundi': true});
+                                    .set({
+                                      'deletedForFundi': true,
+                                      'deletedForFundiAt':
+                                          FieldValue.serverTimestamp(),
+                                    }, SetOptions(merge: true));
                                 Navigator.pop(context);
                               },
                               child: const Text(
