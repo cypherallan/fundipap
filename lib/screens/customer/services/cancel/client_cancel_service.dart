@@ -57,7 +57,7 @@ class ClientCancelService {
       return;
     }
 
-    // ---- FIXED CALC - ORDER MATTERS ----
+    // ---- FIXED CALC - BASED ON WHAT IS ACTUALLY LOCKED ----
     var reneg = job['renegotiation'] as Map<String, dynamic>?;
     int oldLabour = _toInt(
       reneg?['oldLabor'] ??
@@ -80,8 +80,9 @@ class ClientCancelService {
           job['agreedPrice'] ??
           0,
     );
-    if (totalLabour < oldLabour + extraLabour)
+    if (totalLabour < oldLabour + extraLabour) {
       totalLabour = oldLabour + extraLabour;
+    }
     if (totalLabour == 0) totalLabour = oldLabour;
 
     int transport = _toInt(
@@ -114,19 +115,40 @@ class ClientCancelService {
     );
 
     bool extraPaid = (job['extraEscrowStatus'] ?? '').toString() == 'paid';
-    String renegStatus = (reneg?['status'] ?? '').toString().toLowerCase();
+    bool needsTopup = job['clientNeedsToTopup'] == true;
+    int actualEscrowInDb = _toInt(job['escrowAmount'] ?? 0);
     bool extraLocked =
         extraLabour > 0 &&
-        (extraPaid ||
-            totalLocked >= oldTotal + extraTotal ||
-            renegStatus.contains('locked') ||
-            renegStatus == 'client');
+        extraPaid &&
+        !needsTopup &&
+        actualEscrowInDb >= oldTotal;
 
     if (escrowAmount == extraTotal && extraLocked) {
-      escrowAmount = totalLocked; // fix your DB bug 1050 -> 6400
+      escrowAmount = totalLocked;
     }
 
-    int labourForCalc = totalLabour;
+    int labourForCalc;
+    int feeForCalc;
+    if (extraLocked) {
+      labourForCalc = totalLabour; // 6000
+      feeForCalc = totalFee; // 300
+      totalLocked = _toInt(job['totalClientPays'] ?? (oldTotal + extraTotal));
+      escrowAmount = totalLocked;
+    } else {
+      labourForCalc =
+          oldLabour; // 5000 - correct when fundi request pending or counter accepted but not paid
+      feeForCalc = oldFee; // 250
+      totalLocked = actualEscrowInDb > 0
+          ? actualEscrowInDb
+          : oldTotal; // 5400 - what is actually locked
+      escrowAmount = totalLocked;
+    }
+
+    int maxLabourFromEscrow = totalLocked - transport - feeForCalc;
+    if (maxLabourFromEscrow > 0 && labourForCalc > oldLabour && !extraLocked) {
+      labourForCalc = oldLabour;
+    }
+    if (labourForCalc == 0) labourForCalc = oldLabour;
 
     String escrowStatusStr = (job['escrowStatus'] ?? '').toString();
     bool escrowLocked =
@@ -189,7 +211,7 @@ class ClientCancelService {
       return;
     }
 
-    int platformFee = totalFee;
+    int platformFee = feeForCalc;
     int fundiGets = transport;
     int clientRefund = totalLocked - platformFee - fundiGets;
     if (clientRefund < 0) clientRefund = 0;
