@@ -31,9 +31,6 @@ class FundiJobCard extends StatelessWidget {
         data['customerName'] ??
         data['clientName'] ??
         'Client';
-    final offered =
-        data['budget'] ?? data['offeredPrice'] ?? data['amount'] ?? 0;
-    final budgetText = 'KES $offered';
     final distanceText = distanceKm != null
         ? '${distanceKm!.toStringAsFixed(1)}km away'
         : 'Calculating...';
@@ -313,13 +310,6 @@ class FundiJobCard extends StatelessWidget {
                   ),
                 ],
                 const Spacer(),
-                Text(
-                  budgetText,
-                  style: GoogleFonts.montserrat(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                  ),
-                ),
               ],
             ),
             const SizedBox(height: 8),
