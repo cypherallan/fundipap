@@ -1,12 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../app.dart';
+import 'client_cancel_calculator.dart';
 
 class ClientCancelService {
-  static const double feeRate = 0.05;
   static List<String> clientReasons = [
     'Fundi late / not arriving',
     'Found another fundi',
@@ -16,39 +17,20 @@ class ClientCancelService {
     'Other',
   ];
 
-  static bool _isFundiPriceRequestPending(Map<String, dynamic> job) {
-    var reneg = job['renegotiation'] as Map<String, dynamic>?;
-    if (reneg == null) return false;
-    var requested = reneg['requested'] == true;
-    var status = (reneg['status'] ?? '').toString().toLowerCase();
-    var requestedBy = (reneg['requestedBy'] ?? '').toString().toLowerCase();
-    if (requested && status == 'pending' && requestedBy != 'client')
-      return true;
-    if (status == 'pending' && requestedBy == 'fundi') return true;
-    return requested && status == 'pending';
-  }
-
   static Future<void> showCancelDialog({
     required BuildContext context,
     required String jobId,
     required Map<String, dynamic> job,
   }) async {
-    String status = (job['status'] ?? '').toString().toLowerCase();
-    bool travelling = job['travelling'] == true || status == 'travelling';
-    bool siteDone =
-        job['siteVisitDone'] == true ||
-        job['siteVisited'] == true ||
-        job['fundiArrivedAt'] != null;
-    bool isStarted = [
-      'in_progress',
-      'pending_completion',
-      'job_completed',
-    ].contains(status);
-    bool arrived = travelling || siteDone;
-    bool priceRequestPending = _isFundiPriceRequestPending(job);
-    bool effectiveArrived = arrived || priceRequestPending;
+    // --- SINGLE SOURCE OF TRUTH ---
+    final calc = ClientCancelCalculator.calculate(job);
 
-    if (isStarted) {
+    // debug - see exactly what goes wrong
+    for (var l in calc.logs) {
+      if (kDebugMode) debugPrint('[CANCEL_AUDIT] $l');
+    }
+
+    if (calc.stage == ClientCancelStage.blockedJobStarted) {
       await _showBlocked(
         context,
         'Cannot cancel',
@@ -57,110 +39,10 @@ class ClientCancelService {
       return;
     }
 
-    // ---- FIXED CALC - BASED ON WHAT IS ACTUALLY LOCKED ----
-    var reneg = job['renegotiation'] as Map<String, dynamic>?;
-    int oldLabour = _toInt(
-      reneg?['oldLabor'] ??
-          job['acceptedBidAmount'] ??
-          job['currentLabour'] ??
-          job['agreedPrice'] ??
-          0,
-    );
-    int extraLabour = _toInt(
-      reneg?['acceptedCounterExtraLabor'] ??
-          reneg?['approvedExtra'] ??
-          reneg?['counterExtraLabor'] ??
-          job['extraTopupAmount'] ??
-          0,
-    );
-    int totalLabour = _toInt(
-      reneg?['newLaborTotal'] ??
-          reneg?['counterLabor'] ??
-          job['laborCost'] ??
-          job['agreedPrice'] ??
-          0,
-    );
-    if (totalLabour < oldLabour + extraLabour) {
-      totalLabour = oldLabour + extraLabour;
-    }
-    if (totalLabour == 0) totalLabour = oldLabour;
+    bool effectiveArrived = calc.arrived || calc.priceRequestPending;
 
-    int transport = _toInt(
-      job['transportFee'] ??
-          job['escrowTransport'] ??
-          reneg?['counterTransportFee'] ??
-          0,
-    );
-    int escrowAmount = _toInt(job['escrowAmount'] ?? 0);
-
-    int oldFee = (oldLabour * feeRate).round();
-    int extraFee = (extraLabour * feeRate).round();
-    int totalFee = (totalLabour * feeRate).round();
-
-    int oldTotal = _toInt(
-      job['totalCost'] ??
-          reneg?['oldTotalClientPays'] ??
-          (oldLabour + transport + oldFee),
-    );
-    int extraTotal = _toInt(
-      reneg?['approvedExtraToLock'] ??
-          job['extraTopupToLock'] ??
-          (extraLabour + extraFee),
-    );
-    int totalLocked = _toInt(
-      job['totalClientPays'] ??
-          reneg?['counterTotalClientPays'] ??
-          reneg?['newTotalClientPays'] ??
-          (oldTotal + extraTotal),
-    );
-
-    bool extraPaid = (job['extraEscrowStatus'] ?? '').toString() == 'paid';
-    bool needsTopup = job['clientNeedsToTopup'] == true;
-    int actualEscrowInDb = _toInt(job['escrowAmount'] ?? 0);
-    bool extraLocked =
-        extraLabour > 0 &&
-        extraPaid &&
-        !needsTopup &&
-        actualEscrowInDb >= oldTotal;
-
-    if (escrowAmount == extraTotal && extraLocked) {
-      escrowAmount = totalLocked;
-    }
-
-    int labourForCalc;
-    int feeForCalc;
-    if (extraLocked) {
-      labourForCalc = totalLabour; // 6000
-      feeForCalc = totalFee; // 300
-      totalLocked = _toInt(job['totalClientPays'] ?? (oldTotal + extraTotal));
-      escrowAmount = totalLocked;
-    } else {
-      labourForCalc =
-          oldLabour; // 5000 - correct when fundi request pending or counter accepted but not paid
-      feeForCalc = oldFee; // 250
-      totalLocked = actualEscrowInDb > 0
-          ? actualEscrowInDb
-          : oldTotal; // 5400 - what is actually locked
-      escrowAmount = totalLocked;
-    }
-
-    int maxLabourFromEscrow = totalLocked - transport - feeForCalc;
-    if (maxLabourFromEscrow > 0 && labourForCalc > oldLabour && !extraLocked) {
-      labourForCalc = oldLabour;
-    }
-    if (labourForCalc == 0) labourForCalc = oldLabour;
-
-    String escrowStatusStr = (job['escrowStatus'] ?? '').toString();
-    bool escrowLocked =
-        escrowAmount > 0 ||
-        escrowStatusStr == 'held' ||
-        escrowStatusStr == 'locked' ||
-        job['escrowDone'] == true;
-
-    String reason = clientReasons[0];
-    final otherCtrl = TextEditingController();
-
-    if (!escrowLocked) {
+    // CANCEL 1: BEFORE ESCROW
+    if (calc.stage == ClientCancelStage.beforeEscrow) {
       bool? ok = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
@@ -197,8 +79,8 @@ class ClientCancelService {
         jobId: jobId,
         job: job,
         arrived: false,
-        labour: labourForCalc,
-        transport: transport,
+        labour: calc.labourForCalc,
+        transport: calc.transport,
         total: 0,
         platformFee: 0,
         clientRefund: 0,
@@ -211,10 +93,16 @@ class ClientCancelService {
       return;
     }
 
-    int platformFee = feeForCalc;
-    int fundiGets = transport;
-    int clientRefund = totalLocked - platformFee - fundiGets;
-    if (clientRefund < 0) clientRefund = 0;
+    // CANCEL 2-6: WITH ESCROW LOCKED
+    int labourForCalc = calc.labourForCalc;
+    int transport = calc.transport;
+    int totalLocked = calc.totalLockedDisplay;
+    int platformFee = calc.feeForCalc;
+    int fundiGets = calc.fundiGets;
+    int clientRefund = calc.clientRefund;
+
+    String reason = clientReasons[0];
+    final otherCtrl = TextEditingController();
 
     await showDialog(
       context: context,
@@ -256,6 +144,20 @@ class ClientCancelService {
                       _row('Labour (locked):', 'KES $labourForCalc'),
                       _row('Transport:', 'KES $transport'),
                       _row('Total locked:', 'KES $totalLocked', bold: true),
+                      if (calc.stage ==
+                              ClientCancelStage.clientCounterAcceptedNotPaid ||
+                          calc.stage == ClientCancelStage.fundiRequestPending)
+                        Padding(
+                          padding: EdgeInsets.only(top: 4),
+                          child: Text(
+                            'Note: Extra KES ${calc.extraLabour} requested but not yet paid. Showing OLD locked only.',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              color: Colors.orange.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                       Divider(),
                       Container(
                         padding: EdgeInsets.all(8),
@@ -364,7 +266,7 @@ class ClientCancelService {
                   reason: reason,
                   details: otherCtrl.text.trim(),
                   escrowWasLocked: true,
-                  wasPriceRequestPending: priceRequestPending,
+                  wasPriceRequestPending: calc.priceRequestPending,
                 );
               },
               child: Text('Yes, Cancel - Lose KES $platformFee'),
@@ -638,12 +540,5 @@ class ClientCancelService {
         ],
       ),
     );
-  }
-
-  static int _toInt(dynamic v) {
-    if (v is int) return v;
-    if (v is double) return v.toInt();
-    if (v is String) return int.tryParse(v) ?? 0;
-    return 0;
   }
 }

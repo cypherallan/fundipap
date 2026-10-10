@@ -176,18 +176,38 @@ mixin ActionsMixin
   ) async {
     setState(() => loading = true);
     try {
+      // FIX: recompute from DB, don't trust passed alreadyLocked
+      int oldTotal = _toInt(
+        job['totalCost'] ??
+            job['totalClientPays'] ??
+            job['escrowAmount'] ??
+            alreadyLocked,
+      );
+      if (oldTotal == 0) oldTotal = alreadyLocked;
+      if (alreadyLocked == 0 || alreadyLocked == extraToLock) {
+        alreadyLocked = oldTotal; // safety
+      }
+      // ensure alreadyLocked is at least oldTotal
+      if (alreadyLocked < oldTotal) alreadyLocked = oldTotal;
+
       int newTotal = alreadyLocked + extraToLock;
+      // final safety: if newTotal is just 1050, force 5400+1050=6450
+      if (newTotal == extraToLock) {
+        newTotal = oldTotal + extraToLock;
+      }
+
       String fundiId =
           (job['assignedFundiId'] ??
                   job['fundiId'] ??
                   widget.job['assignedFundiId'] ??
                   '')
               .toString();
+
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
           .update({
-            'escrowAmount': newTotal,
+            'escrowAmount': newTotal, // 6450 not 1050
             'totalClientPays': newTotal,
             'totalCost': newTotal,
             'extraEscrowStatus': 'paid',
@@ -195,7 +215,8 @@ mixin ActionsMixin
             'extraTopupAmount': 0,
             'extraTopupToLock': 0,
             'extraToLock': 0,
-            'clientNeedsToTopup': false,
+            'extraLaborAmount': 0,
+            'clientNeedsToTopup': false, // FIX: was true in other flow
             'renegotiation.extraLocked': true,
             'renegotiation.extraLockedAt': FieldValue.serverTimestamp(),
             'renegotiation.extraEscrowPaidAt': FieldValue.serverTimestamp(),
@@ -213,6 +234,7 @@ mixin ActionsMixin
             'customerHasUnread': false,
             'updatedAt': FieldValue.serverTimestamp(),
           });
+
       if (fundiId.isNotEmpty) {
         try {
           var q = await FirebaseFirestore.instance
