@@ -22,6 +22,8 @@ class PostNewJobScreen extends StatefulWidget {
 class _PostNewJobScreenState extends State<PostNewJobScreen> {
   final titleC = TextEditingController();
   final descC = TextEditingController();
+  final searchC = TextEditingController();
+  String searchQuery = '';
   String categoryId = FundiTaxonomy.categories[0]['id'] as String;
   String? subcategoryId;
   String? faultId;
@@ -74,6 +76,52 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
       selectedSub == null ? [] : (selectedSub!['faults'] ?? []) as List;
 
   int get siteVisitFee => PricingService.getSiteVisitFee(categoryId);
+
+  List<Map<String, dynamic>> get searchResults {
+    if (searchQuery.trim().isEmpty) return [];
+    final q = searchQuery.toLowerCase();
+    final List<Map<String, dynamic>> res = [];
+    for (var cat in FundiTaxonomy.categories) {
+      for (var sub in cat['subcategories'] as List) {
+        var subMap = sub as Map<String, dynamic>;
+        var subName = (subMap['name'] as String).toLowerCase();
+        var catName = (cat['name'] as String).toLowerCase();
+        if (subName.contains(q) || catName.contains(q)) {
+          res.add({
+            'categoryId': cat['id'],
+            'categoryName': cat['name'],
+            'subcategoryId': subMap['id'],
+            'subcategoryName': subMap['name'],
+          });
+        }
+      }
+    }
+    return res.take(8).toList();
+  }
+
+  void _selectFromSearch(Map<String, dynamic> r) {
+    setState(() {
+      categoryId = r['categoryId'] as String;
+      subcategoryId = r['subcategoryId'] as String;
+      faultId = null;
+      searchQuery = '';
+      searchC.clear();
+      var sid = subcategoryId!.toLowerCase();
+      if (sid.contains('install')) {
+        serviceFilter = 'install';
+      } else {
+        serviceFilter = 'repair';
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    titleC.dispose();
+    descC.dispose();
+    searchC.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -343,6 +391,69 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            TextField(
+              controller: searchC,
+              onChanged: (v) => setState(() => searchQuery = v),
+              decoration: InputDecoration(
+                hintText: 'Search e.g TV mounting, plumbing...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () => setState(() {
+                          searchQuery = '';
+                          searchC.clear();
+                        }),
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade100,
+              ),
+            ),
+            if (searchQuery.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(top: 8, bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.black12),
+                ),
+                child: searchResults.isEmpty
+                    ? ListTile(
+                        dense: true,
+                        title: Text(
+                          'No result for "$searchQuery"',
+                          style: GoogleFonts.inter(fontSize: 12),
+                        ),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: searchResults.length,
+                        itemBuilder: (_, i) {
+                          var r = searchResults[i];
+                          return ListTile(
+                            dense: true,
+                            title: Text(
+                              r['subcategoryName'],
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              r['categoryName'],
+                              style: GoogleFonts.inter(fontSize: 11),
+                            ),
+                            onTap: () => _selectFromSearch(r),
+                          );
+                        },
+                      ),
+              ),
+            const SizedBox(height: 12),
             TextField(
               controller: titleC,
               decoration: const InputDecoration(
