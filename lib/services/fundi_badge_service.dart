@@ -52,12 +52,10 @@ class FundiBadgeService {
     }
     score += b['cancellations']!;
 
-    // 2. Fraud / Scam reports - 20 pts
     int fraud = (stats['fraudReports'] ?? fundi['fraudReports'] ?? 0) as int;
     b['fraud'] = fraud == 0 ? 20 : -(fraud * 20);
     score += b['fraud']!;
 
-    // 3. Rating - 25 pts max
     double rating = _toDouble(fundi['averageRating'] ?? fundi['rating'] ?? 0);
     if (rating >= 4.8)
       b['rating'] = 25;
@@ -69,7 +67,6 @@ class FundiBadgeService {
       b['rating'] = 0;
     score += b['rating']!;
 
-    // 4. Negative comments sentiment
     int negComments = (stats['negativeCommentsCount'] ?? 0) as int;
     b['negativeComments'] = -(negComments * 5);
     score += b['negativeComments']!;
@@ -280,3 +277,4 @@ class FundiBadgeService {
     }
   }
 }
+//
