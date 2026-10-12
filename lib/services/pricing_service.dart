@@ -1,8 +1,19 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/job_taxonomy.dart';
+import 'fundi_badge_service.dart';
 
 class PricingService {
-  static const String version = 'v2_2026_comprehensive';
+  static const String version = 'v3_2026_badge_commission';
+
+  // NEW LOCKED COMMISSIONS
+  static const int clientCommissionPercent = 5; // client always 5%
+  static const int fundiCommissionGold = 5;
+  static const int fundiCommissionSilver = 7;
+  static const int fundiCommissionBronze = 10;
+  static const int fundiCommissionTrialGold =
+      10; // trial shows GOLD but pays BRONZE
+
+  // Backward compat for old code calling 15
   static const int commissionPercent = 15;
 
   static Map<String, int> getPrice(String categoryId, String subcategoryId) {
@@ -23,12 +34,10 @@ class PricingService {
     }
   }
 
-  // FIXES "Too many positional arguments" - supports 0 AND 1 arg
   static int getSiteVisitFee([String? categoryId, bool isOther = false]) {
     if (isOther) return FundiTaxonomy.siteVisitFeeOther;
-    if (categoryId != null && categoryId.toLowerCase().contains('other')) {
+    if (categoryId != null && categoryId.toLowerCase().contains('other'))
       return FundiTaxonomy.siteVisitFeeOther;
-    }
     return FundiTaxonomy.siteVisitFeeStandard;
   }
 
@@ -42,7 +51,55 @@ class PricingService {
     return price['avg']! + siteFee;
   }
 
-  // FIXES "getPriceToShow isn't defined"
+  // NEW - GET COMMISSION BY BADGE
+  static int getFundiCommissionPct({
+    required String badgeLevel,
+    bool isTrialGold = false,
+  }) {
+    if (isTrialGold) return fundiCommissionTrialGold;
+    switch (badgeLevel) {
+      case 'gold':
+        return fundiCommissionGold;
+      case 'silver':
+        return fundiCommissionSilver;
+      case 'bronze':
+      case 'none':
+      default:
+        return fundiCommissionBronze;
+    }
+  }
+
+  static int getFundiCommissionFromResult(BadgeResult badge) {
+    if (badge.isTrialGold) return fundiCommissionTrialGold;
+    switch (badge.badgeLevel) {
+      case BadgeLevel.gold:
+        return fundiCommissionGold;
+      case BadgeLevel.silver:
+        return fundiCommissionSilver;
+      case BadgeLevel.bronze:
+      case BadgeLevel.none:
+        return fundiCommissionBronze;
+    }
+  }
+
+  static int getClientCommissionPct() => clientCommissionPercent;
+
+  static Map<String, int> getCommissionBreakdown({
+    required String badgeLevel,
+    bool isTrialGold = false,
+  }) {
+    int fundiPct = getFundiCommissionPct(
+      badgeLevel: badgeLevel,
+      isTrialGold: isTrialGold,
+    );
+    int clientPct = clientCommissionPercent;
+    return {
+      'fundiPct': fundiPct,
+      'clientPct': clientPct,
+      'totalPct': fundiPct + clientPct,
+    };
+  }
+
   static Future<Map<String, dynamic>> getPriceToShow({
     required String categoryId,
     required String subcategoryId,
@@ -54,7 +111,6 @@ class PricingService {
     int avg = staticPrice['avg']!;
     int count = 0;
     String source = 'static_fallback';
-
     try {
       String docId = '${categoryId}__${subcategoryId}';
       if (faultId != null && faultId.isNotEmpty) docId = '${docId}__$faultId';
@@ -71,11 +127,9 @@ class PricingService {
         }
       }
     } catch (_) {}
-
     String rangeText = count >= 5
         ? 'KES $min - $max (Avg: $avg from $count fundi bids)'
         : 'KES $min - $max (System estimate)';
-
     return {
       'source': source,
       'min': min,
@@ -105,12 +159,58 @@ class PricingService {
     return total;
   }
 
-  static Map<String, int> calculatePayout(int totalRelease) {
-    int commission = (totalRelease * commissionPercent / 100).round();
+  static Map<String, int> calculatePayout(
+    int totalRelease, {
+    String? badgeLevel,
+    bool isTrialGold = false,
+    int? fundiCommissionOverride,
+  }) {
+    int fundiPct;
+    if (fundiCommissionOverride != null) {
+      fundiPct = fundiCommissionOverride;
+    } else if (badgeLevel != null)
+      fundiPct = getFundiCommissionPct(
+        badgeLevel: badgeLevel,
+        isTrialGold: isTrialGold,
+      );
+    else
+      fundiPct = commissionPercent;
+
+    int clientPct = clientCommissionPercent;
+    int totalCommission = (totalRelease * (fundiPct + clientPct) / 100).round();
     return {
       'total': totalRelease,
-      'commission': commission,
-      'fundiGets': totalRelease - commission,
+      'commission': totalCommission,
+      'fundiCommissionPct': fundiPct,
+      'clientCommissionPct': clientPct,
+      'fundiGets': totalRelease - totalCommission,
+    };
+  }
+
+  static Map<String, int> calculateDetailedPayout({
+    required int labor,
+    required int transportFee,
+    required String badgeLevel,
+    bool isTrialGold = false,
+  }) {
+    int fundiPct = getFundiCommissionPct(
+      badgeLevel: badgeLevel,
+      isTrialGold: isTrialGold,
+    );
+    int clientFee = (labor * clientCommissionPercent / 100).round();
+    int fundiFee = (labor * fundiPct / 100).round();
+    int totalClientPays = labor + transportFee + clientFee;
+    int fundiReceives = labor - fundiFee + transportFee;
+    return {
+      'labor': labor,
+      'transportFee': transportFee,
+      'clientFee': clientFee,
+      'fundiFee': fundiFee,
+      'fundiCommissionPct': fundiPct,
+      'clientCommissionPct': clientCommissionPercent,
+      'totalClientPays': totalClientPays,
+      'fundiReceives': fundiReceives,
+      'totalCommission': clientFee + fundiFee,
     };
   }
 
@@ -138,6 +238,10 @@ class PricingService {
           'requiresSiteVisit': true,
           'maxExtraPercent': 100,
           'commissionPercent': commissionPercent,
+          'clientCommissionPercent': clientCommissionPercent,
+          'fundiCommissionGold': fundiCommissionGold,
+          'fundiCommissionSilver': fundiCommissionSilver,
+          'fundiCommissionBronze': fundiCommissionBronze,
           'active': true,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));

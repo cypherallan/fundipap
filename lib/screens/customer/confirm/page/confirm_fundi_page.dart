@@ -12,7 +12,10 @@ import '../bidding/confirm_fundi_bid_card.dart';
 import '../profile/confirm_fundi_reviews.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
-import '../../../../services/job_cancel_watcher.dart'; // ADD THIS
+import '../../../../services/job_cancel_watcher.dart';
+import '../../../../widgets/fundi_badge_chip.dart'; // NEW
+import '../../../../services/fundi_badge_service.dart'; // NEW
+import '../../../../services/pricing_service.dart';
 
 class ConfirmFundiPage extends StatefulWidget {
   final String jobId;
@@ -32,7 +35,6 @@ class ConfirmFundiPage extends StatefulWidget {
 
 class _ConfirmFundiPageState extends State<ConfirmFundiPage>
     with ConfirmFundiActionsMixin, JobCancelWatcher {
-  // ADD JobCancelWatcher
   @override
   Map<String, dynamic>? fundi;
   @override
@@ -68,7 +70,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
   @override
   void initState() {
     super.initState();
-    // WATCH FOR FUNDI CANCEL / WITHDRAW
     watchCancellation(
       jobId: widget.jobId,
       bidId: widget.bidId,
@@ -122,28 +123,50 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
       double km = t['km'] as double;
       if (trans < 100) trans = 100;
       if (km <= 1.0 && trans < 100) trans = 100;
-      int cFee = (lab * 0.05).round();
-      int fFee = (lab * 0.05).round();
+
+      // LOCKED COMMISSION - from badge
+      String badgeLevelStr = (widget.bidData['badgeLevel'] ?? 'none')
+          .toString();
+      bool isTrial = (widget.bidData['isTrialGold'] ?? false) as bool;
+
+      var payout = PricingService.calculateDetailedPayout(
+        labor: lab,
+        transportFee: trans,
+        badgeLevel: badgeLevelStr,
+        isTrialGold: isTrial,
+      );
+
       setState(() {
         distanceKm = km;
         transportFee = trans;
         transportMode = t['mode'] as String;
         labor = lab;
-        clientAppFee = cFee;
-        fundiAppFee = fFee;
-        totalClientPays = lab + trans + cFee;
-        fundiReceives = lab - fFee + trans;
+        clientAppFee = payout['clientFee']!;
+        fundiAppFee = payout['fundiFee']!;
+        totalClientPays = payout['totalClientPays']!;
+        fundiReceives = payout['fundiReceives']!;
         transportLoading = false;
       });
     } catch (_) {
       if (mounted) {
         int lab = _getEffectiveLabor();
+        String badgeLevelStr = (widget.bidData['badgeLevel'] ?? 'none')
+            .toString();
+        bool isTrial = (widget.bidData['isTrialGold'] ?? false) as bool;
+
+        var payout = PricingService.calculateDetailedPayout(
+          labor: lab,
+          transportFee: transportFee,
+          badgeLevel: badgeLevelStr,
+          isTrialGold: isTrial,
+        );
+
         setState(() {
           labor = lab;
-          clientAppFee = (lab * 0.05).round();
-          fundiAppFee = (lab * 0.05).round();
-          totalClientPays = lab + transportFee + clientAppFee;
-          fundiReceives = lab - fundiAppFee + transportFee;
+          clientAppFee = payout['clientFee']!;
+          fundiAppFee = payout['fundiFee']!;
+          totalClientPays = payout['totalClientPays']!;
+          fundiReceives = payout['fundiReceives']!;
           transportLoading = false;
         });
       }
@@ -240,18 +263,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         'isRead': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
-      await FirebaseFirestore.instance
-          .collection('fundis')
-          .doc(fundiId)
-          .collection('notifications')
-          .add({
-            'jobId': widget.jobId,
-            'bidId': widget.bidId,
-            'type': 'counter',
-            'amount': amount,
-            'createdAt': FieldValue.serverTimestamp(),
-            'isRead': false,
-          });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Counter KES $amount sent to fundi')),
@@ -276,6 +287,25 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
     int totalToShow = totalClientPays > 0
         ? totalClientPays
         : labor + effectiveTransport + clientAppFee;
+
+    // BADGE FOR DISPLAY
+    BadgeLevel bLevel;
+    FundiLevel fLevel;
+    try {
+      bLevel = BadgeLevel.values.byName(
+        (widget.bidData['badgeLevel'] ?? 'none').toString(),
+      );
+    } catch (_) {
+      bLevel = BadgeLevel.none;
+    }
+    try {
+      fLevel = FundiLevel.values.byName(
+        (widget.bidData['fundiLevel'] ?? 'L1_NEW').toString(),
+      );
+    } catch (_) {
+      fLevel = FundiLevel.L1_NEW;
+    }
+    int fundiCommPct = (widget.bidData['fundiCommissionPct'] ?? 10) as int;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F6F6),
@@ -379,7 +409,7 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'App Maintenance (5%)',
+                          'App Maintenance (5% client)',
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             color: Colors.black54,
@@ -390,6 +420,26 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                           style: GoogleFonts.montserrat(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Fundi fee ($fundiCommPct% from fundi)',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: Colors.black45,
+                          ),
+                        ),
+                        Text(
+                          'KES $fundiAppFee',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: Colors.black45,
                           ),
                         ),
                       ],
@@ -415,6 +465,14 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Fundi receives: KES $fundiReceives (Labor - $fundiCommPct% + Transport)',
+                      style: GoogleFonts.inter(
+                        fontSize: 9,
+                        color: Colors.black45,
+                      ),
                     ),
                   ],
                 ),
@@ -506,6 +564,19 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         child: Column(
           children: [
             ConfirmFundiProfileCard(combined: combined),
+            const SizedBox(height: 8),
+            FundiBadgeChip(
+              level: bLevel,
+              fundiLevel: fLevel,
+              isVerified: widget.bidData['isVerifiedFundi'] ?? false,
+              isTrialGold: widget.bidData['isTrialGold'] ?? false,
+              referralCount: widget.bidData['referralCount'] ?? 0,
+              jobsDone:
+                  widget.bidData['completedJobs'] ??
+                  widget.bidData['fundiJobsCompleted'] ??
+                  0,
+              commissionPct: fundiCommPct,
+            ),
             const SizedBox(height: 12),
             ConfirmFundiDetailsSection(combined: combined),
             const SizedBox(height: 12),

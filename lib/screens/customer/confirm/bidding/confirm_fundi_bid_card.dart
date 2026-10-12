@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
+import '../../../../widgets/fundi_badge_chip.dart';
+import '../../../../services/fundi_badge_service.dart';
 
 class ConfirmFundiBidCard extends StatelessWidget {
   final Map<String, dynamic> jobData;
@@ -49,6 +51,24 @@ class ConfirmFundiBidCard extends StatelessWidget {
           0,
     );
     String note = (bidData['note'] ?? '').toString();
+
+    // BADGE PARSING
+    BadgeLevel bLevel;
+    try {
+      bLevel = BadgeLevel.values.byName(
+        (bidData['badgeLevel'] ?? 'none').toString(),
+      );
+    } catch (_) {
+      bLevel = BadgeLevel.none;
+    }
+    FundiLevel fLevel;
+    try {
+      fLevel = FundiLevel.values.byName(
+        (bidData['fundiLevel'] ?? 'L1_NEW').toString(),
+      );
+    } catch (_) {
+      fLevel = FundiLevel.L1_NEW;
+    }
 
     // USE PARENT'S RTDB VALUES DIRECTLY - don't recalculate
     int transport = _toInt(bidData['transportFee'], 100);
@@ -108,6 +128,21 @@ class ConfirmFundiBidCard extends StatelessWidget {
                   ),
                 ),
             ],
+          ),
+          const SizedBox(height: 8),
+          // NEW BADGE CHIP FOR CLIENT
+          FundiBadgeChip(
+            level: bLevel,
+            fundiLevel: fLevel,
+            isVerified: bidData['isVerifiedFundi'] ?? false,
+            isTrialGold: bidData['isTrialGold'] ?? false,
+            referralCount:
+                bidData['referralCount'] ?? bidData['referrals'] ?? 0,
+            jobsDone:
+                bidData['completedJobs'] ?? bidData['fundiJobsCompleted'] ?? 0,
+            showLevel: true,
+            compact: false,
+            hideCommission: true, // <- ADD THIS LINE HERE AT BOTTOM
           ),
           const SizedBox(height: 10),
           Row(

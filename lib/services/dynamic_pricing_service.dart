@@ -44,6 +44,12 @@ class DynamicPricingService {
   }) {
     List<Map<String, dynamic>> sorted = List.from(bids);
     sorted.sort((a, b) {
+      // LOCKED: GOLD always first, regardless of sortBy
+      int scoreA = (a['badgeScore'] ?? 0) as int;
+      int scoreB = (b['badgeScore'] ?? 0) as int;
+      if (scoreB != scoreA)
+        return scoreB.compareTo(scoreA); // gold 110 > silver 70 > bronze 35
+
       double getVal(Map<String, dynamic> bid) {
         switch (sortBy) {
           case 'price':
@@ -58,8 +64,10 @@ class DynamicPricingService {
             return (bid['distanceKm'] ?? bid['distance'] ?? 9999).toDouble();
           case 'fraud':
             return (bid['fraudCount'] ?? 0).toDouble();
+          case 'badge':
+            return (bid['badgeScore'] ?? 0).toDouble();
           default:
-            return 0.0;
+            return (bid['badgeScore'] ?? 0).toDouble();
         }
       }
 

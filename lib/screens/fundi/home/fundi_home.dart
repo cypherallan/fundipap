@@ -16,6 +16,8 @@ import '../../../services/fundi_waiting_state_service.dart';
 import '../rating/rate_client_screen.dart';
 import 'fundi_home_actions_mixin.dart';
 import '../../../services/fundi_penalty_service.dart';
+import '../../../widgets/fundi_badge_chip.dart';
+import '../../../widgets/fundi_level_progress_widget.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});
@@ -330,19 +332,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
     if (mounted) setState(() {});
   }
 
-  Color _badgeColor(BadgeLevel level) {
-    switch (level) {
-      case BadgeLevel.gold:
-        return const Color(0xFFFFD700);
-      case BadgeLevel.silver:
-        return const Color(0xFFC0C0C0);
-      case BadgeLevel.bronze:
-        return const Color(0xFFCD7F32);
-      case BadgeLevel.none:
-        return Colors.transparent;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     BadgeResult? badgeResult;
@@ -351,8 +340,18 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
         badgeResult = FundiBadgeService.calculate(me!, me!);
       } catch (_) {}
     }
-    BadgeLevel level = badgeResult?.level ?? BadgeLevel.none;
-    bool hasBadge = level != BadgeLevel.none;
+    // NEW LOCKED SYSTEM
+    BadgeLevel level = badgeResult?.badgeLevel ?? BadgeLevel.none;
+    // always show L1
+    String nextBadgeLabel = 'BRONZE';
+    if (level == BadgeLevel.none)
+      nextBadgeLabel = 'BRONZE';
+    else if (level == BadgeLevel.bronze)
+      nextBadgeLabel = 'SILVER';
+    else if (level == BadgeLevel.silver)
+      nextBadgeLabel = 'GOLD';
+    else
+      nextBadgeLabel = 'MAX';
 
     final uid = FirebaseAuth.instance.currentUser!.uid;
     final assignedIds = _assignedJobs.map((d) => d.id).toSet();
@@ -566,38 +565,57 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        if (hasBadge)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.verified,
-                                color: _badgeColor(level),
-                                size: 22,
-                              ),
-                              const SizedBox(width: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _badgeColor(level).withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: _badgeColor(level)),
-                                ),
-                                child: Text(
-                                  level.name.toUpperCase(),
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 7,
-                                    fontWeight: FontWeight.w800,
-                                    color: _badgeColor(level),
+                        // NEW BADGE CHIP WITH LEVEL
+                        if (badgeResult != null)
+                          FundiBadgeChip(
+                            level: badgeResult.badgeLevel,
+                            fundiLevel: badgeResult.fundiLevel,
+                            isVerified: badgeResult.isVerified,
+                            isTrialGold: badgeResult.isTrialGold,
+                            commissionPct: badgeResult.fundiCommissionPct,
+                            referralCount: 0,
+                            jobsDone: completedJobs,
+                            compact: true,
+                            showLevel: true,
+                          ),
+                        if (badgeResult != null) const SizedBox(height: 6),
+                        // PROGRESS BAR
+                        if (badgeResult != null)
+                          SizedBox(
+                            width: 130,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: (badgeResult.score / 130).clamp(
+                                      0.0,
+                                      1.0,
+                                    ),
+                                    minHeight: 4,
+                                    backgroundColor: Colors.white12,
+                                    valueColor: AlwaysStoppedAnimation(
+                                      badgeResult.badgeLevel == BadgeLevel.gold
+                                          ? const Color(0xFFFFD700)
+                                          : Colors.white,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 3),
+                                Text(
+                                  '${badgeResult.score}/130 pts • ${badgeResult.pointsToNextBadge} to $nextBadgeLabel • ${badgeResult.jobsToNextLevel} jobs to next level',
+                                  style: GoogleFonts.inter(
+                                    color: Colors.white60,
+                                    fontSize: 7,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ],
+                            ),
                           ),
-                        if (hasBadge) const SizedBox(height: 6),
+                        if (badgeResult != null) const SizedBox(height: 8),
                         Text(
                           'TOTAL EARNED',
                           style: GoogleFonts.montserrat(
@@ -672,6 +690,18 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                 ),
               ),
             ),
+            // LEVEL PROGRESS - NEW
+            if (badgeResult != null)
+              SliverToBoxAdapter(
+                child: Container(
+                  color: FundipapColors.blackGray,
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: FundiLevelProgressWidget(
+                    badge: badgeResult,
+                    completedJobs: completedJobs,
+                  ),
+                ),
+              ),
             if (_loadingLoc)
               const SliverToBoxAdapter(
                 child: LinearProgressIndicator(

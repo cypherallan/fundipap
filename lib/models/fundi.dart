@@ -4,19 +4,22 @@ class Fundi {
   final String id;
   final String name;
   final String phone;
-  final String skill; // backward compat: primary trade slug e.g. 'electrical'
+  final String skill;
   final double rating;
   final int completedJobs;
-
-  // NEW - 24 categories system
-  final List<String> categoryIds; // e.g. ['plumbing_waterworks', 'electrical']
-  final List<String>
-  subcategoryIds; // e.g. ['leaking_pipe', 'full_house_wiring']
+  final List<String> categoryIds;
+  final List<String> subcategoryIds;
   final String primaryCategoryId;
   final bool isVerified;
   final bool isAvailable;
   final double? lat;
   final double? lng;
+  final String fundiLevel;
+  final String badgeLevel;
+  final int badgeScore;
+  final bool isTrialGold;
+  final bool isVerifiedFundi;
+  final int fundiCommissionPct;
 
   Fundi({
     required this.id,
@@ -32,14 +35,17 @@ class Fundi {
     this.isAvailable = true,
     this.lat,
     this.lng,
+    this.fundiLevel = 'L1_NEW',
+    this.badgeLevel = 'none',
+    this.badgeScore = 0,
+    this.isTrialGold = false,
+    this.isVerifiedFundi = false,
+    this.fundiCommissionPct = 10,
   });
 
-  // Check if fundi can do a job - matches category system
   bool canDoJob(String categoryId, String? subcategoryId) {
     if (categoryIds.contains(categoryId)) return true;
-    if (categoryIds.contains('other_custom'))
-      return true; // other can do anything
-    // backward compat with old skill string
+    if (categoryIds.contains('other_custom')) return true;
     var cat = FundiTaxonomy.categories.firstWhere(
       (c) => c['id'] == categoryId,
       orElse: () => {"slug": ""},
@@ -48,7 +54,6 @@ class Fundi {
     return false;
   }
 
-  // Get display name for skills
   List<String> get skillNames {
     return categoryIds.map((cid) {
       try {
@@ -59,6 +64,29 @@ class Fundi {
       }
     }).toList();
   }
+
+  // PASTE HERE - Inside class, after skillNames
+  String get levelLabel {
+    switch (fundiLevel) {
+      case 'L1_NEW':
+        return 'L1 NEWBIE';
+      case 'L2_HUSTLER':
+        return 'L2 HUSTLER';
+      case 'L3_PRO':
+        return 'L3 PRO';
+      case 'L4_ELITE':
+        return 'L4 ELITE';
+      default:
+        return fundiLevel;
+    }
+  }
+
+  String get badgeLabel {
+    if (isTrialGold) return 'GOLD TRIAL';
+    return badgeLevel.toUpperCase();
+  }
+
+  bool get isGold => badgeLevel == 'gold' || isTrialGold;
 
   factory Fundi.fromMap(String id, Map<String, dynamic> d) {
     return Fundi(
@@ -80,6 +108,12 @@ class Fundi {
       isAvailable: d['isAvailable'] ?? true,
       lat: d['lat']?.toDouble(),
       lng: d['lng']?.toDouble(),
+      fundiLevel: d['fundiLevel'] ?? 'L1_NEW',
+      badgeLevel: d['badgeLevel'] ?? 'none',
+      badgeScore: (d['badgeScore'] ?? 0).toInt(),
+      isTrialGold: d['isTrialGold'] ?? false,
+      isVerifiedFundi: d['isVerifiedFundi'] ?? false,
+      fundiCommissionPct: (d['fundiCommissionPct'] ?? 10).toInt(),
     );
   }
 
@@ -99,6 +133,12 @@ class Fundi {
       'isAvailable': isAvailable,
       'lat': lat,
       'lng': lng,
+      'fundiLevel': fundiLevel,
+      'badgeLevel': badgeLevel,
+      'badgeScore': badgeScore,
+      'isTrialGold': isTrialGold,
+      'isVerifiedFundi': isVerifiedFundi,
+      'fundiCommissionPct': fundiCommissionPct,
     };
   }
 }

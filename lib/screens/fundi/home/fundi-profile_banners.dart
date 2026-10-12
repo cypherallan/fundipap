@@ -88,9 +88,10 @@ class FundiProfileCompleteBanner extends StatelessWidget {
   }
 }
 
+// REPLACED - LOCKED SYSTEM
 class FundiBadgeProgressBanner extends StatelessWidget {
   final BadgeResult badge;
-  final int completedJobs; // <-- ADDED
+  final int completedJobs;
   const FundiBadgeProgressBanner({
     super.key,
     required this.badge,
@@ -99,29 +100,46 @@ class FundiBadgeProgressBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    int referrals = (badge.breakdown['referrals'] ?? 0) ~/ 2;
-    String next = badge.level == BadgeLevel.none
-        ? 'Bronze (${FundiBadgeService.bronzeMin}pts)'
-        : badge.level == BadgeLevel.bronze
-        ? 'Silver (${FundiBadgeService.silverMin}pts)'
-        : badge.level == BadgeLevel.silver
-        ? 'Gold (${FundiBadgeService.goldMin}pts)'
-        : 'VERIFIED';
-    int need = badge.level == BadgeLevel.none
-        ? FundiBadgeService.bronzeMin - badge.score
-        : badge.level == BadgeLevel.bronze
-        ? FundiBadgeService.silverMin - badge.score
-        : badge.level == BadgeLevel.silver
-        ? FundiBadgeService.goldMin - badge.score
-        : 0;
-    if (need < 0) need = 0;
+    int referrals = badge.referralRate > 0
+        ? (badge.referralRate * completedJobs).round()
+        : (badge.breakdown['referral'] ?? 0);
+
+    String nextBadge;
+    if (badge.badgeLevel == BadgeLevel.none)
+      nextBadge = 'Bronze (35pts)';
+    else if (badge.badgeLevel == BadgeLevel.bronze)
+      nextBadge = 'Silver (70pts)';
+    else if (badge.badgeLevel == BadgeLevel.silver)
+      nextBadge = 'Gold (110pts)';
+    else
+      nextBadge = 'MAX';
+
+    String nextLevel;
+    if (badge.fundiLevel == FundiLevel.L1_NEW)
+      nextLevel = 'L2 HUSTLER (10 jobs)';
+    else if (badge.fundiLevel == FundiLevel.L2_HUSTLER)
+      nextLevel = 'L3 PRO (50 jobs)';
+    else if (badge.fundiLevel == FundiLevel.L3_PRO)
+      nextLevel = 'L4 ELITE (100 jobs)';
+    else
+      nextLevel = 'ELITE MAX';
+
+    double progress = (badge.score / 130).clamp(0, 1).toDouble();
+    Color progressColor = badge.badgeLevel == BadgeLevel.gold
+        ? const Color(0xFFFFD700)
+        : badge.badgeLevel == BadgeLevel.silver
+        ? Colors.grey.shade400
+        : badge.badgeLevel == BadgeLevel.bronze
+        ? const Color(0xFFCD7F32)
+        : FundipapColors.blackGray;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.black12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,40 +148,63 @@ class FundiBadgeProgressBanner extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Your Badge',
+                'Your Level & Badge',
                 style: GoogleFonts.montserrat(
                   fontWeight: FontWeight.w800,
                   fontSize: 11,
                 ),
               ),
               FundiBadgeChip(
-                level: badge.level,
+                level: badge.badgeLevel,
+                fundiLevel: badge.fundiLevel,
                 isVerified: badge.isVerified,
+                isTrialGold: badge.isTrialGold,
                 referralCount: referrals,
                 jobsDone: completedJobs,
+                commissionPct: badge.fundiCommissionPct,
+                compact: false,
+                showLevel: true,
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 8,
+              backgroundColor: Colors.black12,
+              valueColor: AlwaysStoppedAnimation(progressColor),
+            ),
+          ),
           const SizedBox(height: 8),
-          LinearProgressIndicator(
-            value: (badge.score / FundiBadgeService.goldMin)
-                .clamp(0, 1)
-                .toDouble(),
-            backgroundColor: Colors.black12,
-            color: FundipapColors.blackGray,
+          Text(
+            badge.isVerified
+                ? 'VERIFIED ✔ ${badge.score}/130 pts - You appear first, ${badge.fundiCommissionPct}% fee'
+                : badge.isTrialGold
+                ? 'GOLD TRIAL - ${badge.score}/130 pts - Ends ${badge.trialExpiresAt?.day ?? 7}/${badge.trialExpiresAt?.month ?? 1} - Keep profile complete'
+                : 'Score ${badge.score}/130 pts - ${badge.pointsToNextBadge} pts to $nextBadge - ${badge.jobsToNextLevel} jobs to $nextLevel - Fee: ${badge.fundiCommissionPct}%',
+            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 6),
-          Text(
-            badge.level == BadgeLevel.gold && badge.isVerified
-                ? 'You are VERIFIED ✔ - you appear first to clients'
-                : 'Score ${badge.score}pts - $need more to reach $next',
-            style: GoogleFonts.inter(fontSize: 10),
-          ),
-          if ((badge.breakdown['cancellations'] ?? 0) < 0)
+          if ((badge.breakdown['cancellations'] ?? 10) < 10)
             Text(
-              '⚠ Cancellations hurting your score: ${badge.breakdown['cancellations']}pts',
+              '⚠ Avoid cancellations: ${badge.breakdown['cancellations']}pts',
               style: GoogleFonts.inter(fontSize: 9, color: Colors.red),
             ),
+          if ((badge.breakdown['profileComplete'] ?? 0) == 0)
+            Text(
+              '⚠ Complete My Advert tab: ID + Good Conduct + Trade Cert + Photo + Bio = 10pts',
+              style: GoogleFonts.inter(
+                fontSize: 9,
+                color: Colors.orange.shade800,
+              ),
+            ),
+          const SizedBox(height: 2),
+          Text(
+            'Referral rate: ${(badge.referralRate * 100).toStringAsFixed(0)}% - Ask clients to refer you',
+            style: GoogleFonts.inter(fontSize: 9, color: Colors.black54),
+          ),
         ],
       ),
     );
