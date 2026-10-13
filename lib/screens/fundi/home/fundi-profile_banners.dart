@@ -106,13 +106,13 @@ class FundiBadgeProgressBanner extends StatelessWidget {
 
     String nextBadge;
     if (badge.badgeLevel == BadgeLevel.none)
-      nextBadge = 'Bronze (35pts)';
+      nextBadge = 'Bronze (35pts) 15%→10%';
     else if (badge.badgeLevel == BadgeLevel.bronze)
-      nextBadge = 'Silver (70pts)';
+      nextBadge = 'Silver (70pts) 10%→8%';
     else if (badge.badgeLevel == BadgeLevel.silver)
-      nextBadge = 'Gold (110pts)';
+      nextBadge = 'Gold (110pts) 8%→5%';
     else
-      nextBadge = 'MAX';
+      nextBadge = 'MAX 5%';
 
     String nextLevel;
     if (badge.fundiLevel == FundiLevel.L1_NEW)
@@ -124,14 +124,27 @@ class FundiBadgeProgressBanner extends StatelessWidget {
     else
       nextLevel = 'ELITE MAX';
 
-    double progress = (badge.score / 130).clamp(0, 1).toDouble();
-    Color progressColor = badge.badgeLevel == BadgeLevel.gold
+    double progress = badge.isTrialGold
+        ? (completedJobs / 10).clamp(0, 1).toDouble()
+        : (badge.score / 130).clamp(0, 1).toDouble();
+
+    Color progressColor = badge.isTrialGold
+        ? const Color(0xFFFFD700)
+        : badge.badgeLevel == BadgeLevel.gold
         ? const Color(0xFFFFD700)
         : badge.badgeLevel == BadgeLevel.silver
         ? Colors.grey.shade400
         : badge.badgeLevel == BadgeLevel.bronze
         ? const Color(0xFFCD7F32)
-        : FundipapColors.blackGray;
+        : Colors.red;
+
+    int daysLeft = 0;
+    if (badge.isTrialGold && badge.trialExpiresAt != null) {
+      daysLeft = badge.trialExpiresAt!
+          .difference(DateTime.now())
+          .inDays
+          .clamp(0, 14);
+    }
 
     return Container(
       width: double.infinity,
@@ -159,6 +172,7 @@ class FundiBadgeProgressBanner extends StatelessWidget {
                 fundiLevel: badge.fundiLevel,
                 isVerified: badge.isVerified,
                 isTrialGold: badge.isTrialGold,
+                trialExpiresAt: badge.trialExpiresAt,
                 referralCount: referrals,
                 jobsDone: completedJobs,
                 commissionPct: badge.fundiCommissionPct,
@@ -182,7 +196,7 @@ class FundiBadgeProgressBanner extends StatelessWidget {
             badge.isVerified
                 ? 'VERIFIED ✔ ${badge.score}/130 pts - You appear first, ${badge.fundiCommissionPct}% fee'
                 : badge.isTrialGold
-                ? 'GOLD TRIAL - ${badge.score}/130 pts - Ends ${badge.trialExpiresAt?.day ?? 7}/${badge.trialExpiresAt?.month ?? 1} - Keep profile complete'
+                ? 'GOLD TRIAL - $completedJobs/10 jobs - $daysLeft days left - Finish profile+KYC or drop to NEW 15%'
                 : 'Score ${badge.score}/130 pts - ${badge.pointsToNextBadge} pts to $nextBadge - ${badge.jobsToNextLevel} jobs to $nextLevel - Fee: ${badge.fundiCommissionPct}%',
             style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600),
           ),

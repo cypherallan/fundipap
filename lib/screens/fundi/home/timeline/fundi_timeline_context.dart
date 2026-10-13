@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'fundi_timeline_utils.dart';
-import '../../../../services/pricing_service.dart';
 
 class FundiTimelineContext {
   final BuildContext context;
@@ -116,42 +115,44 @@ class FundiTimelineContext {
     if (newLabour <= 0) newLabour = toInt(job['laborCost'] ?? 5000);
 
     int transport = toInt(
-      job['transportFee'] ?? reneg?['oldTransportFee'] ?? 0,
+      job['transportFee'] ?? reneg?['oldTransportFee'] ?? 183,
     );
     int labour = newLabour;
 
-    // --- FIXED: USE BADGE COMMISSION, NOT 5% ---
-    int fundiPct = toInt(job['fundiCommissionPct'], 0);
-    if (fundiPct == 0) {
-      String badgeLevel =
-          (job['fundiBadgeLevel'] ?? job['badgeLevel'] ?? 'bronze').toString();
-      bool isTrialGold =
-          job['isTrialGold'] == true || job['fundiIsTrialGold'] == true;
-      fundiPct = PricingService.getFundiCommissionPct(
-        badgeLevel: badgeLevel,
-        isTrialGold: isTrialGold,
-      );
-    }
-    if (fundiPct == 0) fundiPct = 10; // fallback bronze
+    // --- FIXED: 5 STAGES FEE ---
+    String badgeLevel =
+        (job['fundiBadgeLevel'] ??
+                job['badgeLevel'] ??
+                job['fundiBadge'] ??
+                'none')
+            .toString()
+            .toLowerCase();
+    bool isTrialGold =
+        job['isTrialGold'] == true ||
+        job['fundiIsTrialGold'] == true ||
+        job['isTrial'] == true;
 
-    int fundiAppFee = (labour * fundiPct / 100).round(); // 6000*10%=600
+    int fundiPct;
+    if (isTrialGold)
+      fundiPct = 5;
+    else if (badgeLevel == 'gold')
+      fundiPct = 5;
+    else if (badgeLevel == 'silver')
+      fundiPct = 8;
+    else if (badgeLevel == 'bronze')
+      fundiPct = 10;
+    else
+      fundiPct = 15;
+
+    int fundiAppFee = (labour * fundiPct / 100).round();
     int fundiReceives =
-        labour - fundiAppFee + transport; // 6000-600+183=5583 not 5883
+        labour - fundiAppFee + transport; // 6000+183-300=5883 for trial gold
     int fundiSeesWaiting = labour + transport;
     int newTotalFundiLocked = newLabour + transport;
     int newFundiReceivesVal =
         newLabour - (newLabour * fundiPct / 100).round() + transport;
     bool isCounterAccepted = counterExtra > 0;
-    int releasedAmount = fundiReceives;
-
-    int storedPayout = toInt(
-      job['fundiPayoutAmount'] ?? job['fundiReceives'] ?? 0,
-    );
-    if (storedPayout > 0 && (storedPayout - fundiReceives).abs() > 500) {
-      releasedAmount = fundiReceives;
-    } else if (storedPayout > 0) {
-      releasedAmount = storedPayout;
-    }
+    int releasedAmount = fundiReceives; // SAME - no more 5283 vs 5583 bug
 
     bool siteDone = toBool(job['siteVisitDone']) || toBool(job['siteVisited']);
     bool travelling = toBool(job['travelling']) || status == 'travelling';

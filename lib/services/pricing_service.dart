@@ -11,9 +11,7 @@ class PricingService {
   static const int fundiCommissionSilver = 8;
   static const int fundiCommissionBronze = 10;
   static const int fundiCommissionNone = 15;
-  static const int fundiCommissionTrialGold = 10; // shows GOLD but pays BRONZE
-
-  // Backward compat
+  static const int fundiCommissionTrialGold = 5;
   static const int commissionPercent = 15;
 
   static Map<String, int> getPrice(String categoryId, String subcategoryId) {

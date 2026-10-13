@@ -7,6 +7,7 @@ class FundiBadgeChip extends StatelessWidget {
   final FundiLevel fundiLevel;
   final bool isVerified;
   final bool isTrialGold;
+  final DateTime? trialExpiresAt; // ADD THIS
   final int referralCount;
   final int jobsDone;
   final int commissionPct;
@@ -20,9 +21,10 @@ class FundiBadgeChip extends StatelessWidget {
     this.fundiLevel = FundiLevel.L1_NEW,
     this.isVerified = false,
     this.isTrialGold = false,
+    this.trialExpiresAt, // ADD THIS
     this.referralCount = 0,
     this.jobsDone = 0,
-    this.commissionPct = 10,
+    this.commissionPct = 15, // none = 15% default
     this.showLevel = true,
     this.compact = false,
     this.hideCommission = false,
@@ -74,6 +76,16 @@ class FundiBadgeChip extends StatelessWidget {
       case FundiLevel.L4_ELITE:
         levelLabel = 'L4';
         break;
+    }
+
+    // FIX: calculate days left
+    int trialDaysLeft = 0;
+    if (isTrialGold && trialExpiresAt != null) {
+      trialDaysLeft = trialExpiresAt!
+          .difference(DateTime.now())
+          .inDays
+          .clamp(0, 14);
+      if (trialDaysLeft == 0) trialDaysLeft = 1;
     }
 
     double referralRate = jobsDone > 0 ? referralCount / jobsDone : 0;
@@ -129,7 +141,7 @@ class FundiBadgeChip extends StatelessWidget {
               if (isTrialGold) ...[
                 const SizedBox(width: 4),
                 Text(
-                  '7D',
+                  '${trialDaysLeft}D',
                   style: GoogleFonts.montserrat(
                     fontSize: 8,
                     fontWeight: FontWeight.w800,
@@ -146,10 +158,20 @@ class FundiBadgeChip extends StatelessWidget {
             decoration: BoxDecoration(
               color: commissionPct == 5
                   ? Colors.green.shade50
-                  : Colors.orange.shade50,
+                  : commissionPct == 8
+                  ? Colors.grey.shade200
+                  : commissionPct == 10
+                  ? Colors.orange.shade50
+                  : Colors.red.shade50,
               borderRadius: BorderRadius.circular(6),
               border: Border.all(
-                color: commissionPct == 5 ? Colors.green : Colors.orange,
+                color: commissionPct == 5
+                    ? Colors.green
+                    : commissionPct == 8
+                    ? Colors.grey
+                    : commissionPct == 10
+                    ? Colors.orange
+                    : Colors.red,
               ),
             ),
             child: Text(
@@ -159,7 +181,11 @@ class FundiBadgeChip extends StatelessWidget {
                 fontWeight: FontWeight.w700,
                 color: commissionPct == 5
                     ? Colors.green.shade800
-                    : Colors.orange.shade800,
+                    : commissionPct == 8
+                    ? Colors.black87
+                    : commissionPct == 10
+                    ? Colors.orange.shade800
+                    : Colors.red.shade800,
               ),
             ),
           ),

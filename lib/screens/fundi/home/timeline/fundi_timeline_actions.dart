@@ -5,6 +5,8 @@ import '../../rating/rate_client_screen.dart';
 import '../../../../app.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'fundi_timeline_utils.dart';
+import '../../../../services/fundi_badge_service.dart';
+import '../../../../services/pricing_service.dart';
 
 class FundiTimelineActions {
   static void goBackToMyJobs(BuildContext context, {int tab = 1}) {
@@ -22,18 +24,39 @@ class FundiTimelineActions {
     );
   }
 
+  static Future<void> _autoWriteBadge(String jobId, String fundiId) async {
+    try {
+      var badge = await FundiBadgeService.getBadge(fundiId);
+      int pct = PricingService.getFundiCommissionFromResult(badge);
+      await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+        'fundiId': fundiId,
+        'fundiBadgeLevel':
+            badge.badgeLevel.name, // gold / silver / bronze / none
+        'badgeLevel': badge.badgeLevel.name,
+        'isTrialGold': badge.isTrialGold,
+        'fundiIsTrialGold': badge.isTrialGold,
+        'fundiCommissionPct': pct, // 5 for trial
+        'fundiBadgeUpdatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
+  }
+
   static Future<void> startSiteVisit(
     BuildContext context,
     String jobId,
     String jobTitle,
   ) async {
     try {
-      // FIXED: fetch full job doc so geopoint exists - don't pass only {title}
       var jobSnap = await FirebaseFirestore.instance
           .collection('jobs')
           .doc(jobId)
           .get(const GetOptions(source: Source.server));
       var fullJob = jobSnap.data() ?? {'title': jobTitle};
+      String fundiId =
+          FirebaseAuth.instance.currentUser?.uid ??
+          (fullJob['fundiId'] ?? '').toString();
+
+      await _autoWriteBadge(jobId, fundiId);
 
       await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
         'travelling': true,
@@ -66,9 +89,12 @@ class FundiTimelineActions {
         .doc(jobId)
         .get();
     String clientId = '';
+    String fundiId = '';
     if (jobSnap.exists) {
       var d = jobSnap.data() as Map<String, dynamic>;
       clientId = (d['customerId'] ?? d['clientId'] ?? '').toString();
+      fundiId = (d['fundiId'] ?? '').toString();
+      if (fundiId.isNotEmpty) await _autoWriteBadge(jobId, fundiId);
     }
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'status': 'parts_confirmed_by_fundi',
@@ -97,6 +123,8 @@ class FundiTimelineActions {
   }
 
   static Future<void> startJob(String jobId) async {
+    String fundiId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (fundiId.isNotEmpty) await _autoWriteBadge(jobId, fundiId);
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'status': 'in_progress',
       'renegotiation.currentPhase': 'fundi_working',
@@ -107,6 +135,8 @@ class FundiTimelineActions {
   }
 
   static Future<void> completeJob(String jobId) async {
+    String fundiId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (fundiId.isNotEmpty) await _autoWriteBadge(jobId, fundiId);
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'status': 'job_completed',
       'renegotiation.currentPhase': 'completed_by_fundi',
@@ -124,6 +154,8 @@ class FundiTimelineActions {
     String clientName,
     String jobTitle,
   ) async {
+    String fundiId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (fundiId.isNotEmpty) await _autoWriteBadge(jobId, fundiId);
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'fundiConfirmedPayment': true,
       'fundiPaymentConfirmedAt': FieldValue.serverTimestamp(),

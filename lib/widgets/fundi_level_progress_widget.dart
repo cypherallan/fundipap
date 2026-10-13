@@ -18,7 +18,14 @@ class FundiLevelProgressWidget extends StatelessWidget {
     double levelProgress;
     String levelNextText;
 
-    if (badge.fundiLevel == FundiLevel.L1_NEW) {
+    if (badge.isTrialGold) {
+      levelProgress = (completedJobs / 10).clamp(0, 1).toDouble();
+      int left = 10 - completedJobs;
+      levelNextText =
+          '$left jobs left in trial - finish KYC + video + tools or drop to NEW 15%';
+      if (left <= 0)
+        levelNextText = 'Trial ending - complete profile to avoid NEW 15%';
+    } else if (badge.fundiLevel == FundiLevel.L1_NEW) {
       levelProgress = (completedJobs / 10).clamp(0, 1).toDouble();
       levelNextText = '${10 - completedJobs} jobs to L2 HUSTLER';
       if (levelNextText.contains('-')) levelNextText = 'Ready for L2 HUSTLER';
@@ -33,17 +40,22 @@ class FundiLevelProgressWidget extends StatelessWidget {
       levelNextText = 'ELITE MAX - You get first priority';
     }
 
-    double badgeProgress = (badge.score / 130).clamp(0, 1).toDouble();
+    double badgeProgress = badge.isTrialGold
+        ? (completedJobs / 10).clamp(0, 1).toDouble()
+        : (badge.score / 130).clamp(0, 1).toDouble();
     String badgeNextText;
-    if (badge.badgeLevel == BadgeLevel.none) {
+    if (badge.isTrialGold) {
       badgeNextText =
-          '${badge.pointsToNextBadge} pts to BRONZE (5% fee → 10% fee)';
-    } else if (badge.badgeLevel == BadgeLevel.bronze)
-      badgeNextText = '${badge.pointsToNextBadge} pts to SILVER (7% fee)';
-    else if (badge.badgeLevel == BadgeLevel.silver)
-      badgeNextText = '${badge.pointsToNextBadge} pts to GOLD (5% fee)';
-    else
+          '$completedJobs/10 jobs done - Need ${10 - completedJobs} more to reach L2, keep profile complete to avoid NEW 15%';
+    } else if (badge.badgeLevel == BadgeLevel.none) {
+      badgeNextText = '${badge.pointsToNextBadge} pts to BRONZE (15% → 10%)';
+    } else if (badge.badgeLevel == BadgeLevel.bronze) {
+      badgeNextText = '${badge.pointsToNextBadge} pts to SILVER (10% → 8%)';
+    } else if (badge.badgeLevel == BadgeLevel.silver) {
+      badgeNextText = '${badge.pointsToNextBadge} pts to GOLD (8% → 5%)';
+    } else {
       badgeNextText = 'GOLD MAX - 5% fee locked';
+    }
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -70,6 +82,7 @@ class FundiLevelProgressWidget extends StatelessWidget {
                 fundiLevel: badge.fundiLevel,
                 isVerified: badge.isVerified,
                 isTrialGold: badge.isTrialGold,
+                trialExpiresAt: badge.trialExpiresAt, // ADD THIS
                 commissionPct: badge.fundiCommissionPct,
                 jobsDone: completedJobs,
                 compact: true,
@@ -102,7 +115,9 @@ class FundiLevelProgressWidget extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'BADGE SCORE: ${badge.score}/130 pts - Fee ${badge.fundiCommissionPct}%',
+            badge.isTrialGold
+                ? 'TRIAL PROGRESS: $completedJobs/10 jobs - Fee ${badge.fundiCommissionPct}%'
+                : 'BADGE SCORE: ${badge.score}/130 pts - Fee ${badge.fundiCommissionPct}%',
             style: GoogleFonts.montserrat(
               fontSize: 10,
               fontWeight: FontWeight.w700,
