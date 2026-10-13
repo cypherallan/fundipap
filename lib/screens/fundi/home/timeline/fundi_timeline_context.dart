@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'fundi_timeline_utils.dart';
+import '../../../../services/pricing_service.dart';
 
 class FundiTimelineContext {
   final BuildContext context;
@@ -40,7 +41,7 @@ class FundiTimelineContext {
   final bool fundiConfirmedPayment;
   final bool fundiRatedClient;
   final String clientId;
-  final bool isBidSent; // NEW
+  final bool isBidSent;
 
   FundiTimelineContext({
     required this.context,
@@ -118,11 +119,28 @@ class FundiTimelineContext {
       job['transportFee'] ?? reneg?['oldTransportFee'] ?? 0,
     );
     int labour = newLabour;
-    int fundiAppFee = (labour * 0.05).round();
-    int fundiReceives = labour - fundiAppFee + transport;
+
+    // --- FIXED: USE BADGE COMMISSION, NOT 5% ---
+    int fundiPct = toInt(job['fundiCommissionPct'], 0);
+    if (fundiPct == 0) {
+      String badgeLevel =
+          (job['fundiBadgeLevel'] ?? job['badgeLevel'] ?? 'bronze').toString();
+      bool isTrialGold =
+          job['isTrialGold'] == true || job['fundiIsTrialGold'] == true;
+      fundiPct = PricingService.getFundiCommissionPct(
+        badgeLevel: badgeLevel,
+        isTrialGold: isTrialGold,
+      );
+    }
+    if (fundiPct == 0) fundiPct = 10; // fallback bronze
+
+    int fundiAppFee = (labour * fundiPct / 100).round(); // 6000*10%=600
+    int fundiReceives =
+        labour - fundiAppFee + transport; // 6000-600+183=5583 not 5883
     int fundiSeesWaiting = labour + transport;
     int newTotalFundiLocked = newLabour + transport;
-    int newFundiReceivesVal = fundiReceives;
+    int newFundiReceivesVal =
+        newLabour - (newLabour * fundiPct / 100).round() + transport;
     bool isCounterAccepted = counterExtra > 0;
     int releasedAmount = fundiReceives;
 

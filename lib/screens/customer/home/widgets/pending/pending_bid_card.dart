@@ -340,6 +340,7 @@ class _PendingBidCardState extends State<PendingBidCard> {
                             size: 12,
                             color: Colors.amber.shade700,
                           ),
+                          const SizedBox(width: 2),
                           Text(
                             '${widget.bid.rating.toStringAsFixed(1)}',
                             style: GoogleFonts.inter(
@@ -347,12 +348,16 @@ class _PendingBidCardState extends State<PendingBidCard> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${widget.bid.referrals} referrals • ${widget.bid.jobsDone} jobs',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              color: Colors.black54,
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              '${widget.bid.referrals} refs • ${widget.bid.jobsDone} jobs',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: GoogleFonts.inter(
+                                fontSize: 9,
+                                color: Colors.black54,
+                              ),
                             ),
                           ),
                         ],

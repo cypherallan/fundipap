@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
+import '../../../services/fundi_badge_service.dart';
 
 mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
   Future<void> payEscrowSimulated(
@@ -11,22 +12,21 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
     double amount,
   ) async {
     try {
-      // 1. Update jobs
       await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
         'status': 'confirmed',
         'escrowStatus': 'held',
-        'escrowAmount': amount,
+        'escrowAmount': amount, // CLIENT SEES ONLY THIS - no fee
         'escrowHeldAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // 2. Update escrowTransactions - use set merge so it never fails
       await FirebaseFirestore.instance
           .collection('escrowTransactions')
           .doc(jobId)
           .set({
             'status': 'held',
             'escrowStatus': 'held',
+            'amount': amount, // full amount held
             'paidAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
@@ -83,7 +83,7 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
-  // FIXED: Release INITIAL + NEW REVIEWED COST = TOTAL
+  // FIXED: WITH FEE CALCULATION - CLIENT SEES TOTAL, FUNDI SEES PAYOUT
   Future<void> confirmCompletionClient(String jobId) async {
     var jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
     var snap = await jobRef.get();
@@ -100,7 +100,6 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
             .toInt();
     int newLaborTotal = (reneg?['newLaborTotal'] ?? 0).toInt();
 
-    // TOTAL = newLaborTotal OR initial + extra
     int totalRelease = newLaborTotal > 0
         ? newLaborTotal
         : initialAmount + extraAmount;
@@ -117,17 +116,56 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
     });
 
     if (fundiDone) {
+      // ---- CALCULATE FEE ----
+      String fundiId = (j['assignedFundiId'] ?? j['assignedFundi'] ?? '')
+          .toString();
+      int commissionPct = 10; // default
+      if (fundiId.isNotEmpty) {
+        try {
+          var fundiDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(fundiId)
+              .get();
+          if (fundiDoc.exists) {
+            var badge = FundiBadgeService.calculate(
+              fundiDoc.data()!,
+              fundiDoc.data()!,
+            );
+            commissionPct = badge.fundiCommissionPct; // 10 / 7 / 5
+          }
+        } catch (_) {}
+      }
+      int platformFee = (totalRelease * commissionPct / 100).round();
+      int fundiPayout = totalRelease - platformFee;
+
       await jobRef.update({
         'status': 'completed',
         'escrowStatus': 'released',
         'extraEscrowStatus': 'released',
         'completedAt': FieldValue.serverTimestamp(),
-        'totalReleasedAmount': totalRelease,
-        'fundiPayoutAmount': totalRelease,
+        'totalReleasedAmount': totalRelease, // CLIENT SEES THIS - 5000
+        'fundiPayoutAmount': fundiPayout, // FUNDI SEES THIS - 4500
+        'platformFee': platformFee, // NEVER SHOW TO CLIENT - 500
+        'fundiCommissionPct': commissionPct,
         'initialEscrowReleased': initialAmount,
         'extraEscrowReleased': extraAmount,
         'fundiHasUnread': true,
       });
+
+      // Pay fundi - PAYOUT NOT TOTAL
+      if (fundiId.isNotEmpty) {
+        try {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(fundiId)
+              .update({
+                'totalEarned': FieldValue.increment(fundiPayout),
+                'balance': FieldValue.increment(fundiPayout),
+                'completedJobs': FieldValue.increment(1),
+              });
+        } catch (_) {}
+      }
+
       try {
         await FirebaseFirestore.instance
             .collection('escrowTransactions')
@@ -135,6 +173,9 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
             .update({
               'status': 'released',
               'amount': totalRelease,
+              'platformFee': platformFee,
+              'fundiPayout': fundiPayout,
+              'commissionPct': commissionPct,
               'initialAmount': initialAmount,
               'extraAmount': extraAmount,
               'releasedAt': FieldValue.serverTimestamp(),
@@ -150,6 +191,7 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
     String jobId,
     Map<String, dynamic> job,
   ) async {
+    // ... keep your existing rating code same ...
     int rating = 5;
     final commentCtrl = TextEditingController();
     await showDialog(

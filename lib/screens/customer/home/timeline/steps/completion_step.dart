@@ -16,23 +16,28 @@ class CompletionSteps {
             oldLabour + toInt(c.reneg?['extraLabor'] ?? 0),
       );
       int transportVal = toInt(c.job['transportFee'] ?? 0);
-      int newClientFee = (newLabour * 0.05).round();
-      int newTotalClient = newLabour + transportVal + newClientFee;
+      int clientFee = (newLabour * 0.05)
+          .round(); // 5% - YOUR profit from client
+      int totalClientPays =
+          newLabour + transportVal + clientFee; // what client locked
+
       int totalToRelease = toInt(
-        c.reneg?['newTotalClientPays'] ?? newTotalClient,
+        c.reneg?['newTotalClientPays'] ?? totalClientPays,
       );
+
       timeline.add(
         TimelineCard(
           title:
               'Job Completed by ${c.fundiName} - Confirm & Release KES $totalToRelease',
           body:
-              'Fundi marked job as complete. Confirm to release KES $totalToRelease',
+              'Fundi marked job as complete. Confirm to release KES $totalToRelease (you paid $totalClientPays, fundi gets labour+transport minus his badge fee)',
           icon: Icons.verified,
           isDone: false,
           extra: ReleaseFeeBreakdown(
             labour: newLabour,
             transport: transportVal,
-            clientFee: newClientFee,
+            clientFee:
+                clientFee, // CLIENT SEES HIS OWN 5% ONLY - never fundi commission
             total: totalToRelease,
           ),
           action: SizedBox(
@@ -62,7 +67,7 @@ class CompletionSteps {
                       ),
                     )
                   : Text(
-                      'CONFIRM COMPLETION & RELEASE KES $totalToRelease',
+                      'CONFIRM & RELEASE KES $totalToRelease',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
@@ -74,6 +79,7 @@ class CompletionSteps {
         ),
       );
     }
+    // ... rest same
     if (c.status == 'in_progress' ||
         c.phase == 'fundi_working' ||
         c.status == 'job_completed' ||
@@ -87,7 +93,7 @@ class CompletionSteps {
             borderRadius: BorderRadius.circular(12),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(12),
             child: Text(
               'Job started - Cancel inactive for both. Must complete the job.',
               style: GoogleFonts.inter(

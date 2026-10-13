@@ -13,8 +13,8 @@ import '../profile/confirm_fundi_reviews.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../../../../services/job_cancel_watcher.dart';
-import '../../../../widgets/fundi_badge_chip.dart'; // NEW
-import '../../../../services/fundi_badge_service.dart'; // NEW
+import '../../../../widgets/fundi_badge_chip.dart';
+import '../../../../services/fundi_badge_service.dart';
 import '../../../../services/pricing_service.dart';
 
 class ConfirmFundiPage extends StatefulWidget {
@@ -269,10 +269,11 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
       );
       Navigator.pop(context, false);
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+      }
     } finally {
       if (mounted) setState(() => counterLoading = false);
     }
@@ -280,8 +281,9 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
 
   @override
   Widget build(BuildContext context) {
-    if (loading)
+    if (loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     var combined = {...?user, ...?fundi, ...widget.bidData};
     int effectiveTransport = transportFee < 100 ? 100 : transportFee;
     int totalToShow = totalClientPays > 0
@@ -409,7 +411,7 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'App Maintenance (5% client)',
+                          'App Maintenance (5%)',
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             color: Colors.black54,
@@ -420,26 +422,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                           style: GoogleFonts.montserrat(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Fundi fee ($fundiCommPct% from fundi)',
-                          style: GoogleFonts.inter(
-                            fontSize: 10,
-                            color: Colors.black45,
-                          ),
-                        ),
-                        Text(
-                          'KES $fundiAppFee',
-                          style: GoogleFonts.inter(
-                            fontSize: 10,
-                            color: Colors.black45,
                           ),
                         ),
                       ],
@@ -465,14 +447,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Fundi receives: KES $fundiReceives (Labor - $fundiCommPct% + Transport)',
-                      style: GoogleFonts.inter(
-                        fontSize: 9,
-                        color: Colors.black45,
-                      ),
                     ),
                   ],
                 ),

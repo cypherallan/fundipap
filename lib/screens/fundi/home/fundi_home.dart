@@ -116,7 +116,12 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
 
   Future<void> _loadMe() async {
     try {
+      // TEMP - run once to fix old Firestore
       var uid = FirebaseAuth.instance.currentUser!.uid;
+      var result = await FundiBadgeService.recalcAndUpdate(uid);
+      print(
+        'FIXED -> Level: ${result.fundiLevel} Badge: ${result.badgeLevel} Score: ${result.score} Fee: ${result.fundiCommissionPct}%',
+      );
       var doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)

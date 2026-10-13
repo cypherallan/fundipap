@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../rating/rate_client_screen.dart';
+import '../../../services/pricing_service.dart';
 
 class FundiConfirmPaymentScreen extends StatefulWidget {
   final String jobId;
@@ -92,7 +93,6 @@ class _FundiConfirmPaymentScreenState extends State<FundiConfirmPaymentScreen> {
     var job = widget.jobData;
     var reneg = job['renegotiation'] as Map<String, dynamic>? ?? {};
 
-    // FIX: use accepted counter 1000 not raw 2000
     int rawExtra = _toInt(reneg['extraLabor'] ?? job['extraLaborAmount'] ?? 0);
     int counterExtra = _toInt(
       reneg['acceptedCounterExtraLabor'] ?? reneg['counterExtraLabor'] ?? 0,
@@ -101,22 +101,35 @@ class _FundiConfirmPaymentScreenState extends State<FundiConfirmPaymentScreen> {
 
     int oldLabor = _toInt(reneg['oldLabor'] ?? 0);
     if (oldLabor == 0) {
-      // fallback: agreedPrice was already updated to 6000, subtract extra
       int agreed = _toInt(job['agreedPrice'] ?? job['laborCost'] ?? 0);
       oldLabor = agreed > finalExtra ? agreed - finalExtra : agreed;
       if (oldLabor == 0) oldLabor = 5000;
     }
 
-    int finalLabor = oldLabor + finalExtra; // 5000+1000=6000 NOT 7000
+    int finalLabor = oldLabor + finalExtra;
     int transport = _toInt(
       job['transportFee'] ?? reneg['oldTransportFee'] ?? 100,
     );
-    int appFee = (finalLabor * 0.05).round(); // 300 NOT 350
-    int fundiReceives =
-        finalLabor - appFee + transport; // 6000-300+100=5800 NOT 6750
-    int totalClientPays = finalLabor + transport + appFee; // 6400
 
-    // Use computed receives, ignore wrong widget.amount (6750)
+    // FIX: use badge commission - gold 5%, silver 8%, bronze 10%, none 15%
+    String badgeLevel =
+        (job['fundiBadgeLevel'] ??
+                job['badgeLevel'] ??
+                job['fundiBadge'] ??
+                'bronze')
+            .toString();
+    bool isTrialGold =
+        job['isTrialGold'] == true || job['fundiIsTrialGold'] == true;
+    int fundiPct = PricingService.getFundiCommissionPct(
+      badgeLevel: badgeLevel,
+      isTrialGold: isTrialGold,
+    );
+
+    int appFee = (finalLabor * fundiPct / 100).round(); // bronze 10% = 600
+    int fundiReceives = finalLabor - appFee + transport; // 6000-600+179=5579
+    int clientFee = (finalLabor * 5 / 100).round();
+    int totalClientPays = finalLabor + transport + clientFee;
+
     int displayAmount = fundiReceives;
 
     return PopScope(
@@ -154,7 +167,6 @@ class _FundiConfirmPaymentScreenState extends State<FundiConfirmPaymentScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              // FIX: breakdown shows correct 6000 +100 -300 = 5800
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -193,7 +205,7 @@ class _FundiConfirmPaymentScreenState extends State<FundiConfirmPaymentScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'App maintenance cost (5%):',
+                          'Badge fee ($fundiPct% $badgeLevel):',
                           style: GoogleFonts.inter(fontSize: 12),
                         ),
                         Text(

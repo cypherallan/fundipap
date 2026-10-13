@@ -5,15 +5,15 @@ import 'fundi_badge_service.dart';
 class PricingService {
   static const String version = 'v3_2026_badge_commission';
 
-  // NEW LOCKED COMMISSIONS
+  // LOCKED COMMISSIONS - FINAL
   static const int clientCommissionPercent = 5; // client always 5%
   static const int fundiCommissionGold = 5;
-  static const int fundiCommissionSilver = 7;
+  static const int fundiCommissionSilver = 8;
   static const int fundiCommissionBronze = 10;
-  static const int fundiCommissionTrialGold =
-      10; // trial shows GOLD but pays BRONZE
+  static const int fundiCommissionNone = 15;
+  static const int fundiCommissionTrialGold = 10; // shows GOLD but pays BRONZE
 
-  // Backward compat for old code calling 15
+  // Backward compat
   static const int commissionPercent = 15;
 
   static Map<String, int> getPrice(String categoryId, String subcategoryId) {
@@ -51,21 +51,25 @@ class PricingService {
     return price['avg']! + siteFee;
   }
 
-  // NEW - GET COMMISSION BY BADGE
   static int getFundiCommissionPct({
     required String badgeLevel,
     bool isTrialGold = false,
   }) {
     if (isTrialGold) return fundiCommissionTrialGold;
-    switch (badgeLevel) {
+    switch (badgeLevel.toLowerCase()) {
       case 'gold':
+      case 'l4_gold':
         return fundiCommissionGold;
       case 'silver':
+      case 'l3_silver':
         return fundiCommissionSilver;
       case 'bronze':
-      case 'none':
-      default:
+      case 'l2_bronze':
         return fundiCommissionBronze;
+      case 'none':
+      case 'l1_new':
+      default:
+        return fundiCommissionNone;
     }
   }
 
@@ -77,8 +81,9 @@ class PricingService {
       case BadgeLevel.silver:
         return fundiCommissionSilver;
       case BadgeLevel.bronze:
-      case BadgeLevel.none:
         return fundiCommissionBronze;
+      case BadgeLevel.none:
+        return fundiCommissionNone;
     }
   }
 
@@ -168,13 +173,14 @@ class PricingService {
     int fundiPct;
     if (fundiCommissionOverride != null) {
       fundiPct = fundiCommissionOverride;
-    } else if (badgeLevel != null)
+    } else if (badgeLevel != null) {
       fundiPct = getFundiCommissionPct(
         badgeLevel: badgeLevel,
         isTrialGold: isTrialGold,
       );
-    else
+    } else {
       fundiPct = commissionPercent;
+    }
 
     int clientPct = clientCommissionPercent;
     int totalCommission = (totalRelease * (fundiPct + clientPct) / 100).round();
@@ -242,6 +248,7 @@ class PricingService {
           'fundiCommissionGold': fundiCommissionGold,
           'fundiCommissionSilver': fundiCommissionSilver,
           'fundiCommissionBronze': fundiCommissionBronze,
+          'fundiCommissionNone': fundiCommissionNone,
           'active': true,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
