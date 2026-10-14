@@ -2,7 +2,7 @@ import * as admin from "firebase-admin";
 import { getFirestore, FieldValue, Firestore } from "firebase-admin/firestore";
 import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { onDocumentWritten, onDocumentCreated } from "firebase-functions/v2/firestore";
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -12,7 +12,7 @@ function db() {
     return _db;
 }
 
-// ============ MPESA ============
+// ============ YOUR EXISTING MPESA - UNTOUCHED ============
 export const initiateMpesaPayment = onCall(async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
     const { phoneNumber, amount, contributionId, groupId } = request.data;
@@ -33,7 +33,7 @@ export const mpesaCallback = onRequest(async (req, res) => {
     res.json({ ResultCode: 0, ResultDesc: "Accepted - Simulated" });
 });
 
-// ============ AUTO-CANCEL ============
+// ============ YOUR EXISTING AUTO-CANCEL - UNTOUCHED ============
 export const autoCancelNoArrival = onSchedule({ schedule: 'every 5 minutes', region: 'us-central1' }, async () => {
     const cutoff = new Date(Date.now() - 150 * 60 * 1000);
     const snap = await db().collection('jobs').where('status', '==', 'travelling').get();
@@ -60,7 +60,7 @@ export const autoCancelNoArrival = onSchedule({ schedule: 'every 5 minutes', reg
     if (count > 0) await batch.commit();
 });
 
-// ============ BADGE SYSTEM ============
+// ============ YOUR EXISTING BADGE SYSTEM - UNTOUCHED ============
 type BadgeLevel = "none" | "bronze" | "silver" | "gold";
 type FundiLevel = "L1_NEW" | "L2_HUSTLER" | "L3_PRO" | "L4_ELITE";
 
@@ -158,4 +158,144 @@ export const recalcBadgeOnJobComplete = onDocumentWritten({ document: "jobs/{job
     const fundiId = after.assignedFundiId ?? after.fundiId; if (!fundiId) return;
     const fd = await db().collection("users").doc(fundiId).get(); if (!fd.exists) return;
     await updateFundiBadge(fundiId, fd.data());
+});
+
+// ============ NEW: REAL PUSH NOTIFICATIONS - ONLY ADDITION ============
+async function getFcmTokens(uid: string): Promise<string[]> {
+    if (!uid) return [];
+    const [uSnap, fSnap] = await Promise.all([
+        db().collection("users").doc(uid).get(),
+        db().collection("fundis").doc(uid).get(),
+    ]);
+    const set = new Set<string>();
+    for (const snap of [uSnap, fSnap]) {
+        const d = snap.data() as any; if (!d) continue;
+        if (d.fcmToken) set.add(d.fcmToken);
+        if (d.pushToken) set.add(d.pushToken);
+        if (Array.isArray(d.fcmTokens)) d.fcmTokens.forEach((t: string) => { if (t) set.add(t); });
+    }
+    return [...set];
+}
+
+async function sendPush(tokens: string[], title: string, body: string, data: any) {
+    if (!tokens.length) return;
+    try {
+        await admin.messaging().sendEachForMulticast({
+            tokens,
+            notification: { title, body },
+            data: { click_action: "FLUTTER_NOTIFICATION_CLICK", ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])) },
+            android: { priority: "high", notification: { channelId: "jobs", priority: "high", visibility: "public" } },
+            apns: { payload: { aps: { sound: "default", badge: 1 } } },
+        });
+    } catch (e) { console.log("push error", e); }
+}
+
+function distKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+    const R = 6371; const dLat = (lat2 - lat1) * Math.PI / 180; const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// NEW JOB = Jobs Near You card -> real push (uses your fundis collection with isOnline + geopoint)
+export const notifyNearbyFundisOnJobCreate = onDocumentCreated({ document: "jobs/{jobId}", region: "us-central1" }, async (event) => {
+    const job = event.data?.data() as any; if (!job) return;
+    const jobId = event.params.jobId;
+    const lat = job.location?.latitude || job.geopoint?.latitude || job.lat || job.latitude;
+    const lng = job.location?.longitude || job.geopoint?.longitude || job.lng || job.longitude;
+    if (!lat || !lng) return;
+    const snap = await db().collection("fundis").where("isOnline", "==", true).get();
+    for (const doc of snap.docs) {
+        const u = doc.data() as any;
+        const fLat = u.geopoint?.latitude || u.location?.latitude;
+        const fLng = u.geopoint?.longitude || u.location?.longitude;
+        if (!fLat || !fLng) continue;
+        const d = distKm(lat, lng, fLat, fLng);
+        if (d <= 10) {
+            const tokens = await getFcmTokens(doc.id);
+            await sendPush(tokens, "New job near you", `${job.title || 'Job'} • KES ${job.budget || job.price || ''} • ${d.toFixed(1)}km`, { jobId, type: "new_job" });
+        }
+    }
+});
+
+// BIDS = covers your FundiNotificationsPage + CustomerNotificationsSection
+export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId}", region: "us-central1" }, async (event) => {
+    const before = event.data?.before?.data() as any; const after = event.data?.after?.data() as any;
+    if (!after) return;
+    const jobId = event.params.jobId;
+    const fundiId = after.fundiId; const clientId = after.customerId || after.clientId || after.customerId;
+    const oldS = (before?.status || "").toString(); const newS = (after?.status || "").toString();
+    const lastBy = (after.lastCounterBy || after.counterBy || "").toString();
+
+    if (!before) {
+        const tokens = await getFcmTokens(clientId);
+        await sendPush(tokens, "New bid received", `${after.fundiName || 'Fundi'} bid KES ${after.amount || after.bidAmount || after.price || ''} • ${after.jobTitle || ''}`, { jobId, type: "bid" });
+        return;
+    }
+    if ((newS === "countered" || newS === "client_counter" || newS === "countered_by_client" || newS === "countered_by_client") && lastBy !== fundiId && oldS !== newS) {
+        const tokens = await getFcmTokens(fundiId);
+        await sendPush(tokens, `Client countered KES ${after.clientCounterAmount || after.lastCounterAmount || 0}`, `${after.jobTitle || 'Job'} • Tap to Accept/Counter`, { jobId, type: "client_counter" });
+    }
+    if (newS === "countered" && lastBy === fundiId && oldS !== newS) {
+        const tokens = await getFcmTokens(clientId);
+        await sendPush(tokens, `Fundi countered KES ${after.lastCounterAmount || 0}`, `${after.jobTitle || 'Job'} • Tap to view`, { jobId, type: "fundi_counter" });
+    }
+    if (newS === "accepted" && oldS !== "accepted") {
+        const tokens = await getFcmTokens(fundiId);
+        await sendPush(tokens, "Bid Accepted!", `${after.jobTitle || 'Job'} accepted`, { jobId, type: "accepted" });
+    }
+    if (newS.includes("counter_accepted_by_fundi") && !oldS.includes("counter_accepted_by_fundi")) {
+        const tokens = await getFcmTokens(clientId);
+        await sendPush(tokens, `Your counter offer of KES ${after.agreedPrice || after.clientCounterAmount || ''} has been accepted`, `${after.fundiName || 'Fundi'} accepted • Tap to proceed`, { jobId, type: "counter_accepted_by_fundi" });
+    }
+});
+
+// JOB STATUS = covers HomeStatusWidget + getFundiWaitingState (all orange cards)
+export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "us-central1" }, async (event) => {
+    const before = event.data?.before?.data() as any; const after = event.data?.after?.data() as any;
+    if (!after) return;
+    const jobId = event.params.jobId;
+    const fundiId = after.assignedFundiId || after.fundiId; const clientId = after.customerId || after.clientId;
+    const oldS = (before?.status || "").toLowerCase(); const newS = (after?.status || "").toLowerCase();
+    if (oldS === newS && (before?.escrowStatus === after?.escrowStatus) && (before?.renegotiation?.status === after?.renegotiation?.status)) return;
+    const fundiTokens = await getFcmTokens(fundiId); const clientTokens = await getFcmTokens(clientId);
+    const title = after.title || 'Job';
+
+    if ((newS === "assigned" || newS === "confirmed") && oldS !== newS) {
+        await sendPush(clientTokens, `Escrow locked KES ${after.escrowAmount || ''} • Waiting for fundi`, `${title} • ${after.assignedFundiName || 'Fundi'} has NOT started travelling`, { jobId, type: newS });
+        await sendPush(fundiTokens, `Escrow locked KES ${after.escrowAmount || ''} - Start site visit now`, `${title} • Tap to travel`, { jobId, type: "escrow_locked" });
+    }
+    if ((newS === "travelling" || newS === "on_the_way") && oldS !== newS) {
+        await sendPush(clientTokens, "Fundi is on the way", `${after.assignedFundiName || 'Fundi'} is travelling • Tracking live`, { jobId, type: "travelling" });
+        await sendPush(fundiTokens, "You are on the way", `${title} • Travelling to client`, { jobId, type: "travelling" });
+    }
+    if ((newS.includes("site_visit") || newS === "site_visited") && !oldS.includes("site_visit")) {
+        await sendPush(fundiTokens, `Waiting for you to start work KES ${after.agreedPrice || ''}`, `${title} • Tap START JOB`, { jobId, type: "site_visited" });
+        await sendPush(clientTokens, "Fundi arrived on site", `${after.assignedFundiName || 'Fundi'} • Waiting to start work`, { jobId, type: "site_visited" });
+    }
+    if ((newS === "in_progress" || newS === "fundi_working") && oldS !== newS) {
+        await sendPush(clientTokens, "Fundi is working", `${title} in progress`, { jobId, type: "working" });
+    }
+    if ((newS === "pending_completion" || newS === "job_completed") && oldS !== newS) {
+        await sendPush(clientTokens, `Job Completed - Confirm & release KES ${after.totalClientPays || after.escrowAmount || ''}`, `${title} • Tap to confirm`, { jobId, type: "job_completed" });
+        await sendPush(fundiTokens, "Job Completed - Waiting for client", `${title} • Waiting for client to confirm`, { jobId, type: "job_completed" });
+    }
+    if (newS.includes("awaiting_extra") && !oldS.includes("awaiting_extra")) {
+        const extra = after.renegotiation?.extraToLock || after.extraToLock || after.extraTopupToLock || 0;
+        await sendPush(clientTokens, `Lock extra KES ${extra} in escrow`, `${title} • Fundi accepted`, { jobId, type: "awaiting_extra_escrow" });
+        await sendPush(fundiTokens, `Waiting for client to lock extra KES ${extra}`, `${title}`, { jobId, type: "awaiting_extra_escrow" });
+    }
+    if (newS.includes("waiting_for_client_to_buy_parts") && !oldS.includes("waiting_for_client_to_buy_parts")) {
+        await sendPush(clientTokens, "You will buy parts - Confirm when bought", `${title}`, { jobId, type: "waiting_for_client_to_buy_parts" });
+    }
+    if (after.renegotiation?.status === "pending" && before?.renegotiation?.status !== "pending") {
+        await sendPush(clientTokens, "Fundi requests price review", `${after.renegotiation.reasonDetails || 'New breakdown'} • Tap to REVIEW`, { jobId, type: "price_review" });
+    }
+    if (after.renegotiation?.status === "countered_by_client" && before?.renegotiation?.status !== "countered_by_client") {
+        await sendPush(fundiTokens, `Client countered extra KES ${after.renegotiation.counterExtraLabor || 0}`, `${title} • Tap to view`, { jobId, type: "reneg_countered" });
+    }
+    if (newS === "completed" || after.escrowStatus === "released") {
+        if (oldS !== "completed" && before?.escrowStatus !== "released") {
+            await sendPush(fundiTokens, `Client released KES ${after.totalReleasedAmount || after.escrowAmount || ''}`, `${title} • Payment released`, { jobId, type: "released" });
+        }
+    }
 });
