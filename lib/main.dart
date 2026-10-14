@@ -9,14 +9,26 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'firebase_options.dart';
 import 'app.dart';
 
+final _local = FlutterLocalNotificationsPlugin();
+
+@pragma('vm:entry-point')
+Future<void> _bgHandler(RemoteMessage msg) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // --- PASTE HERE START ---
-  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+  runApp(const FundiPapApp()); // <-- FIRST, so no stuck logo
+
+  if (kIsWeb) return;
+  if (!Platform.isAndroid && !Platform.isIOS) return;
+
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
     final messaging = FirebaseMessaging.instance;
     await messaging.requestPermission(alert: true, badge: true, sound: true);
+    FirebaseMessaging.onBackgroundMessage(_bgHandler);
 
     const channel = AndroidNotificationChannel(
       'jobs',
@@ -24,24 +36,61 @@ void main() async {
       description: 'Fundipap job updates',
       importance: Importance.max,
     );
-    await FlutterLocalNotificationsPlugin()
+    await _local.initialize(
+      settings: const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/launcher_icon'),
+      ),
+    );
+    await _local
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.createNotificationChannel(channel);
 
-    final token = await messaging.getToken();
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (token != null && uid != null) {
+    FirebaseMessaging.onMessage.listen((RemoteMessage msg) async {
+      final n = msg.notification;
+      if (n == null) return;
+      await _local.show(
+        id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        title: n.title,
+        body: n.body,
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'jobs',
+            'Jobs',
+            importance: Importance.max,
+            priority: Priority.max,
+            playSound: true,
+          ),
+        ),
+      );
+    });
+
+    Future<void> saveToken(String? uid) async {
+      if (uid == null) return;
+      final t = await messaging.getToken();
+      if (t == null) return;
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'fcmToken': token,
+        'fcmToken': t,
       }, SetOptions(merge: true));
       await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
-        'fcmToken': token,
+        'fcmToken': t,
+        'fcmTokens': FieldValue.arrayUnion([t]),
       }, SetOptions(merge: true));
     }
-  }
-  // --- PASTE HERE END ---
 
-  runApp(const FundiPapApp());
+    messaging.onTokenRefresh.listen((t) async {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'fcmToken': t,
+      }, SetOptions(merge: true));
+      await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
+        'fcmToken': t,
+        'fcmTokens': FieldValue.arrayUnion([t]),
+      }, SetOptions(merge: true));
+    });
+    FirebaseAuth.instance.authStateChanges().listen((u) => saveToken(u?.uid));
+    saveToken(FirebaseAuth.instance.currentUser?.uid);
+  });
 }
