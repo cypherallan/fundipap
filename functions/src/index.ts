@@ -240,6 +240,25 @@ export const notifyNearbyFundisOnJobCreate = onDocumentCreated({ document: "jobs
     }
 });
 
+export const onNotificationPush = onDocumentCreated({ document: "notifications/{notifId}", region: "us-central1" }, async (event) => {
+    const d = event.data?.data() as any;
+    if (!d) return;
+    const toUserId = d.toUserId as string;
+    if (!toUserId) return;
+
+    const tokens = await getFcmTokens(toUserId);
+    if (tokens.length === 0) {
+        console.log(`NO TOKENS for ${toUserId} type ${d.type}`);
+        return;
+    }
+
+    await sendPush(tokens, d.title || "Fundipap", d.body || "", {
+        jobId: d.jobId || "",
+        type: d.type || "bid_sent"
+    });
+    console.log(`PUSH SENT to ${toUserId}: ${d.title} | type=${d.type}`);
+});
+
 // BIDS = covers your FundiNotificationsPage + CustomerNotificationsSection
 export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId}", region: "us-central1" }, async (event) => {
     const before = event.data?.before?.data() as any; const after = event.data?.after?.data() as any;
@@ -274,22 +293,41 @@ export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId
 
 // JOB STATUS = covers HomeStatusWidget + getFundiWaitingState (all orange cards)
 export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "us-central1" }, async (event) => {
-    const before = event.data?.before?.data() as any; const after = event.data?.after?.data() as any;
+    const before = event.data?.before?.data() as any;
+    const after = event.data?.after?.data() as any;
     if (!after) return;
     const jobId = event.params.jobId;
-    const fundiId = after.assignedFundiId || after.fundiId; const clientId = after.customerId || after.clientId;
-    const oldS = (before?.status || "").toLowerCase(); const newS = (after?.status || "").toLowerCase();
-    if (oldS === newS && (before?.escrowStatus === after?.escrowStatus) && (before?.renegotiation?.status === after?.renegotiation?.status)) return;
-    const fundiTokens = await getFcmTokens(fundiId); const clientTokens = await getFcmTokens(clientId);
+    const fundiId = after.assignedFundiId || after.fundiId;
+    const clientId = after.customerId || after.clientId;
+    const oldS = (before?.status || "").toLowerCase();
+    const newS = (after?.status || "").toLowerCase();
     const title = after.title || 'Job';
 
-    if ((newS === "assigned" || newS === "confirmed") && oldS !== newS) {
-        await sendPush(clientTokens, `Escrow locked KES ${after.escrowAmount || ''} • Waiting for fundi`, `${title} • ${after.assignedFundiName || 'Fundi'} has NOT started travelling`, { jobId, type: newS });
-        await sendPush(fundiTokens, `Escrow locked KES ${after.escrowAmount || ''} - Start site visit now`, `${title} • Tap to travel`, { jobId, type: "escrow_locked" });
+    const fundiTokens = await getFcmTokens(fundiId);
+    const clientTokens = await getFcmTokens(clientId);
+
+    const newEscHeld = after.escrowHeld === true;
+    const oldEscHeld = before?.escrowHeld === true;
+    const newEscStatus = (after?.escrowStatus || "").toLowerCase();
+    const oldEscStatus = (before?.escrowStatus || "").toLowerCase();
+
+    // PRIORITY 1: ESCROW LOCKED = held:true OR status=held
+    if ((newEscHeld && !oldEscHeld) || (newEscStatus === "held" && oldEscStatus !== "held")) {
+        const amount = after.escrowAmount || after.agreedPrice || after.totalCost || '';
+        await sendPush(fundiTokens, `Escrow locked KES ${amount} - Start site visit now`, `${title} • Tap to travel`, { jobId, type: "escrow_locked" });
+        await sendPush(clientTokens, `Escrow locked KES ${amount} • Waiting for fundi`, `${title} • ${after.assignedFundiName || 'Fundi'} has NOT started travelling`, { jobId, type: "escrow_locked" });
+        return;
     }
+
+    // PRIORITY 2: ASSIGNED but NOT locked yet
+    if ((newS === "assigned" || newS === "confirmed") && oldS !== newS && !newEscHeld && newEscStatus !== "held") {
+        await sendPush(fundiTokens, "Bid Accepted!", `${title} accepted • Waiting for client to lock escrow KES ${after.agreedPrice || after.escrowAmount || ''}`, { jobId, type: "accepted_waiting_escrow" });
+        await sendPush(clientTokens, `Fundi accepted • Lock KES ${after.totalCost || after.escrowAmount || after.agreedPrice || ''} to start`, `${title} • Tap to pay escrow`, { jobId, type: "lock_escrow" });
+    }
+
+    // PRIORITY 3: TRAVELLING
     if ((newS === "travelling" || newS === "on_the_way") && oldS !== newS) {
         await sendPush(clientTokens, "Fundi is on the way", `${after.assignedFundiName || 'Fundi'} is travelling • Tracking live`, { jobId, type: "travelling" });
-        await sendPush(fundiTokens, "You are on the way", `${title} • Travelling to client`, { jobId, type: "travelling" });
     }
     if ((newS.includes("site_visit") || newS === "site_visited") && !oldS.includes("site_visit")) {
         await sendPush(fundiTokens, `Waiting for you to start work KES ${after.agreedPrice || ''}`, `${title} • Tap START JOB`, { jobId, type: "site_visited" });
@@ -316,8 +354,8 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     if (after.renegotiation?.status === "countered_by_client" && before?.renegotiation?.status !== "countered_by_client") {
         await sendPush(fundiTokens, `Client countered extra KES ${after.renegotiation.counterExtraLabor || 0}`, `${title} • Tap to view`, { jobId, type: "reneg_countered" });
     }
-    if (newS === "completed" || after.escrowStatus === "released") {
-        if (oldS !== "completed" && before?.escrowStatus !== "released") {
+    if (newS === "completed" || newEscStatus === "released") {
+        if (oldS !== "completed" && oldEscStatus !== "released") {
             await sendPush(fundiTokens, `Client released KES ${after.totalReleasedAmount || after.escrowAmount || ''}`, `${title} • Payment released`, { jobId, type: "released" });
         }
     }
