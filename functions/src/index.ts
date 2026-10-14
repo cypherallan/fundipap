@@ -314,10 +314,21 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const clientTokens = await getFcmTokens(clientId);
     console.log(`TOKENS fundi ${fundiId} count ${fundiTokens.length} client ${clientId} count ${clientTokens.length}`);
 
+    // PRIORITY 1: ESCROW LOCKED - now detects extra vs first lock
     if ((newEscHeld && !oldEscHeld) || (newEscStatus === "held" && oldEscStatus !== "held")) {
         const amount = after.escrowAmount || after.agreedPrice || after.totalCost || '';
-        await sendPush(fundiTokens, `Escrow locked KES ${amount} - Start site visit now`, `${title} • Tap to travel`, { jobId, type: "escrow_locked" });
-        await sendPush(clientTokens, `Escrow locked KES ${amount} • Waiting for fundi`, `${title} • ${after.assignedFundiName || 'Fundi'} has NOT started travelling`, { jobId, type: "escrow_locked" });
+        const extra = (after as any).renegotiation?.extraToLock || (after as any).extraToLock || (after as any).extraTopupToLock || 0;
+        const beforeStatus = (before?.status || "").toLowerCase();
+        const isExtraLock = extra > 0 || beforeStatus.includes("awaiting_extra") || beforeStatus.includes("in_progress") || beforeStatus.includes("site_visit") || beforeStatus.includes("site_visited");
+
+        if (isExtraLock) {
+            const display = extra || amount; // 1000, not 1050 if you want to hide fee use extra
+            await sendPush(fundiTokens, `Extra KES ${display} locked - Continue job`, `${title} • Resume work`, { jobId, type: "extra_escrow_locked" });
+            await sendPush(clientTokens, `Extra KES ${display} locked • Fundi resuming`, `${title} • Continue job`, { jobId, type: "extra_escrow_locked" });
+        } else {
+            await sendPush(fundiTokens, `Escrow locked KES ${amount} - Start site visit now`, `${title} • Tap to travel`, { jobId, type: "escrow_locked" });
+            await sendPush(clientTokens, `Escrow locked KES ${amount} • Waiting for fundi`, `${title} • ${after.assignedFundiName || 'Fundi'} has NOT started travelling`, { jobId, type: "escrow_locked" });
+        }
         return;
     }
 
