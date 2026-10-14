@@ -297,22 +297,23 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const after = event.data?.after?.data() as any;
     if (!after) return;
     const jobId = event.params.jobId;
-    const fundiId = after.assignedFundiId || after.fundiId;
+    const fundiId = after.assignedFundiId || after.fundiId || (after as any).acceptedFundiId || (after as any).fundiId;
     const clientId = after.customerId || after.clientId;
     const oldS = (before?.status || "").toLowerCase();
     const newS = (after?.status || "").toLowerCase();
     const title = after.title || 'Job';
-    
-
-    const fundiTokens = await getFcmTokens(fundiId);
-    const clientTokens = await getFcmTokens(clientId);
 
     const newEscHeld = after.escrowHeld === true;
     const oldEscHeld = before?.escrowHeld === true;
     const newEscStatus = (after?.escrowStatus || "").toLowerCase();
     const oldEscStatus = (before?.escrowStatus || "").toLowerCase();
 
-    // PRIORITY 1: ESCROW LOCKED
+    console.log(`DEBUG ${jobId} status ${oldS}->${newS} escrow ${oldEscStatus}->${newEscStatus} released ${before?.escrowReleased}->${after?.escrowReleased} fundi ${fundiId} agreed ${after.agreedPrice} labor ${after.laborCost} counter ${after.clientCounterAmount} escrowAmt ${after.escrowAmount}`);
+
+    const fundiTokens = await getFcmTokens(fundiId);
+    const clientTokens = await getFcmTokens(clientId);
+    console.log(`TOKENS fundi ${fundiId} count ${fundiTokens.length} client ${clientId} count ${clientTokens.length}`);
+
     if ((newEscHeld && !oldEscHeld) || (newEscStatus === "held" && oldEscStatus !== "held")) {
         const amount = after.escrowAmount || after.agreedPrice || after.totalCost || '';
         await sendPush(fundiTokens, `Escrow locked KES ${amount} - Start site visit now`, `${title} • Tap to travel`, { jobId, type: "escrow_locked" });
@@ -324,7 +325,6 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
         await sendPush(fundiTokens, "Bid Accepted!", `${title} accepted • Waiting for client to lock escrow KES ${after.agreedPrice || after.escrowAmount || ''}`, { jobId, type: "accepted_waiting_escrow" });
         await sendPush(clientTokens, `Fundi accepted • Lock KES ${after.totalCost || after.escrowAmount || after.agreedPrice || ''} to start`, `${title} • Tap to pay escrow`, { jobId, type: "lock_escrow" });
     }
-
     if ((newS === "travelling" || newS === "on_the_way") && oldS !== newS) {
         await sendPush(clientTokens, "Fundi is on the way", `${after.assignedFundiName || 'Fundi'} is travelling • Tracking live`, { jobId, type: "travelling" });
     }
@@ -354,17 +354,17 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
         await sendPush(fundiTokens, `Client countered extra KES ${after.renegotiation.counterExtraLabor || 0}`, `${title} • Tap to view`, { jobId, type: "reneg_countered" });
     }
 
-    // === FIXED: RELEASED - was broken with && ===
-    const wasReleased = oldEscStatus === "released" || (before as any)?.escrowReleased === true;
-    const nowReleased = newEscStatus === "released" || (after as any)?.escrowReleased === true;
+    const wasReleased = oldEscStatus === "released" || before?.escrowReleased === true || before?.escrowStatus === "released";
+    const nowReleased = newEscStatus === "released" || after?.escrowReleased === true || after?.escrowStatus === "released";
     if (!wasReleased && nowReleased) {
-        const labour = Number(after.laborCost || after.agreedPrice || 0);
+        // FIX for counter: agreedPrice is truth (5000), not laborCost (6000)
+        const agreed = Number(after.agreedPrice || after.clientCounterAmount || after.lastCounterAmount || after.laborCost || after.totalClientPays || 0);
         const transport = Number(after.transportFee || 0);
-        const fundiFee = Number((after as any).fundiAppFee || 0) || Math.round(labour * 0.05);
-        const clientPays = Number((after as any).totalClientPays || after.escrowAmount || 0); // 6464
-        const fundiSees = labour + transport; // 6164
-        const fundiReceives = fundiSees - fundiFee; // 5864 = your ***
-        console.log(`RELEASE ${jobId}: clientPays ${clientPays} fundiReceives ${fundiReceives}`);
+        const fundiFee = Number((after as any).fundiAppFee || 0) || Math.round(agreed * 0.05);
+        const clientPays = Number((after as any).totalClientPays || after.escrowAmount || after.totalReleasedAmount || agreed);
+        const fundiSees = agreed + transport;
+        const fundiReceives = fundiSees - fundiFee;
+        console.log(`RELEASE TRIGGER ${jobId}: was ${oldEscStatus}->${newEscStatus} clientPays ${clientPays} agreed ${agreed} fundiReceives ${fundiReceives} tokens ${fundiTokens.length}`);
         await sendPush(fundiTokens, `Client released KES ${fundiReceives || clientPays}`, `${title} • Tap to view receipt of payment`, { jobId, type: "released", clientPays, fundiReceives });
     }
 });
