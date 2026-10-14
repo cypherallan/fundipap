@@ -329,7 +329,9 @@ FundiWaitingState? getFundiWaitingState({
     int requestedExtra = _toInt(
       renego?['counteredExtraRequested'] ?? renego?['extraLabor'] ?? 0,
     );
-    int counterExtra = _toInt(renego?['counterExtraLabor'] ?? 0);
+    int counterExtra = _toInt(
+      renego?['acceptedCounterExtraLabor'] ?? renego?['counterExtraLabor'] ?? 0,
+    );
     if (counterExtra == 0) {
       int toLock = _toInt(renego?['counterExtraToLock'] ?? 0);
       if (toLock > 0) counterExtra = (toLock / 1.05).round();
@@ -430,9 +432,10 @@ FundiWaitingState? getFundiWaitingState({
   );
 
   int pureExtra = _toInt(
-    renego?['extraLabor'] ??
-        renego?['approvedExtra'] ??
+    renego?['acceptedCounterExtraLabor'] ??
         renego?['counterExtraLabor'] ??
+        renego?['approvedExtra'] ??
+        renego?['extraLabor'] ??
         job['extraLaborAmount'] ??
         0,
   );
@@ -441,12 +444,15 @@ FundiWaitingState? getFundiWaitingState({
   }
 
   int toLockExtra = _toInt(
-    job['extraToLock'] ??
-        job['extraEscrowAmount'] ??
-        job['extraTopupToLock'] ??
-        renego?['extraToLock'] ??
-        0,
+    renego?['acceptedCounterExtraLabor'] != null
+        ? null // don't use old toLock if accepted counter exists, pureExtra handles it
+        : job['extraToLock'] ??
+              job['extraEscrowAmount'] ??
+              job['extraTopupToLock'] ??
+              renego?['extraToLock'] ??
+              0,
   );
+  // If accepted counter exists, toLockExtra will be 0 and pureExtra (1000) wins
   if (toLockExtra == 0 && newTotalVal > 0) {
     toLockExtra = newTotalVal - lockedAmount;
   }
