@@ -302,6 +302,7 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const oldS = (before?.status || "").toLowerCase();
     const newS = (after?.status || "").toLowerCase();
     const title = after.title || 'Job';
+    
 
     const fundiTokens = await getFcmTokens(fundiId);
     const clientTokens = await getFcmTokens(clientId);
@@ -311,7 +312,7 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const newEscStatus = (after?.escrowStatus || "").toLowerCase();
     const oldEscStatus = (before?.escrowStatus || "").toLowerCase();
 
-    // PRIORITY 1: ESCROW LOCKED = held:true OR status=held
+    // PRIORITY 1: ESCROW LOCKED
     if ((newEscHeld && !oldEscHeld) || (newEscStatus === "held" && oldEscStatus !== "held")) {
         const amount = after.escrowAmount || after.agreedPrice || after.totalCost || '';
         await sendPush(fundiTokens, `Escrow locked KES ${amount} - Start site visit now`, `${title} • Tap to travel`, { jobId, type: "escrow_locked" });
@@ -319,13 +320,11 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
         return;
     }
 
-    // PRIORITY 2: ASSIGNED but NOT locked yet
     if ((newS === "assigned" || newS === "confirmed") && oldS !== newS && !newEscHeld && newEscStatus !== "held") {
         await sendPush(fundiTokens, "Bid Accepted!", `${title} accepted • Waiting for client to lock escrow KES ${after.agreedPrice || after.escrowAmount || ''}`, { jobId, type: "accepted_waiting_escrow" });
         await sendPush(clientTokens, `Fundi accepted • Lock KES ${after.totalCost || after.escrowAmount || after.agreedPrice || ''} to start`, `${title} • Tap to pay escrow`, { jobId, type: "lock_escrow" });
     }
 
-    // PRIORITY 3: TRAVELLING
     if ((newS === "travelling" || newS === "on_the_way") && oldS !== newS) {
         await sendPush(clientTokens, "Fundi is on the way", `${after.assignedFundiName || 'Fundi'} is travelling • Tracking live`, { jobId, type: "travelling" });
     }
@@ -354,9 +353,18 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     if (after.renegotiation?.status === "countered_by_client" && before?.renegotiation?.status !== "countered_by_client") {
         await sendPush(fundiTokens, `Client countered extra KES ${after.renegotiation.counterExtraLabor || 0}`, `${title} • Tap to view`, { jobId, type: "reneg_countered" });
     }
-    if (newS === "completed" || newEscStatus === "released") {
-        if (oldS !== "completed" && oldEscStatus !== "released") {
-            await sendPush(fundiTokens, `Client released KES ${after.totalReleasedAmount || after.escrowAmount || ''}`, `${title} • Payment released`, { jobId, type: "released" });
-        }
+
+    // === FIXED: RELEASED - was broken with && ===
+    const wasReleased = oldEscStatus === "released" || (before as any)?.escrowReleased === true;
+    const nowReleased = newEscStatus === "released" || (after as any)?.escrowReleased === true;
+    if (!wasReleased && nowReleased) {
+        const labour = Number(after.laborCost || after.agreedPrice || 0);
+        const transport = Number(after.transportFee || 0);
+        const fundiFee = Number((after as any).fundiAppFee || 0) || Math.round(labour * 0.05);
+        const clientPays = Number((after as any).totalClientPays || after.escrowAmount || 0); // 6464
+        const fundiSees = labour + transport; // 6164
+        const fundiReceives = fundiSees - fundiFee; // 5864 = your ***
+        console.log(`RELEASE ${jobId}: clientPays ${clientPays} fundiReceives ${fundiReceives}`);
+        await sendPush(fundiTokens, `Client released KES ${fundiReceives || clientPays}`, `${title} • Tap to view receipt of payment`, { jobId, type: "released", clientPays, fundiReceives });
     }
 });
