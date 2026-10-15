@@ -67,17 +67,48 @@ void main() async {
     });
 
     Future<void> saveToken(String? uid) async {
-      if (uid == null) return;
-      final t = await messaging.getToken();
-      if (t == null) return;
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'fcmToken': t,
-      }, SetOptions(merge: true));
-      await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
-        'fcmToken': t,
-        'fcmTokens': FieldValue.arrayUnion([t]),
-      }, SetOptions(merge: true));
+      if (uid == null) {
+        debugPrint("SAVE TOKEN: uid null, skip");
+        return;
+      }
+      try {
+        final t = await messaging.getToken();
+        debugPrint("SAVE TOKEN: uid=$uid token=$t");
+        if (t == null) {
+          debugPrint(
+            "SAVE TOKEN: token null - google-services.json missing or emulator",
+          );
+          return;
+        }
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'fcmToken': t,
+          'fcmTokens': FieldValue.arrayUnion([t]),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
+          'fcmToken': t,
+          'fcmTokens': FieldValue.arrayUnion([t]),
+          'isOnline': true,
+          'geopoint': const GeoPoint(
+            -1.286389,
+            36.817223,
+          ), // temp Nairobi, update later with real location
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        debugPrint("SAVE TOKEN: saved to users/$uid and fundis/$uid");
+      } catch (e) {
+        debugPrint("SAVE TOKEN ERROR: $e");
+      }
     }
+
+    FirebaseAuth.instance.authStateChanges().listen((u) {
+      debugPrint("AUTH STATE: ${u?.uid}");
+      if (u != null) saveToken(u.uid);
+    });
+    // also save after 2 sec delay for cold start
+    Future.delayed(const Duration(seconds: 2), () {
+      saveToken(FirebaseAuth.instance.currentUser?.uid);
+    });
 
     messaging.onTokenRefresh.listen((t) async {
       final uid = FirebaseAuth.instance.currentUser?.uid;

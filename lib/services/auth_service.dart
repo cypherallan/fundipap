@@ -1,5 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:geolocator/geolocator.dart';
 
 class AuthService {
   final _auth = FirebaseAuth.instance;
@@ -9,10 +11,7 @@ class AuthService {
   Stream<User?> get authState => _auth.authStateChanges();
 
   Future<User?> login({required String email, required String password}) async {
-    var cred = await _auth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+    var cred = await _auth.signInWithEmailAndPassword(email: email, password: password);
     return cred.user;
   }
 
@@ -27,38 +26,44 @@ class AuthService {
     String? searchKeyword,
     List<String>? otherSkills,
   }) async {
-    var cred = await _auth.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+    var cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
     var uid = cred.user!.uid;
 
+    // get location + token at signup - so you never have fundi without geopoint
+    String? fcmToken;
+    GeoPoint? geo;
+    try {
+      fcmToken = await FirebaseMessaging.instance.getToken();
+      var pos = await Geolocator.getCurrentPosition();
+      geo = GeoPoint(pos.latitude, pos.longitude);
+    } catch (_) {}
+
     await _db.collection('users').doc(uid).set({
-      'name': name ?? '',
-      'username': username ?? '',
+      'name': name?? '',
+      'username': username?? '',
       'email': email,
       'role': role,
       'phone': phone,
-      'skill': profession ?? 'General',
-      'profession': profession ?? 'General',
-      'searchKeyword': searchKeyword ?? profession?.toLowerCase() ?? 'general',
-      'otherSkills': otherSkills ?? [],
+      'skill': profession?? 'General',
+      'profession': profession?? 'General',
+      'searchKeyword': searchKeyword?? profession?.toLowerCase()?? 'general',
+      'otherSkills': otherSkills?? [],
       'photoUrl': null,
+      'fcmToken': fcmToken,
       'createdAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
 
     if (role == 'fundi') {
       await _db.collection('fundis').doc(uid).set({
-        'name': name ?? '',
-        'username': username ?? '',
+        'name': name?? '',
+        'username': username?? '',
         'email': email,
         'phone': phone,
-        'skill': profession ?? 'General',
-        'profession': profession ?? 'General',
-        'searchKeyword':
-            searchKeyword ?? profession?.toLowerCase() ?? 'general',
-        'otherSkills': otherSkills ?? [],
-        'specialization': profession ?? 'General',
+        'skill': profession?? 'General',
+        'profession': profession?? 'General',
+        'searchKeyword': searchKeyword?? profession?.toLowerCase()?? 'general',
+        'otherSkills': otherSkills?? [],
+        'specialization': profession?? 'General',
         'bio': '',
         'price': 0,
         'rating': 5.0,
@@ -67,10 +72,15 @@ class AuthService {
         'resumes': [],
         'certificates': [],
         'portfolio': [],
-        'location': '',
-        'locationLat': null,
-        'locationLng': null,
-        'locationSet': false,
+        'location': geo?? '',
+        'geopoint': geo,
+        'locationLat': geo?.latitude,
+        'locationLng': geo?.longitude,
+        'locationSet': geo!= null,
+        'isOnline': true,
+        'lastSeen': FieldValue.serverTimestamp(),
+        'fcmToken': fcmToken,
+        'fcmTokens': fcmToken!= null? FieldValue.arrayUnion([fcmToken]) : [],
         'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     }
@@ -83,6 +93,10 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid!= null) {
+      await _db.collection('fundis').doc(uid).set({'isOnline': false}, SetOptions(merge:true));
+    }
     await _auth.signOut();
   }
 

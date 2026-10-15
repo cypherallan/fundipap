@@ -34,7 +34,7 @@ export const mpesaCallback = onRequest(async (req, res) => {
 });
 
 // ============ YOUR EXISTING AUTO-CANCEL - UNTOUCHED ============
-export const autoCancelNoArrival = onSchedule({ schedule: 'every 5 minutes', region: 'us-central1' }, async () => {
+export const autoCancelNoArrival = onSchedule({ schedule: 'every 5 minutes', region: 'europe-west1' }, async () => {
     const cutoff = new Date(Date.now() - 150 * 60 * 1000);
     const snap = await db().collection('jobs').where('status', '==', 'travelling').get();
     if (snap.empty) return;
@@ -64,20 +64,19 @@ export const autoCancelNoArrival = onSchedule({ schedule: 'every 5 minutes', reg
 type BadgeLevel = "none" | "bronze" | "silver" | "gold";
 type FundiLevel = "L1_NEW" | "L2_HUSTLER" | "L3_PRO" | "L4_ELITE";
 
+
 function calcBadge(user: any) {
     const completedJobs = Number(user.completedJobs ?? user.jobsDone ?? 0);
     const rating = Number(user.rating ?? user.avgRating ?? 0);
     const reviewCount = Number(user.reviewCount ?? user.ratingsCount ?? 0);
     const cancelledJobs = Number(user.cancelledJobs ?? 0);
-    const fraudReports = Number(user.fraudReports ?? user.fraudCount ?? 0);
+    const fraudReports = Number(user.fraudReports ?? 0);
     const hasKyc = !!(user.kycVerified || user.isKycVerified);
     const hasId = !!(user.idUploaded || user.nationalIdUrl);
     const hasGoodConduct = !!(user.goodConductUploaded || user.goodConductUrl);
     const hasTradeCert = !!(user.tradeCertUploaded || user.certificateUrl);
     const hasPhoto = !!(user.photoUrl || user.profilePhotoUrl);
     const hasBio = (user.bio ?? "").toString().length > 20;
-    const avgResponseMin = Number(user.avgResponseMinutes ?? 999);
-    const avgChatMin = Number(user.avgChatResponseMinutes ?? 999);
     const referrals = Number(user.referralCount ?? 0);
 
     let score = 0; const b: any = {};
@@ -92,43 +91,37 @@ function calcBadge(user: any) {
         else if (rating >= 4.0) ratingPts = 10; else if (rating >= 3.5) ratingPts = 5;
     }
     b.rating = ratingPts; score += ratingPts;
-    let cancelPts = cancelledJobs >= 5 ? 0 : cancelledJobs >= 3 ? 3 : cancelledJobs >= 1 ? 6 : 10;
-    b.cancellations = cancelPts; score += cancelPts;
+    b.cancellations = cancelledJobs >= 5 ? 0 : cancelledJobs >= 3 ? 3 : cancelledJobs >= 1 ? 6 : 10; score += b.cancellations;
     b.fraud = fraudReports > 0 ? 0 : 10; score += b.fraud;
-    b.fastResponse = (avgResponseMin <= 5 && avgChatMin <= 10) ? 10 : 0; score += b.fastResponse;
-    let referralPts = 0; let referralRate = 0;
-    if (completedJobs > 0) {
-        referralRate = referrals / completedJobs;
-        if (referralRate >= 0.5) referralPts = 10; else if (referralRate >= 0.3) referralPts = 7;
-        else if (referralRate >= 0.1) referralPts = 4; else if (referrals > 0) referralPts = 2;
-    }
-    b.referral = referralPts; score += referralPts;
-    const lastActive = user.lastActiveAt?.toDate?.() ?? (user.lastActiveAt ? new Date(user.lastActiveAt) : null);
-    let recencyPts = 5;
-    if (lastActive) {
-        const days = (Date.now() - lastActive.getTime()) / 86400000;
-        if (days <= 2) recencyPts = 30; else if (days <= 7) recencyPts = 20; else if (days <= 14) recencyPts = 10;
-    }
-    b.recency = recencyPts; score += recencyPts;
-    score = Math.max(0, Math.min(130, score));
+    b.fastResponse = 0;
+    b.referral = referrals > 0 ? 2 : 0; score += b.referral;
+    b.recency = 5; score += 5;
 
+    score = Math.max(0, Math.min(130, score));
     let badgeLevel: BadgeLevel = score >= 110 ? "gold" : score >= 70 ? "silver" : score >= 35 ? "bronze" : "none";
     let fundiLevel: FundiLevel = completedJobs >= 100 ? "L4_ELITE" : completedJobs >= 50 ? "L3_PRO" : completedJobs >= 10 ? "L2_HUSTLER" : "L1_NEW";
 
     const createdAt = user.createdAt?.toDate?.() ?? (user.createdAt ? new Date(user.createdAt) : new Date());
     const trialExpDate = new Date(createdAt.getTime() + 7 * 86400000);
-    let isTrialGold = false; let trialExpiresAt: any = null; let fundiCommissionPct = 10;
+    let isTrialGold = false; let trialExpiresAt: any = null;
     const isNew = completedJobs < 10;
-    if (isNew && Date.now() < trialExpDate.getTime() && profileComplete) {
-        isTrialGold = true; trialExpiresAt = trialExpDate; badgeLevel = "gold"; fundiCommissionPct = 10;
-    } else {
-        fundiCommissionPct = badgeLevel === "gold" ? 5 : badgeLevel === "silver" ? 7 : 10;
-    }
-    const isVerified = badgeLevel === "gold" && !isTrialGold && hasKyc && profileComplete && completedJobs >= 50 && rating >= 4.5;
-    let pointsToNextBadge = badgeLevel === "none" ? 35 - score : badgeLevel === "bronze" ? 70 - score : badgeLevel === "silver" ? 110 - score : 0;
-    let jobsToNextLevel = fundiLevel === "L1_NEW" ? 10 - completedJobs : fundiLevel === "L2_HUSTLER" ? 50 - completedJobs : fundiLevel === "L3_PRO" ? 100 - completedJobs : 0;
+    const withinTrial = Date.now() < trialExpDate.getTime();
 
-    return { score, badgeLevel, fundiLevel, fundiCommissionPct, clientCommissionPct: 5, referralRate, isTrialGold, trialExpiresAt, isVerified, pointsToNextBadge: Math.max(0, pointsToNextBadge), jobsToNextLevel: Math.max(0, jobsToNextLevel), breakdown: b };
+    // NEW RULE: every new fundi gets trial gold for 7 days
+    if (isNew && withinTrial) {
+        isTrialGold = true; trialExpiresAt = trialExpDate; badgeLevel = "gold";
+    }
+
+    let fundiCommissionPct = badgeLevel === "gold" ? 5 : badgeLevel === "silver" ? 7 : 10;
+    if (isTrialGold) fundiCommissionPct = 5; // trial gold pays 5% too
+
+    return {
+        score, badgeLevel, fundiLevel, fundiCommissionPct, clientCommissionPct: 5,
+        referralRate: 0, isTrialGold, trialExpiresAt,
+        isVerified: badgeLevel === "gold" && !isTrialGold && hasKyc,
+        pointsToNextBadge: 0, jobsToNextLevel: Math.max(0, 10 - completedJobs),
+        breakdown: b
+    };
 }
 
 async function updateFundiBadge(uid: string, data: any) {
@@ -142,17 +135,17 @@ async function updateFundiBadge(uid: string, data: any) {
     }, { merge: true });
 }
 
-export const recalcBadgesNightly = onSchedule({ schedule: "0 23 * * *", timeZone: "UTC", region: "us-central1" }, async () => {
+export const recalcBadgesNightly = onSchedule({ schedule: "0 23 * * *", timeZone: "UTC", region: "europe-west1" }, async () => {
     const snap = await db().collection("users").where("role", "==", "fundi").limit(500).get();
     for (const doc of snap.docs) await updateFundiBadge(doc.id, doc.data());
 });
 
-export const recalcBadgeOnUserWrite = onDocumentWritten({ document: "users/{uid}", region: "us-central1" }, async (event) => {
+export const recalcBadgeOnUserWrite = onDocumentWritten({ document: "users/{uid}", region: "europe-west1" }, async (event) => {
     const after = event.data?.after?.data() as any; if (!after || after.role !== "fundi") return;
     await updateFundiBadge(event.params.uid, after);
 });
 
-export const recalcBadgeOnJobComplete = onDocumentWritten({ document: "jobs/{jobId}", region: "us-central1" }, async (event) => {
+export const recalcBadgeOnJobComplete = onDocumentWritten({ document: "jobs/{jobId}", region: "europe-west1" }, async (event) => {
     const after = event.data?.after?.data() as any; if (!after) return;
     if (after.status !== "completed" && after.escrowStatus !== "released") return;
     const fundiId = after.assignedFundiId ?? after.fundiId; if (!fundiId) return;
@@ -196,7 +189,7 @@ function distKm(lat1: number, lon1: number, lat2: number, lon2: number) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export const notifyNearbyFundisOnJobCreate = onDocumentCreated({ document: "jobs/{jobId}", region: "us-central1" }, async (event) => {
+export const notifyNearbyFundisOnJobCreate = onDocumentCreated({ document: "jobs/{jobId}", region: "europe-west1" }, async (event) => {
     const job = event.data?.data() as any;
     if (!job) return;
     const jobId = event.params.jobId;
@@ -221,11 +214,12 @@ export const notifyNearbyFundisOnJobCreate = onDocumentCreated({ document: "jobs
         const d = distKm(lat, lng, fLat, fLng);
 
         // Get badge from users collection
-        const userSnap = await db().collection("users").doc(uid).get();
-        const userData = userSnap.data() as any;
-        const badgeLevel = (userData?.badgeLevel || "none").toString().toLowerCase();
-
-        const maxDist = badgeLevel === "gold" ? 100 : badgeLevel === "silver" ? 50 : badgeLevel === "bronze" ? 20 : 10;
+        let badgeLevel = (fData.badgeLevel || "").toLowerCase();
+        if (!badgeLevel) {
+            const userSnap = await db().collection("users").doc(uid).get();
+            badgeLevel = (userSnap.data() as any)?.badgeLevel?.toLowerCase() || "gold"; // fallback gold for new
+        }
+        const maxDist = badgeLevel === "gold" ? 100 : badgeLevel === "silver" ? 50 : badgeLevel === "bronze" ? 20 : 100;
 
         console.log(`Fundi ${uid} badge=${badgeLevel} dist=${d.toFixed(1)}km max=${maxDist}km`);
 
@@ -240,7 +234,7 @@ export const notifyNearbyFundisOnJobCreate = onDocumentCreated({ document: "jobs
     }
 });
 
-export const onNotificationPush = onDocumentCreated({ document: "notifications/{notifId}", region: "us-central1" }, async (event) => {
+export const onNotificationPush = onDocumentCreated({ document: "notifications/{notifId}", region: "europe-west1" }, async (event) => {
     const d = event.data?.data() as any;
     if (!d) return;
     const toUserId = d.toUserId as string;
@@ -260,7 +254,7 @@ export const onNotificationPush = onDocumentCreated({ document: "notifications/{
 });
 
 // BIDS = covers your FundiNotificationsPage + CustomerNotificationsSection
-export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId}", region: "us-central1" }, async (event) => {
+export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId}", region: "europe-west1" }, async (event) => {
     const before = event.data?.before?.data() as any; const after = event.data?.after?.data() as any;
     if (!after) return;
     const jobId = event.params.jobId;
@@ -292,7 +286,7 @@ export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId
 });
 
 // JOB STATUS = covers HomeStatusWidget + getFundiWaitingState (all orange cards)
-export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "us-central1" }, async (event) => {
+export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "europe-west1" }, async (event) => {
     const before = event.data?.before?.data() as any;
     const after = event.data?.after?.data() as any;
     if (!after) return;
