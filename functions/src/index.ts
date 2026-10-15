@@ -193,43 +193,38 @@ export const notifyNearbyFundisOnJobCreate = onDocumentCreated({ document: "jobs
     const job = event.data?.data() as any;
     if (!job) return;
     const jobId = event.params.jobId;
-    const lat = job.location?.latitude || job.geopoint?.latitude || job.lat || job.latitude;
-    const lng = job.location?.longitude || job.geopoint?.longitude || job.lng || job.longitude;
-    if (!lat || !lng) {
-        console.log(`JOB ${jobId} NO LOCATION`);
-        return;
-    }
+    const lat = job.location?.latitude || job.geopoint?.latitude || job.lat || job.latitude || job.locationLat;
+    const lng = job.location?.longitude || job.geopoint?.longitude || job.lng || job.longitude || job.locationLng;
+    if (!lat || !lng) return;
 
-    // Only online fundis
     const snap = await db().collection("fundis").where("isOnline", "==", true).get();
-    console.log(`NEW JOB ${jobId} at ${lat},${lng} - ${snap.size} online fundis found`);
 
     for (const doc of snap.docs) {
         const uid = doc.id;
         const fData = doc.data() as any;
-        const fLat = fData.geopoint?.latitude || fData.location?.latitude || fData.lat;
-        const fLng = fData.geopoint?.longitude || fData.location?.longitude || fData.lng;
+        const fLat = fData.geopoint?.latitude || fData.location?.latitude || fData.locationLat;
+        const fLng = fData.geopoint?.longitude || fData.location?.longitude || fData.locationLng;
         if (!fLat || !fLng) continue;
 
         const d = distKm(lat, lng, fLat, fLng);
 
-        // Get badge from users collection
-        let badgeLevel = (fData.badgeLevel || "").toLowerCase();
+        let badgeLevel = (fData.badgeLevel || fData.badge || "").toLowerCase();
         if (!badgeLevel) {
             const userSnap = await db().collection("users").doc(uid).get();
-            badgeLevel = (userSnap.data() as any)?.badgeLevel?.toLowerCase() || "gold"; // fallback gold for new
+            badgeLevel = ((userSnap.data() as any)?.badgeLevel || "new").toLowerCase();
         }
-        const maxDist = badgeLevel === "gold" ? 100 : badgeLevel === "silver" ? 50 : badgeLevel === "bronze" ? 20 : 100;
-
-        console.log(`Fundi ${uid} badge=${badgeLevel} dist=${d.toFixed(1)}km max=${maxDist}km`);
+        const maxDist = badgeLevel === "gold" ? 100 : badgeLevel === "silver" ? 50 : badgeLevel === "bronze" ? 20 : 15;
 
         if (d <= maxDist) {
             const tokens = await getFcmTokens(uid);
-            if (tokens.length === 0) {
-                console.log(`Fundi ${uid} NO TOKENS`);
-                continue;
-            }
-            await sendPush(tokens, "New job near you", `${job.title || 'Job'} • KES ${job.budget || ''} • ${d.toFixed(1)}km • ${badgeLevel}`, { jobId, type: "new_job", badgeLevel, distance: d.toFixed(1) });
+            if (tokens.length === 0) continue;
+
+            await sendPush(
+                tokens,
+                "A new job posted",
+                `${d.toFixed(1)}km away • Tap to view`,
+                { jobId, type: "new_job" }
+            );
         }
     }
 });
