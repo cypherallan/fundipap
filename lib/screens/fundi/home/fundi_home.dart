@@ -61,11 +61,12 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
     return fb;
   }
 
-  @override
+    @override
   void initState() {
     super.initState();
     initOnlineStatus();
     _loadMe();
+    _loadLocation(); // ADD THIS - was missing
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initNotificationListeners();
       _enforceMandatoryRating();

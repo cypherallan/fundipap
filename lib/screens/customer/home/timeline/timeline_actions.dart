@@ -17,30 +17,65 @@ class TimelineActions {
 
   static Future<void> payExtraEscrow(
     String jobId,
-    int extraToLock,
-    int newTotal,
+    int extraLabor, // 2000
+    int extraToLock, // 2100
     String whoBuys,
   ) async {
     final jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
+    final snap = await jobRef.get();
+    final job = snap.data() as Map<String, dynamic>;
 
-    bool clientBuys = whoBuys == 'client';
+    int oldLabor = toInt(job['laborCost'] ?? job['agreedPrice'] ?? 0);
+    int transport = toInt(job['transportFee'] ?? 164);
+    String fundiId = (job['assignedFundiId'] ?? job['fundiId'] ?? '')
+        .toString();
+
+    // Fetch bronze % for correct fundi fee
+    int fundiPct = 10;
+    if (fundiId.isNotEmpty) {
+      var fundiSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(fundiId)
+          .get();
+      var fd = fundiSnap.data() ?? {};
+      if (fd['badgeLevel'] == 'gold' || fd['isTrialGold'] == true)
+        fundiPct = 5;
+      else if (fd['badgeLevel'] == 'silver')
+        fundiPct = 8;
+      else if (fd['badgeLevel'] == 'bronze')
+        fundiPct = 10;
+      else
+        fundiPct = 15;
+    }
+
+    int newLabor = oldLabor + extraLabor; // 8000
+    int newClientFee = (newLabor * 0.05).round(); // 400
+    int newFundiFee = (newLabor * fundiPct / 100).round(); // 800 for bronze
+    int newTotal = newLabor + transport + newClientFee; // 8564
+    int newFundiReceives = newLabor - newFundiFee + transport; // 7364
+
     await jobRef.update({
-      'escrowStatus': 'held',
-      'escrowAmount': newTotal, // 6400 not 1050
+      'laborCost': newLabor,
+      'agreedPrice': newLabor,
+      'clientAppFee': newClientFee,
+      'fundiAppFee': newFundiFee,
+      'totalClientPays': newTotal,
+      'totalCost': newTotal,
+      'escrowAmount': newTotal,
+      'fundiReceives': newFundiReceives,
+      'extraToLock': 0,
+      'extraLaborAmount': 0,
       'extraEscrowStatus': 'paid',
-      'extraEscrowPaidAt': FieldValue.serverTimestamp(),
-      'extraToLock': extraToLock, // 1050
-      'renegotiation.extraToLock': extraToLock,
-      'status': clientBuys
+      'escrowStatus': 'held',
+      'clientNeedsToTopup': false,
+      'status': whoBuys == 'client'
           ? 'waiting_for_client_to_buy_parts'
           : 'fundi_buying_parts',
       'renegotiation.status': 'extra_locked',
-      'renegotiation.requested': false,
-      'renegotiation.currentPhase': clientBuys
+      'renegotiation.extraLocked': true,
+      'renegotiation.currentPhase': whoBuys == 'client'
           ? 'waiting_for_client_to_buy_parts'
           : 'fundi_buying_parts',
-      'fundiHasUnread': true,
-      'customerHasUnread': false,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }

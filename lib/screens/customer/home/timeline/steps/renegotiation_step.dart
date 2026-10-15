@@ -92,8 +92,8 @@ class RenegotiationSteps {
             ),
             onPressed: () => TimelineActions.payExtraEscrow(
               c.jobId,
-              extraToLock, // 1050
-              c.alreadyLocked + extraToLock, // 6400
+              extraLaborToShow, // 2000
+              extraToLock, // 2100
               whoBuys,
             ),
             child: Text('LOCK EXTRA KES $extraToLock NOW'),

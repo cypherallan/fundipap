@@ -34,6 +34,15 @@ Widget? buildCurrentWaiting({
   String lowStat = (job['status'] ?? '').toString().toLowerCase();
   String lowPhase = (renego?['currentPhase'] ?? '').toString().toLowerCase();
   bool hasParts = hasPartsInRenego(renego);
+  int newLabour = toInt(job['laborCost'] ?? job['agreedPrice'] ?? 6000);
+  int totalLocked = toInt(
+    job['totalClientPays'] ??
+        job['escrowAmount'] ??
+        fundiSees + toInt(job['clientAppFee'] ?? 0),
+  );
+  int fundiReceivesCalc = toInt(
+    job['fundiReceives'] ?? newLabour + toInt(job['transportFee'] ?? 0),
+  );
 
   // FIX NO PARTS: Skip materials waiting, show START JOB / New Price directly
   if ((status == 'waiting_for_client_to_buy_parts' ||
@@ -66,7 +75,7 @@ Widget? buildCurrentWaiting({
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Waiting for you to start work - KES $fundiSees',
+                  'Site visited - Ready to start - KES $totalLocked locked (Labour $newLabour)',
                   style: GoogleFonts.montserrat(
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
@@ -78,7 +87,7 @@ Widget? buildCurrentWaiting({
           ),
           const SizedBox(height: 6),
           Text(
-            'Extra labour KES $extraLabourToShow locked. No materials needed. Tap START JOB to begin.',
+            'Labour KES $newLabour (extra $extraLabourToShow) + Transport locked. Total KES $totalLocked secured. Tap START JOB.',
             style: GoogleFonts.inter(fontSize: 11),
           ),
           const SizedBox(height: 12),
@@ -149,8 +158,9 @@ Widget? buildCurrentWaiting({
       children: [
         OrangeAnimatedWaitingCard(
           title:
-              'You are working - KES ${toInt(job['agreedPrice'] ?? job['laborCost'] ?? 6000)}',
-          message: 'You are working on $jobTitle.',
+              'You are working - Labour KES $newLabour - Will receive KES ${toInt(job['fundiReceives'] ?? fundiReceivesCalc)}',
+          message:
+              'You are marked job as completed. waiting for client to confirmSS',
         ),
         const SizedBox(height: 10),
         SizedBox(
@@ -555,7 +565,7 @@ Widget? buildCurrentWaiting({
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Waiting for you to start work - KES $fundiSees',
+                    'Extra locked - Ready to start work - Total KES $totalLocked',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w800,
                       fontSize: 12,
@@ -567,7 +577,7 @@ Widget? buildCurrentWaiting({
             ),
             const SizedBox(height: 6),
             Text(
-              'You visited site. Client locked KES $fundiSees secured. Tap START JOB to begin.',
+              'You visited site. Labour KES $newLabour • Total KES $totalLocked secured. Tap START JOB.',
               style: GoogleFonts.inter(fontSize: 11),
             ),
             const SizedBox(height: 12),
@@ -624,7 +634,7 @@ Widget? buildCurrentWaiting({
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'You are working - KES ${waitingState.price}',
+                    'You are working - Labour KES $newLabour - Total KES $totalLocked',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w800,
                       fontSize: 12,

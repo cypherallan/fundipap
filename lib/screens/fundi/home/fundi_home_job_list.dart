@@ -47,6 +47,22 @@ class FundiHomeJobList extends StatelessWidget {
           )
           .snapshots(),
       builder: (context, snap) {
+        // FIX 1: don't spinner forever - handle waiting + error
+        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+          return const Center(
+            child: CircularProgressIndicator(
+              color: FundipapColors.primaryYellow,
+            ),
+          );
+        }
+        if (snap.hasError) {
+          return Center(
+            child: Text(
+              'Error: ${snap.error}',
+              style: GoogleFonts.inter(color: Colors.white60, fontSize: 11),
+            ),
+          );
+        }
         if (!snap.hasData) {
           return const Center(
             child: CircularProgressIndicator(
@@ -58,14 +74,12 @@ class FundiHomeJobList extends StatelessWidget {
             .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
             .toList();
 
-        // keep cancelled docs here - we will filter after checking bid
         docs = docs.where((m) {
           var status = (m['status'] ?? '').toString().toLowerCase();
           var escrow = (m['escrowStatus'] ?? 'pending')
               .toString()
               .toLowerCase();
           if (m['reposted'] == true) return false;
-          // don't hide cancelled yet - let inner builder decide if fundi bid
           if (status.contains('complete') || status == 'closed') return false;
           if (['held', 'paid', 'locked', 'released'].contains(escrow))
             return false;
@@ -109,7 +123,11 @@ class FundiHomeJobList extends StatelessWidget {
             double? km = FundiHomeLogic.distanceKm(currentPos, data);
             var uid = FirebaseAuth.instance.currentUser!.uid;
 
-            // detect cancelled at job level
+            // FIX 2: 30km filter - was hidden because no filter, but with null pos it flickered. Now allow 16.4km
+            if (km != null && km > 30) {
+              return const SizedBox.shrink(); // hide beyond 30km, not 5km
+            }
+
             bool jobIsCancelled =
                 (data['cancelled'] == true) ||
                 (data['autoCancelled'] == true) ||
@@ -136,20 +154,14 @@ class FundiHomeJobList extends StatelessWidget {
                     bidData?['rejectionReason'] ??
                     bidData?['rejectionCategory'] ??
                     'No reason given';
-
                 if (deletedForFundi) return const SizedBox.shrink();
-
-                // FIX: read status from bidData, not from job data
                 final String? myBidStatus = bidData?['status']?.toString();
                 bool isCancelledByClient = myBidStatus == 'cancelled_by_client';
                 bool isWithdrawn =
                     myBidStatus == 'withdrawn' || myBidStatus == 'cancelled';
-
-                // if job cancelled and fundi never bid - hide
                 if (jobIsCancelled && !hasBid) return const SizedBox.shrink();
 
                 if (isRejected) {
-                  // ... keep your rejected dialog as is ...
                   return GestureDetector(
                     onTap: () async {
                       await FirebaseFirestore.instance
@@ -293,19 +305,16 @@ class FundiHomeJobList extends StatelessWidget {
                   );
                 }
 
-                // FIXED: green only if bid is active, not cancelled_by_client
                 bool hasBidActive =
                     hasBid && !isCancelledByClient && !isWithdrawn;
-
-                // inject status into data for card
                 data['bidStatus'] = myBidStatus;
 
                 return FundiJobCard(
                   data: data,
                   isMatch: isMatch,
                   distanceKm: km,
-                  hasBid: hasBidActive, // <-- not green when client cancelled
-                  bidStatus: myBidStatus, // <-- orange banner
+                  hasBid: hasBidActive,
+                  bidStatus: myBidStatus,
                   onBid: hasBidActive || jobIsCancelled || isCancelledByClient
                       ? null
                       : () => onBid(context, data),

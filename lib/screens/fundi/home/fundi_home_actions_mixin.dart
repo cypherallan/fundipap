@@ -24,12 +24,9 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
   Position? get currentPos;
   set currentPos(Position? v);
 
-  // online state
   bool _isOnline = false;
   bool get isOnline => _isOnline;
   StreamSubscription<Position>? _posSub;
-
-  // ANTI-GLITCH LOCK
   Position? _stablePos;
   DateTime? _lastPosTime;
 
@@ -44,17 +41,25 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
   Future<void> initOnlineStatus() async {
     try {
       var uid = FirebaseAuth.instance.currentUser!.uid;
-      var doc = await FirebaseFirestore.instance
+      // check both collections - your app uses both
+      var fundiDoc = await FirebaseFirestore.instance
           .collection('fundis')
           .doc(uid)
           .get();
-      bool wasOnline = doc.data()?['isOnline'] == true;
+      var userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      bool wasOnline =
+          fundiDoc.data()?['isOnline'] == true ||
+          userDoc.data()?['isOnline'] == true;
+
+      await loadLocation(context); // always load location first
+
       if (wasOnline && mounted) {
         setState(() => _isOnline = true);
         await LocationService.startTracking(uid);
         _listenToLivePos();
-      } else {
-        await loadLocation(context);
       }
     } catch (e) {
       await loadLocation(context);
@@ -77,9 +82,15 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
       await LocationService.stopTracking(uid);
       await _posSub?.cancel();
       if (!mounted) return;
-      setState(() {
-        _isOnline = false;
-      });
+      setState(() => _isOnline = false);
+      // FIX: PERSIST OFF
+      await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
+        'isOnline': false,
+        'lastSeen': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'isOnline': false,
+      }, SetOptions(merge: true));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('You are Offline - not receiving jobs')),
       );
@@ -94,13 +105,20 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
         );
         return;
       }
-
       if (!mounted) return;
       setState(() => _isOnline = true);
+      // FIX: PERSIST ON
+      await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
+        'isOnline': true,
+        'lastSeen': FieldValue.serverTimestamp(),
+        'isOnlineSince': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'isOnline': true,
+      }, SetOptions(merge: true));
 
       await LocationService.startTracking(uid);
       _listenToLivePos();
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Colors.green,
@@ -114,13 +132,7 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
     _posSub?.cancel();
     _posSub = LocationService.getPositionStream().listen((pos) {
       if (!mounted) return;
-
-      // Ignore very bad accuracy
-      if (pos.accuracy > 100) {
-        return;
-      }
-
-      // LOCK TO FAKE - If we have fake, block real flips >300m within 30s
+      if (pos.accuracy > 100) return;
       if (_stablePos != null && _stablePos!.isMocked && !pos.isMocked) {
         double jump = Geolocator.distanceBetween(
           _stablePos!.latitude,
@@ -130,20 +142,16 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
         );
         if (jump > 300 &&
             _lastPosTime != null &&
-            DateTime.now().difference(_lastPosTime!).inSeconds < 30) {
+            DateTime.now().difference(_lastPosTime!).inSeconds < 30)
           return;
-        }
       }
-
       _stablePos = pos;
       _lastPosTime = DateTime.now();
       setState(() => currentPos = pos);
     });
   }
 
-  void disposeTracking() {
-    _posSub?.cancel();
-  }
+  void disposeTracking() => _posSub?.cancel();
 
   Future<void> loadMe() async {
     final result = await FundiHomeLogic.loadMe();
@@ -154,7 +162,6 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
         .where('assignedFundi', isEqualTo: uid)
         .where('status', isEqualTo: 'completed')
         .get();
-
     double sum = 0;
     for (var doc in snap.docs) {
       var data = doc.data();
@@ -175,7 +182,6 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
       );
       sum += payout.toDouble();
     }
-
     setState(() {
       me = result.me;
       completedJobs = snap.docs.length;
@@ -196,7 +202,6 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
       ).showSnackBar(const SnackBar(content: Text('Job ID missing')));
       return;
     }
-
     final uid = FirebaseAuth.instance.currentUser!.uid;
     bool canBid = await FundiPenaltyService.canFundiBid(uid);
     if (!canBid) {
@@ -212,14 +217,12 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
       }
       return;
     }
-
     if (!_isOnline) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Go Online first to bid for jobs')),
       );
       return;
     }
-
     await showDialog(
       context: context,
       builder: (_) => FundiBidDialog(jobId: jobId.toString(), jobData: job),
