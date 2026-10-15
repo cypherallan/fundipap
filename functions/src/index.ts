@@ -250,21 +250,28 @@ export const onNotificationPush = onDocumentCreated({ document: "notifications/{
 
 // BIDS = covers your FundiNotificationsPage + CustomerNotificationsSection
 export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId}", region: "europe-west1" }, async (event) => {
-    const before = event.data?.before?.data() as any; const after = event.data?.after?.data() as any;
+    const before = event.data?.before?.data() as any;
+    const after = event.data?.after?.data() as any;
     if (!after) return;
     const jobId = event.params.jobId;
-    const fundiId = after.fundiId; const clientId = after.customerId || after.clientId || after.customerId;
-    const oldS = (before?.status || "").toString(); const newS = (after?.status || "").toString();
+    const fundiId = after.fundiId;
+    const clientId = after.customerId || after.clientId;
+    const oldS = (before?.status || "").toString();
+    const newS = (after?.status || "").toString();
     const lastBy = (after.lastCounterBy || after.counterBy || "").toString();
+
+    // get transport from job
+    const jobSnap = await db().collection("jobs").doc(jobId).get();
+    const transport = (jobSnap.data() as any)?.transportFee || (jobSnap.data() as any)?.transport || 164;
 
     if (!before) {
         const tokens = await getFcmTokens(clientId);
-        await sendPush(tokens, "New bid received", `${after.fundiName || 'Fundi'} bid KES ${after.amount || after.bidAmount || after.price || ''} • ${after.jobTitle || ''}`, { jobId, type: "bid" });
+        await sendPush(tokens, "New bid received", `${after.fundiName || 'Fundi'} bid KES ${after.amount || ''} • ${after.jobTitle || ''}`, { jobId, type: "bid" });
         return;
     }
-    if ((newS === "countered" || newS === "client_counter" || newS === "countered_by_client" || newS === "countered_by_client") && lastBy !== fundiId && oldS !== newS) {
+    if ((newS === "countered" || newS === "client_counter") && lastBy !== fundiId && oldS !== newS) {
         const tokens = await getFcmTokens(fundiId);
-        await sendPush(tokens, `Client countered KES ${after.clientCounterAmount || after.lastCounterAmount || 0}`, `${after.jobTitle || 'Job'} • Tap to Accept/Counter`, { jobId, type: "client_counter" });
+        await sendPush(tokens, `Client countered KES ${after.clientCounterAmount || 0}`, `${after.jobTitle || 'Job'} • Tap to Accept/Counter`, { jobId, type: "client_counter" });
     }
     if (newS === "countered" && lastBy === fundiId && oldS !== newS) {
         const tokens = await getFcmTokens(clientId);
@@ -272,11 +279,13 @@ export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId
     }
     if (newS === "accepted" && oldS !== "accepted") {
         const tokens = await getFcmTokens(fundiId);
-        await sendPush(tokens, "Bid Accepted!", `${after.jobTitle || 'Job'} accepted`, { jobId, type: "accepted" });
+        const agreed = after.agreedPrice || after.amount || after.bidAmount || 0;
+        const escrowLock = Number(agreed) + Number(transport); // labor + transport
+        await sendPush(tokens, "Bid accepted", `Bid accepted. Waiting for client to lock escrow KES ${escrowLock} • Tap to view`, { jobId, type: "accepted", escrow: escrowLock.toString() });
     }
     if (newS.includes("counter_accepted_by_fundi") && !oldS.includes("counter_accepted_by_fundi")) {
         const tokens = await getFcmTokens(clientId);
-        await sendPush(tokens, `Your counter offer of KES ${after.agreedPrice || after.clientCounterAmount || ''} has been accepted`, `${after.fundiName || 'Fundi'} accepted • Tap to proceed`, { jobId, type: "counter_accepted_by_fundi" });
+        await sendPush(tokens, `Your counter offer of KES ${after.agreedPrice || ''} has been accepted`, `${after.fundiName || 'Fundi'} accepted • Tap to proceed`, { jobId, type: "counter_accepted_by_fundi" });
     }
 });
 
@@ -300,16 +309,28 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const fundiTokens = await getFcmTokens(fundiId);
     const clientTokens = await getFcmTokens(clientId);
 
-    // === LEAK-FREE CALC - single source of truth ===
+    // === LEAK-FREE CALC - FIXED ===
     const agreed = Number(after.agreedPrice || after.clientCounterAmount || after.lastCounterAmount || after.laborCost || 0);
-    const transport = Number(after.transportFee || 0);
-    const fundiSees = agreed + transport; // what fundi should see - NO client fee
-    const fundiFee = Number((after as any).fundiAppFee || 0) || Math.round(agreed * 0.05);
-    const fundiReceives = fundiSees - fundiFee;
-    const clientPays = Number((after as any).totalClientPays || after.escrowAmount || after.totalCost || (fundiSees + Math.round(fundiSees * 0.05)));
+    const transport = Number(after.transportFee || after.transport || 0);
+    const fundiSees = agreed + transport;
 
-    console.log(`DEBUG ${jobId} ${oldS}->${newS} escrow ${oldEscStatus}->${newEscStatus} agreed ${agreed} transport ${transport} fundiSees ${fundiSees} fundiReceives ${fundiReceives} clientPays ${clientPays}`);
+    // RECALC commission from USER not job - fixes 5200 bug
+    const fundiSnap = await db().collection("users").doc(fundiId).get();
+    const u = fundiSnap.data() as any || {};
+    let fundiPct = Number(u.fundiCommissionPct ?? 5);
+    if (u.isTrialGold) fundiPct = 5;
+    else if (u.badgeLevel === "gold") fundiPct = 5;
+    else if (u.badgeLevel === "silver") fundiPct = 8;
+    else if (u.badgeLevel === "bronze") fundiPct = 10;
+    else if (u.badgeLevel === "none") fundiPct = 15;
+    else fundiPct = 5;
 
+    const fundiFee = Math.round(agreed * fundiPct / 100);
+    const clientFee = Math.round(agreed * 0.05);
+    const fundiReceives = agreed - fundiFee + transport;
+    const clientPays = fundiSees + clientFee;
+
+    console.log(`RELEASE FIX ${jobId} badge=${u.badgeLevel} trial=${u.isTrialGold} pct=${fundiPct}% agreed ${agreed} fundiReceives ${fundiReceives} clientPays ${clientPays}`);
     // PRIORITY 1: ESCROW LOCKED
     if ((newEscHeld && !oldEscHeld) || (newEscStatus === "held" && oldEscStatus !== "held")) {
         const extraRaw = (after as any).renegotiation?.extraToLock || (after as any).extraToLock || (after as any).extraTopupToLock || 0;
@@ -329,7 +350,6 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     }
 
     if ((newS === "assigned" || newS === "confirmed") && oldS !== newS && !newEscHeld && newEscStatus !== "held") {
-        await sendPush(fundiTokens, "Bid Accepted!", `${title} accepted • Waiting for client to lock escrow KES ${fundiSees}`, { jobId, type: "accepted_waiting_escrow" });
         await sendPush(clientTokens, `Fundi accepted • Lock KES ${clientPays} to start`, `${title} • Tap to pay escrow`, { jobId, type: "lock_escrow" });
     }
     if ((newS === "travelling" || newS === "on_the_way") && oldS !== newS) {
@@ -366,8 +386,7 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const wasReleased = oldEscStatus === "released" || before?.escrowReleased === true || before?.escrowStatus === "released";
     const nowReleased = newEscStatus === "released" || after?.escrowReleased === true || after?.escrowStatus === "released";
     if (!wasReleased && nowReleased) {
-        console.log(`RELEASE ${jobId}: clientPays ${clientPays} fundiReceives ${fundiReceives}`);
-        await sendPush(fundiTokens, `Client released KES ${fundiReceives}`, `${title} • Tap to view receipt`, { jobId, type: "released", clientPays, fundiReceives });
+        await sendPush(fundiTokens, `Client released KES ${fundiReceives}`, `${title} • Tap to view receipt`, { jobId, type: "released" });
         await sendPush(clientTokens, `You released KES ${clientPays} • Completed`, `${title}`, { jobId, type: "released" });
     }
 });

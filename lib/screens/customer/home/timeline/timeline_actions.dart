@@ -227,18 +227,30 @@ class TimelineActions {
       var j = snap.data() as Map<String, dynamic>;
       var reneg = j['renegotiation'] as Map<String, dynamic>?;
 
+      // FIXED - recalc from FUNDI badge, not stale job doc
+      var fundiSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(fundiId)
+          .get();
+      var fundiData = fundiSnap.data() ?? {};
+      int fundiPct = 5;
+      if (fundiData['isTrialGold'] == true)
+        fundiPct = 5;
+      else if (fundiData['badgeLevel'] == 'gold')
+        fundiPct = 5;
+      else if (fundiData['badgeLevel'] == 'silver')
+        fundiPct = 8;
+      else if (fundiData['badgeLevel'] == 'bronze')
+        fundiPct = 10;
+      else if (fundiData['badgeLevel'] == 'none')
+        fundiPct = 15;
+
       int labour = toInt(j['laborCost'] ?? j['agreedPrice'] ?? 0);
       int transport = toInt(j['transportFee'] ?? 100);
-      int clientAppFee = toInt(j['clientAppFee'] ?? (labour * 0.05).round());
-      int fundiAppFee = toInt(j['fundiAppFee'] ?? (labour * 0.05).round());
-      int totalClient = toInt(
-        j['totalClientPays'] ??
-            j['totalCost'] ??
-            labour + transport + clientAppFee,
-      );
-      int fundiReceives = toInt(
-        j['fundiReceives'] ?? labour - fundiAppFee + transport,
-      );
+      int clientAppFee = (labour * 0.05).round();
+      int fundiAppFee = (labour * fundiPct / 100).round();
+      int totalClient = labour + transport + clientAppFee;
+      int fundiReceives = labour - fundiAppFee + transport;
 
       if (reneg != null && reneg['newLaborTotal'] != null) {
         int newLabour = toInt(reneg['newLaborTotal']);
@@ -246,10 +258,8 @@ class TimelineActions {
           reneg['newTotalClientPays'] ??
               newLabour + transport + (newLabour * 0.05).round(),
         );
-        int newFundiReceives = toInt(
-          reneg['newFundiReceives'] ??
-              newLabour - (newLabour * 0.05).round() + transport,
-        );
+        int newFundiReceives =
+            newLabour - (newLabour * fundiPct / 100).round() + transport;
         totalClient = newTotalClient > 0 ? newTotalClient : totalClient;
         fundiReceives = newFundiReceives > 0 ? newFundiReceives : fundiReceives;
       }
@@ -299,9 +309,9 @@ class TimelineActions {
           'toRole': 'fundi',
           'type': 'escrow_released',
           'jobId': jobId,
-          'title': 'Client released KES $totalClient',
+          'title': 'Client released KES $fundiReceives',
           'body':
-              'Client confirmed job done and released KES $totalClient to you - Tap to view receipt',
+              'Client confirmed job done and released KES $fundiReceives to you - Tap to view receipt',
           'isRead': false,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -312,8 +322,9 @@ class TimelineActions {
             .add({
               'jobId': jobId,
               'type': 'escrow_released',
-              'title': 'Client released KES $totalClient - Tap to view receipt',
-              'amount': totalClient,
+              'title':
+                  'Client released KES $fundiReceives - Tap to view receipt',
+              'amount': fundiReceives,
               'isRead': false,
               'createdAt': FieldValue.serverTimestamp(),
             });

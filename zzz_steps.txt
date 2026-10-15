@@ -1,0 +1,39 @@
+Locked for trial Gold = 5% fundi / 5% client. Transport 164 is paid once, goes 100% to fundi.
+
+Fundi receives = Labor - 5% + 164
+
+Client pays = Labor + 5% + 164
+
+All 6 paths:
+1. Fundi 6000 → Client accepts 6000 → NO extra
+
+Labor: 6000
+Commission: 300
+Fundi gets: 5700 + 164 = 5,864 KES
+2. Fundi 6000 → Client accepts → Fundi asks +2000 → Client accepts 2000
+
+Labor: 6000 + 2000 = 8000
+Commission: 400
+Fundi gets: 7600 + 164 = 7,764 KES
+3. Fundi 6000 → Client accepts → Fundi asks +2000 → Client counters 1000
+
+Labor: 6000 + 1000 = 7000
+Commission: 350
+Fundi gets: 6650 + 164 = 6,814 KES
+4. Fundi 6000 → Client counters 5000 → Fundi accepts → NO extra
+
+Labor: 5000
+Commission: 250
+Fundi gets: 4750 + 164 = 4,914 KES
+5. Fundi 6000 → Client counters 5000 → Fundi asks +2000 → Client accepts
+
+Labor: 5000 + 2000 = 7000
+Commission: 350
+Fundi gets: 6650 + 164 = 6,814 KES (same as #3)
+6. Fundi 6000 → Client counters 5000 → Fundi asks +2000 → Client counters 1000
+
+Labor: 5000 + 1000 = 6000
+Commission: 300
+Fundi gets: 5700 + 164 = 5,864 KES (same as #1)
+If you deduct commission on transport too (labor+transport)*0.95, subtract 8 KES from each:
+1=5,856 / 2=7,756 / 3=6,806 / 4=4,906 / 5=6,806 / 6=5,856
