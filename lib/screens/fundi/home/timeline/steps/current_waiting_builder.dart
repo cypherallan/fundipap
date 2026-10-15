@@ -34,14 +34,20 @@ Widget? buildCurrentWaiting({
   String lowStat = (job['status'] ?? '').toString().toLowerCase();
   String lowPhase = (renego?['currentPhase'] ?? '').toString().toLowerCase();
   bool hasParts = hasPartsInRenego(renego);
-  int newLabour = toInt(job['laborCost'] ?? job['agreedPrice'] ?? 6000);
-  int totalLocked = toInt(
-    job['totalClientPays'] ??
-        job['escrowAmount'] ??
-        fundiSees + toInt(job['clientAppFee'] ?? 0),
-  );
-  int fundiReceivesCalc = toInt(
-    job['fundiReceives'] ?? newLabour + toInt(job['transportFee'] ?? 0),
+
+  // FIXED CALC - correct, no client total leak
+  int labour = toInt(job['laborCost'] ?? job['agreedPrice'] ?? job['price'] ?? 0);
+  int transport = toInt(job['transportFee'] ?? 0);
+  int fundiFee = toInt(job['fundiAppFee'] ?? (labour * 0.10).round());
+  int fundiReceives = toInt(job['fundiReceives'] ?? labour - fundiFee + transport);
+  
+  int extraLabourToShow = toInt(
+    renego?['acceptedCounterExtraLabor'] ??
+        renego?['extraLabor'] ??
+        renego?['counterExtraLabor'] ??
+        renego?['extraLaborAmount'] ??
+        job['extraLaborAmount'] ??
+        0,
   );
 
   // FIX NO PARTS: Skip materials waiting, show START JOB / New Price directly
@@ -49,16 +55,6 @@ Widget? buildCurrentWaiting({
           lowPhase == 'waiting_for_client_to_buy_parts' ||
           lowStat == 'waiting_for_client_to_buy_parts') &&
       !hasParts) {
-    // FIX: Show actual extra labour without fee - handles both counter and no-counter
-    int extraLabourToShow = toInt(
-      renego?['acceptedCounterExtraLabor'] ??
-          renego?['extraLabor'] ??
-          renego?['counterExtraLabor'] ??
-          renego?['extraLaborAmount'] ??
-          job['extraLaborAmount'] ??
-          0,
-    );
-
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -75,7 +71,9 @@ Widget? buildCurrentWaiting({
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Site visited - Ready to start - KES $totalLocked locked (Labour $newLabour)',
+                  extraLabourToShow > 0
+                      ? 'Extra KES $extraLabourToShow approved - Continue with job'
+                      : 'Site visited - Ready to start',
                   style: GoogleFonts.montserrat(
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
@@ -87,7 +85,9 @@ Widget? buildCurrentWaiting({
           ),
           const SizedBox(height: 6),
           Text(
-            'Labour KES $newLabour (extra $extraLabourToShow) + Transport locked. Total KES $totalLocked secured. Tap START JOB.',
+            extraLabourToShow > 0
+                ? 'New labour KES $labour to earn (extra $extraLabourToShow). Tap START JOB.'
+                : 'Labour KES $labour to earn. Tap START JOB.',
             style: GoogleFonts.inter(fontSize: 11),
           ),
           const SizedBox(height: 12),
@@ -147,7 +147,7 @@ Widget? buildCurrentWaiting({
     return OrangeAnimatedWaitingCard(
       title: 'Job Completed - Waiting for $clientName to confirm',
       message:
-          'You marked $jobTitle as completed. Waiting for $clientName to confirm and release payment.',
+          'You marked $jobTitle as completed. Waiting for $clientName to confirm and release KES $fundiReceives.',
     );
   } else if (lowStat == 'in_progress' ||
       lowStat == 'fundi_working' ||
@@ -158,9 +158,9 @@ Widget? buildCurrentWaiting({
       children: [
         OrangeAnimatedWaitingCard(
           title:
-              'You are working - Labour KES $newLabour - Will receive KES ${toInt(job['fundiReceives'] ?? fundiReceivesCalc)}',
+              'You are working - Labour KES $labour - Will receive KES $fundiReceives',
           message:
-              'You are marked job as completed. waiting for client to confirmSS',
+              'You are working on $jobTitle. Complete the job to request payment release.',
         ),
         const SizedBox(height: 10),
         SizedBox(
@@ -209,8 +209,9 @@ Widget? buildCurrentWaiting({
       hasParts) {
     return OrangeAnimatedWaitingCard(
       title: 'Waiting for client to buy materials',
-      message:
-          'Client locked extra labour KES ${toInt(renego?['acceptedCounterExtraLabor'] ?? 1000)} (counter ${toInt(renego?['counterExtraLabor'] ?? 1000)} accepted). Total locked KES ${toInt(job['agreedPrice'] ?? 6000)} labour. Waiting for materials.',
+      message: extraLabourToShow > 0
+          ? 'Client approved extra KES $extraLabourToShow. Waiting for materials to start.'
+          : 'Waiting for client to buy materials.',
     );
   }
 
@@ -363,9 +364,10 @@ Widget? buildCurrentWaiting({
                               renego['oldTransportFee'] ??
                               100,
                         );
-                        int newLabour = currentAgreed + approvedExtra;
-                        int newTotalPay =
-                            newLabour + oldTrans + (newLabour * 0.05).round();
+                        int newLabourTotal = currentAgreed + approvedExtra;
+                        int newTotalPay = newLabourTotal +
+                            oldTrans +
+                            (newLabourTotal * 0.05).round();
                         await FirebaseFirestore.instance
                             .collection('jobs')
                             .doc(jobId)
@@ -385,10 +387,10 @@ Widget? buildCurrentWaiting({
                                   (approvedExtra * 0.05).round(),
                               'renegotiation.requested': false,
                               'renegotiation.oldLabor': currentAgreed,
-                              'renegotiation.newLaborTotal': newLabour,
+                              'renegotiation.newLaborTotal': newLabourTotal,
                               'renegotiation.newTotalClientPays': newTotalPay,
-                              'laborCost': newLabour,
-                              'agreedPrice': newLabour,
+                              'laborCost': newLabourTotal,
+                              'agreedPrice': newLabourTotal,
                               'totalClientPays': newTotalPay,
                               'extraTopupAmount': approvedExtra,
                               'extraTopupToLock': approvedExtraToLock,
@@ -508,7 +510,6 @@ Widget? buildCurrentWaiting({
             icon: const Icon(Icons.navigation),
             label: const Text('START SITE VISIT'),
             onPressed: () async {
-              // FIXED: same as OPEN TRACKING - use VisitCustomerScreen directly
               await FirebaseFirestore.instance
                   .collection('jobs')
                   .doc(jobId)
@@ -565,7 +566,7 @@ Widget? buildCurrentWaiting({
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Extra locked - Ready to start work - Total KES $totalLocked',
+                    'Site visited - Ready to start work',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w800,
                       fontSize: 12,
@@ -577,7 +578,7 @@ Widget? buildCurrentWaiting({
             ),
             const SizedBox(height: 6),
             Text(
-              'You visited site. Labour KES $newLabour • Total KES $totalLocked secured. Tap START JOB.',
+              'Labour KES $labour • You will receive KES $fundiReceives. Tap START JOB.',
               style: GoogleFonts.inter(fontSize: 11),
             ),
             const SizedBox(height: 12),
@@ -605,8 +606,8 @@ Widget? buildCurrentWaiting({
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) =>
-                            FundiRequestNewPriceScreen(jobId: jobId, job: job),
+                        builder: (_) => FundiRequestNewPriceScreen(
+                            jobId: jobId, job: job),
                       ),
                     ),
                     child: const Text('New Price'),
@@ -634,7 +635,7 @@ Widget? buildCurrentWaiting({
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'You are working - Labour KES $newLabour - Total KES $totalLocked',
+                    'You are working - Labour KES $labour - You will receive KES $fundiReceives',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w800,
                       fontSize: 12,
@@ -674,7 +675,7 @@ Widget? buildCurrentWaiting({
       return OrangeAnimatedWaitingCard(
         title: 'Job Completed - Waiting for $clientName to confirm',
         message:
-            'You marked $jobTitle as completed. Waiting for $clientName to confirm and release payment.',
+            'You marked $jobTitle as completed. Waiting for $clientName to confirm and release KES $fundiReceives.',
       );
   }
 }
