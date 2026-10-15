@@ -302,51 +302,60 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const newEscStatus = (after?.escrowStatus || "").toLowerCase();
     const oldEscStatus = (before?.escrowStatus || "").toLowerCase();
 
-    console.log(`DEBUG ${jobId} status ${oldS}->${newS} escrow ${oldEscStatus}->${newEscStatus} released ${before?.escrowReleased}->${after?.escrowReleased} fundi ${fundiId} agreed ${after.agreedPrice} labor ${after.laborCost} counter ${after.clientCounterAmount} escrowAmt ${after.escrowAmount}`);
-
     const fundiTokens = await getFcmTokens(fundiId);
     const clientTokens = await getFcmTokens(clientId);
-    console.log(`TOKENS fundi ${fundiId} count ${fundiTokens.length} client ${clientId} count ${clientTokens.length}`);
 
-    // PRIORITY 1: ESCROW LOCKED - now detects extra vs first lock
+    // === LEAK-FREE CALC - single source of truth ===
+    const agreed = Number(after.agreedPrice || after.clientCounterAmount || after.lastCounterAmount || after.laborCost || 0);
+    const transport = Number(after.transportFee || 0);
+    const fundiSees = agreed + transport; // what fundi should see - NO client fee
+    const fundiFee = Number((after as any).fundiAppFee || 0) || Math.round(agreed * 0.05);
+    const fundiReceives = fundiSees - fundiFee;
+    const clientPays = Number((after as any).totalClientPays || after.escrowAmount || after.totalCost || (fundiSees + Math.round(fundiSees * 0.05)));
+
+    console.log(`DEBUG ${jobId} ${oldS}->${newS} escrow ${oldEscStatus}->${newEscStatus} agreed ${agreed} transport ${transport} fundiSees ${fundiSees} fundiReceives ${fundiReceives} clientPays ${clientPays}`);
+
+    // PRIORITY 1: ESCROW LOCKED
     if ((newEscHeld && !oldEscHeld) || (newEscStatus === "held" && oldEscStatus !== "held")) {
-        const amount = after.escrowAmount || after.agreedPrice || after.totalCost || '';
-        const extra = (after as any).renegotiation?.extraToLock || (after as any).extraToLock || (after as any).extraTopupToLock || 0;
+        const extraRaw = (after as any).renegotiation?.extraToLock || (after as any).extraToLock || (after as any).extraTopupToLock || 0;
+        const extra = Number(extraRaw);
         const beforeStatus = (before?.status || "").toLowerCase();
-        const isExtraLock = extra > 0 || beforeStatus.includes("awaiting_extra") || beforeStatus.includes("in_progress") || beforeStatus.includes("site_visit") || beforeStatus.includes("site_visited");
+        const isExtraLock = extra > 0 || beforeStatus.includes("awaiting_extra") || beforeStatus.includes("in_progress") || beforeStatus.includes("site_visit");
 
         if (isExtraLock) {
-            const display = extra || amount; // 1000, not 1050 if you want to hide fee use extra
-            await sendPush(fundiTokens, `Extra KES ${display} locked - Continue job`, `${title} • Resume work`, { jobId, type: "extra_escrow_locked" });
-            await sendPush(clientTokens, `Extra KES ${display} locked • Fundi resuming`, `${title} • Continue job`, { jobId, type: "extra_escrow_locked" });
+            const extraClientPays = extra + Math.round(extra * 0.05); // client sees extra + fee
+            await sendPush(fundiTokens, `Extra KES ${extra} locked - Continue job`, `${title} • Resume work`, { jobId, type: "extra_escrow_locked" });
+            await sendPush(clientTokens, `Extra KES ${extraClientPays} locked • Fundi resuming`, `${title} • Continue job`, { jobId, type: "extra_escrow_locked" });
         } else {
-            await sendPush(fundiTokens, `Escrow locked KES ${amount} - Start site visit now`, `${title} • Tap to travel`, { jobId, type: "escrow_locked" });
-            await sendPush(clientTokens, `Escrow locked KES ${amount} • Waiting for fundi`, `${title} • ${after.assignedFundiName || 'Fundi'} has NOT started travelling`, { jobId, type: "escrow_locked" });
+            await sendPush(fundiTokens, `Escrow locked KES ${fundiSees} - Start site visit now`, `${title} • Tap to travel`, { jobId, type: "escrow_locked" });
+            await sendPush(clientTokens, `Escrow locked KES ${clientPays} • Waiting for fundi`, `${title} • ${after.assignedFundiName || 'Fundi'} has NOT started travelling`, { jobId, type: "escrow_locked" });
         }
         return;
     }
 
     if ((newS === "assigned" || newS === "confirmed") && oldS !== newS && !newEscHeld && newEscStatus !== "held") {
-        await sendPush(fundiTokens, "Bid Accepted!", `${title} accepted • Waiting for client to lock escrow KES ${after.agreedPrice || after.escrowAmount || ''}`, { jobId, type: "accepted_waiting_escrow" });
-        await sendPush(clientTokens, `Fundi accepted • Lock KES ${after.totalCost || after.escrowAmount || after.agreedPrice || ''} to start`, `${title} • Tap to pay escrow`, { jobId, type: "lock_escrow" });
+        await sendPush(fundiTokens, "Bid Accepted!", `${title} accepted • Waiting for client to lock escrow KES ${fundiSees}`, { jobId, type: "accepted_waiting_escrow" });
+        await sendPush(clientTokens, `Fundi accepted • Lock KES ${clientPays} to start`, `${title} • Tap to pay escrow`, { jobId, type: "lock_escrow" });
     }
     if ((newS === "travelling" || newS === "on_the_way") && oldS !== newS) {
         await sendPush(clientTokens, "Fundi is on the way", `${after.assignedFundiName || 'Fundi'} is travelling • Tracking live`, { jobId, type: "travelling" });
     }
     if ((newS.includes("site_visit") || newS === "site_visited") && !oldS.includes("site_visit")) {
-        await sendPush(fundiTokens, `Waiting for you to start work KES ${after.agreedPrice || ''}`, `${title} • Tap START JOB`, { jobId, type: "site_visited" });
+        await sendPush(fundiTokens, `Waiting for you to start work KES ${fundiSees}`, `${title} • Tap START JOB`, { jobId, type: "site_visited" });
         await sendPush(clientTokens, "Fundi arrived on site", `${after.assignedFundiName || 'Fundi'} • Waiting to start work`, { jobId, type: "site_visited" });
     }
     if ((newS === "in_progress" || newS === "fundi_working") && oldS !== newS) {
         await sendPush(clientTokens, "Fundi is working", `${title} in progress`, { jobId, type: "working" });
     }
     if ((newS === "pending_completion" || newS === "job_completed") && oldS !== newS) {
-        await sendPush(clientTokens, `Job Completed - Confirm & release KES ${after.totalClientPays || after.escrowAmount || ''}`, `${title} • Tap to confirm`, { jobId, type: "job_completed" });
+        await sendPush(clientTokens, `Job Completed - Confirm & release KES ${clientPays}`, `${title} • Tap to confirm`, { jobId, type: "job_completed" });
         await sendPush(fundiTokens, "Job Completed - Waiting for client", `${title} • Waiting for client to confirm`, { jobId, type: "job_completed" });
     }
     if (newS.includes("awaiting_extra") && !oldS.includes("awaiting_extra")) {
-        const extra = after.renegotiation?.extraToLock || after.extraToLock || after.extraTopupToLock || 0;
-        await sendPush(clientTokens, `Lock extra KES ${extra} in escrow`, `${title} • Fundi accepted`, { jobId, type: "awaiting_extra_escrow" });
+        const extraRaw = after.renegotiation?.extraToLock || after.extraToLock || after.extraTopupToLock || 0;
+        const extra = Number(extraRaw);
+        const extraClientPays = extra + Math.round(extra * 0.05);
+        await sendPush(clientTokens, `Lock extra KES ${extraClientPays} in escrow`, `${title} • Fundi accepted`, { jobId, type: "awaiting_extra_escrow" });
         await sendPush(fundiTokens, `Waiting for client to lock extra KES ${extra}`, `${title}`, { jobId, type: "awaiting_extra_escrow" });
     }
     if (newS.includes("waiting_for_client_to_buy_parts") && !oldS.includes("waiting_for_client_to_buy_parts")) {
@@ -362,14 +371,8 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const wasReleased = oldEscStatus === "released" || before?.escrowReleased === true || before?.escrowStatus === "released";
     const nowReleased = newEscStatus === "released" || after?.escrowReleased === true || after?.escrowStatus === "released";
     if (!wasReleased && nowReleased) {
-        // FIX for counter: agreedPrice is truth (5000), not laborCost (6000)
-        const agreed = Number(after.agreedPrice || after.clientCounterAmount || after.lastCounterAmount || after.laborCost || after.totalClientPays || 0);
-        const transport = Number(after.transportFee || 0);
-        const fundiFee = Number((after as any).fundiAppFee || 0) || Math.round(agreed * 0.05);
-        const clientPays = Number((after as any).totalClientPays || after.escrowAmount || after.totalReleasedAmount || agreed);
-        const fundiSees = agreed + transport;
-        const fundiReceives = fundiSees - fundiFee;
-        console.log(`RELEASE TRIGGER ${jobId}: was ${oldEscStatus}->${newEscStatus} clientPays ${clientPays} agreed ${agreed} fundiReceives ${fundiReceives} tokens ${fundiTokens.length}`);
-        await sendPush(fundiTokens, `Client released KES ${fundiReceives || clientPays}`, `${title} • Tap to view receipt of payment`, { jobId, type: "released", clientPays, fundiReceives });
+        console.log(`RELEASE ${jobId}: clientPays ${clientPays} fundiReceives ${fundiReceives}`);
+        await sendPush(fundiTokens, `Client released KES ${fundiReceives}`, `${title} • Tap to view receipt`, { jobId, type: "released", clientPays, fundiReceives });
+        await sendPush(clientTokens, `You released KES ${clientPays} • Completed`, `${title}`, { jobId, type: "released" });
     }
 });
