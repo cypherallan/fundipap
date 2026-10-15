@@ -304,17 +304,6 @@ class TimelineActions {
       } catch (_) {}
 
       try {
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'toUserId': fundiId,
-          'toRole': 'fundi',
-          'type': 'escrow_released',
-          'jobId': jobId,
-          'title': 'Client released KES $fundiReceives',
-          'body':
-              'Client confirmed job done and released KES $fundiReceives to you - Tap to view receipt',
-          'isRead': false,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
         await FirebaseFirestore.instance
             .collection('fundis')
             .doc(fundiId)
