@@ -82,6 +82,8 @@ mixin ActionsMixin
             'customerHasUnread': false,
             'updatedAt': FieldValue.serverTimestamp(),
           });
+      if (!mounted) return;
+      Navigator.pop(context);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -154,14 +156,12 @@ mixin ActionsMixin
             'totalCost': alreadyLockedCorrect,
             'escrowAmount': alreadyLockedCorrect,
             'fundiReceives': oldFundiReceives,
-
             'extraLaborAmount': extraLabor,
             'extraEscrowAmount': extraToLock,
             'extraToLock': extraToLock,
             'extraEscrowStatus': 'pending',
             'clientNeedsToTopup': true,
             'escrowStatus': 'pending_topup',
-
             'status': 'awaiting_extra_escrow',
             'renegotiation.status':
                 'accepted_fundi_buys_at_client_risk_pending_extra_escrow',
@@ -180,68 +180,8 @@ mixin ActionsMixin
             'fundiHasUnread': true,
             'updatedAt': FieldValue.serverTimestamp(),
           });
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
-  }
-
-  Future<void> _payExtraEscrow(
-    Map<String, dynamic> job,
-    int alreadyLocked,
-    int extraToLock,
-    String whoBuysVal,
-  ) async {
-    setState(() => loading = true);
-    try {
-      var snap = await FirebaseFirestore.instance
-          .collection('jobs')
-          .doc(widget.jobId)
-          .get();
-      var f = snap.data() ?? job;
-      var r = f['renegotiation'] as Map<String, dynamic>? ?? {};
-
-      int oldTotal = _toInt(
-        r['oldTotalClientPays'] ??
-            f['totalCost'] ??
-            f['totalClientPays'] ??
-            6450,
-      );
-      int extraLab = _toInt(r['extraLabor'] ?? f['extraLaborAmount'] ?? 2000);
-      int extraFee = (extraLab * 0.05).round();
-      int extra = extraLab + extraFee; // 2100
-      int newTotal = _toInt(
-        r['newTotalClientPays'] ?? r['newTotal'] ?? oldTotal + extra,
-      ); // 8550
-      int newLabor = _toInt(r['newLabor'] ?? r['newLaborTotal'] ?? 8000);
-      int transport = _toInt(f['transportFee'] ?? 150);
-      int newFee = (newLabor * 0.05).round();
-
-      await FirebaseFirestore.instance
-          .collection('jobs')
-          .doc(widget.jobId)
-          .update({
-            'escrowAmount': newTotal,
-            'totalCost': newTotal,
-            'totalClientPays': newTotal,
-            'agreedPrice': newLabor,
-            'laborCost': newLabor,
-            'clientAppFee': newFee,
-            'fundiAppFee': newFee,
-            'fundiReceives': newLabor - newFee + transport,
-            'extraToLock': 0,
-            'extraLaborAmount': 0,
-            'extraEscrowAmount': 0,
-            'extraClientAppFee': 0,
-            'extraEscrowStatus': 'paid',
-            'escrowStatus': 'held',
-            'clientNeedsToTopup': false,
-            'renegotiation.extraLocked': true,
-            'renegotiation.extraToLock': 0,
-            'status': whoBuysVal == 'client'
-                ? 'waiting_for_client_to_buy_parts'
-                : 'fundi_buying_parts',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+      if (!mounted) return;
+      Navigator.pop(context);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -292,7 +232,6 @@ mixin ActionsMixin
             'renegotiation.counteredAt': FieldValue.serverTimestamp(),
             'renegotiation.counteredExtraRequested': extraRequested,
             'fundiHasUnread': true,
-            'customerHasUnread': true,
             'customerUnreadType': 'renegotiation_countered',
             'updatedAt': FieldValue.serverTimestamp(),
           });

@@ -6,6 +6,7 @@ mixin FooterSectionMixin
         FieldsMixin,
         HelpersMixin,
         ActionsMixin {
+  // FIXED - No more LOCK button here, only redirect to timeline
   Widget buildNeedsExtraEscrowSection(
     Map<String, dynamic> job,
     int alreadyLockedCorrect,
@@ -19,30 +20,26 @@ mixin FooterSectionMixin
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.red.shade50,
+        color: Colors.green.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red, width: 1.5),
+        border: Border.all(color: Colors.green, width: 1.5),
       ),
       child: Column(
         children: [
-          Icon(Icons.lock, color: Colors.red.shade700, size: 32),
+          Icon(Icons.check_circle, color: Colors.green.shade700, size: 32),
           const SizedBox(height: 8),
           Text(
-            isCounterAccepted
-                ? 'Fundi accepted your counter KES $acceptedCounterLabour - Lock Extra KES $extraToLock'
-                : 'Lock Extra KES $extraToLock in Escrow',
+            'Extra KES $extraToLock Approved!',
             style: GoogleFonts.montserrat(
               fontWeight: FontWeight.w800,
               fontSize: 14,
-              color: Colors.red.shade800,
+              color: Colors.green.shade800,
             ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 6),
           Text(
-            isCounterAccepted
-                ? 'Fundi accepted your counter of KES $acceptedCounterLabour (was KES ${_toInt(reneg['extraLabor'] ?? extraLabor)}). You already locked KES $alreadyLockedCorrect. Lock extra KES $extraToLock to reach KES $newTotal before fundi starts.'
-                : 'You already locked KES $alreadyLockedCorrect. Lock extra KES $extraToLock to reach KES $newTotal before fundi starts.',
+            'You already locked KES $alreadyLockedCorrect. Go to timeline to lock extra KES $extraToLock and reach KES $newTotal.',
             style: GoogleFonts.inter(fontSize: 11),
             textAlign: TextAlign.center,
           ),
@@ -51,20 +48,17 @@ mixin FooterSectionMixin
             width: double.infinity,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
+                backgroundColor: Colors.black,
                 foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 52),
               ),
-              onPressed: loading
-                  ? null
-                  : () => _payExtraEscrow(
-                      job,
-                      alreadyLockedCorrect,
-                      extraToLock,
-                      whoBuys,
-                    ),
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                ); // Back to timeline where real LOCK button lives
+              },
               child: Text(
-                loading ? 'Processing...' : 'LOCK KES $extraToLock NOW',
+                'GO TO TIMELINE TO LOCK KES $extraToLock',
                 style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
               ),
             ),
@@ -74,6 +68,7 @@ mixin FooterSectionMixin
     );
   }
 
+  // Keep buildPendingActionsSection and buildStatusDoneSection SAME as before
   Widget buildPendingActionsSection(
     Map<String, dynamic> job,
     int newLabor,
@@ -149,7 +144,7 @@ mixin FooterSectionMixin
                       oldTransport,
                     ),
               child: Text(
-                'Accept New Labour KES $extraLabor - Lock Extra KES $extraToLock',
+                'Accept New Labour KES $extraLabor',
                 style: GoogleFonts.montserrat(
                   fontWeight: FontWeight.w800,
                   fontSize: 11,
@@ -180,7 +175,7 @@ mixin FooterSectionMixin
                 child: Text(
                   isMaterialsOnly
                       ? 'Accept Materials - I will buy myself\nTotal materials KES $partsEstimateTotal'
-                      : 'Accept - Pay extra KES $extraToLock to escrow + Buy parts yourself\nTotal will be KES $newTotal',
+                      : 'Accept - I will buy parts myself',
                   style: GoogleFonts.montserrat(
                     fontWeight: FontWeight.w800,
                     fontSize: 11,
@@ -210,7 +205,7 @@ mixin FooterSectionMixin
                 child: Text(
                   isMaterialsOnly
                       ? 'Accept - Send fundi to buy materials\nTotal materials KES $partsEstimateTotal to Till $tillNumber'
-                      : 'Accept - Lock KES $extraToLock + Pay shop\nTotal KES $newTotal',
+                      : 'Accept - Send fundi to buy',
                   style: GoogleFonts.montserrat(
                     fontWeight: FontWeight.w800,
                     fontSize: 11,
@@ -240,23 +235,9 @@ mixin FooterSectionMixin
                               decoration: InputDecoration(
                                 labelText:
                                     'Your extra labour offer (e.g. 1000)',
-                                helperText:
-                                    'Extra + 5% = total extra to lock. Transport already locked',
                               ),
                               onChanged: (_) => setState(() {}),
                             ),
-                            if (counterPriceCtrl.text.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(
-                                  'Extra to lock: KES ${_toInt(counterPriceCtrl.text) + (_toInt(counterPriceCtrl.text) * 0.05).round()}',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 10,
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
                             TextField(
                               controller: counterReasonCtrl,
                               decoration: const InputDecoration(

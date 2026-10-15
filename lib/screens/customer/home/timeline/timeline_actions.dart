@@ -17,43 +17,28 @@ class TimelineActions {
 
   static Future<void> payExtraEscrow(
     String jobId,
-    int extra,
+    int extraToLock,
     int newTotal,
-    String currentRenegStatus,
+    String whoBuys,
   ) async {
-    String finalStatus = currentRenegStatus.replaceAll(
-      '_pending_extra_escrow',
-      '',
-    );
     final jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
-    final snap = await jobRef.get();
-    String whoBuys = 'client';
-    if (snap.exists) {
-      var data = snap.data() as Map<String, dynamic>;
-      var reneg = data['renegotiation'] as Map<String, dynamic>?;
-      whoBuys =
-          (reneg?['whoBuysParts'] ??
-                  (finalStatus.contains('client_buys') ? 'client' : 'client'))
-              .toString();
-    }
-    bool clientBuys = whoBuys == 'client';
 
+    bool clientBuys = whoBuys == 'client';
     await jobRef.update({
       'escrowStatus': 'held',
-      'escrowAmount': newTotal,
+      'escrowAmount': newTotal, // 6400 not 1050
       'extraEscrowStatus': 'paid',
       'extraEscrowPaidAt': FieldValue.serverTimestamp(),
-      'extraToLock': extra,
-      'renegotiation.extraToLock': extra,
+      'extraToLock': extraToLock, // 1050
+      'renegotiation.extraToLock': extraToLock,
       'status': clientBuys
           ? 'waiting_for_client_to_buy_parts'
           : 'fundi_buying_parts',
-      'renegotiation.status': finalStatus,
+      'renegotiation.status': 'extra_locked',
       'renegotiation.requested': false,
       'renegotiation.currentPhase': clientBuys
           ? 'waiting_for_client_to_buy_parts'
           : 'fundi_buying_parts',
-      'renegotiation.whoBuysParts': whoBuys,
       'fundiHasUnread': true,
       'customerHasUnread': false,
       'updatedAt': FieldValue.serverTimestamp(),
