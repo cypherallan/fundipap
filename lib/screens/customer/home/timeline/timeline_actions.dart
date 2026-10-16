@@ -6,7 +6,7 @@ import '../../rating/rate_fundi_screen.dart';
 class TimelineActions {
   static Future<void> payEscrow(String jobId, double amount) async {
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
-      'status': 'confirmed', // <-- ADD THIS
+      'status': 'confirmed',
       'escrowStatus': 'held',
       'escrowAmount': amount,
       'escrowPaidAt': FieldValue.serverTimestamp(),
@@ -17,8 +17,8 @@ class TimelineActions {
 
   static Future<void> payExtraEscrow(
     String jobId,
-    int extraLabor, // 2000
-    int extraToLock, // 2100
+    int extraLabor,
+    int extraToLock,
     String whoBuys,
   ) async {
     final jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
@@ -30,7 +30,6 @@ class TimelineActions {
     String fundiId = (job['assignedFundiId'] ?? job['fundiId'] ?? '')
         .toString();
 
-    // Fetch bronze % for correct fundi fee
     int fundiPct = 10;
     if (fundiId.isNotEmpty) {
       var fundiSnap = await FirebaseFirestore.instance
@@ -48,11 +47,11 @@ class TimelineActions {
         fundiPct = 15;
     }
 
-    int newLabor = oldLabor + extraLabor; // 8000
-    int newClientFee = (newLabor * 0.05).round(); // 400
-    int newFundiFee = (newLabor * fundiPct / 100).round(); // 800 for bronze
-    int newTotal = newLabor + transport + newClientFee; // 8564
-    int newFundiReceives = newLabor - newFundiFee + transport; // 7364
+    int newLabor = oldLabor + extraLabor;
+    int newClientFee = (newLabor * 0.05).round();
+    int newFundiFee = (newLabor * fundiPct / 100).round();
+    int newTotal = newLabor + transport + newClientFee;
+    int newFundiReceives = newLabor - newFundiFee + transport;
 
     await jobRef.update({
       'laborCost': newLabor,

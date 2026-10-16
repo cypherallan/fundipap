@@ -36,11 +36,15 @@ Widget? buildCurrentWaiting({
   bool hasParts = hasPartsInRenego(renego);
 
   // FIXED CALC - correct, no client total leak
-  int labour = toInt(job['laborCost'] ?? job['agreedPrice'] ?? job['price'] ?? 0);
+  int labour = toInt(
+    job['laborCost'] ?? job['agreedPrice'] ?? job['price'] ?? 0,
+  );
   int transport = toInt(job['transportFee'] ?? 0);
   int fundiFee = toInt(job['fundiAppFee'] ?? (labour * 0.10).round());
-  int fundiReceives = toInt(job['fundiReceives'] ?? labour - fundiFee + transport);
-  
+  int fundiReceives = toInt(
+    job['fundiReceives'] ?? labour - fundiFee + transport,
+  );
+
   int extraLabourToShow = toInt(
     renego?['acceptedCounterExtraLabor'] ??
         renego?['extraLabor'] ??
@@ -160,7 +164,7 @@ Widget? buildCurrentWaiting({
           title:
               'You are working - Labour KES $labour - Will receive KES $fundiReceives',
           message:
-              'You are working on $jobTitle. Complete the job to request payment release.',
+              'You are working. Complete the job for client to release payment.',
         ),
         const SizedBox(height: 10),
         SizedBox(
@@ -365,7 +369,8 @@ Widget? buildCurrentWaiting({
                               100,
                         );
                         int newLabourTotal = currentAgreed + approvedExtra;
-                        int newTotalPay = newLabourTotal +
+                        int newTotalPay =
+                            newLabourTotal +
                             oldTrans +
                             (newLabourTotal * 0.05).round();
                         await FirebaseFirestore.instance
@@ -606,8 +611,8 @@ Widget? buildCurrentWaiting({
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => FundiRequestNewPriceScreen(
-                            jobId: jobId, job: job),
+                        builder: (_) =>
+                            FundiRequestNewPriceScreen(jobId: jobId, job: job),
                       ),
                     ),
                     child: const Text('New Price'),
@@ -673,9 +678,9 @@ Widget? buildCurrentWaiting({
       );
     case FundiWaitingType.jobCompleted:
       return OrangeAnimatedWaitingCard(
-        title: 'Job Completed - Waiting for $clientName to confirm',
+        title: 'Job Completed - Waiting for client',
         message:
-            'You marked $jobTitle as completed. Waiting for $clientName to confirm and release KES $fundiReceives.',
+            'Waiting for client to confirm and release KES $fundiReceives.',
       );
   }
 }

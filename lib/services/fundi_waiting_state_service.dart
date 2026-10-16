@@ -72,6 +72,11 @@ FundiWaitingState? getFundiWaitingState({
       .toLowerCase();
   bool escrowDone = ['held', 'paid', 'released'].contains(escrowStatus);
 
+  // ADD
+  print(
+    "WAITING_STATE CHECK job=${job['title']} status=$jobStatus escrow=$escrowStatus travelling=${job['travelling']} siteDone=${job['siteVisited']} bidStatus=${bid['status']}",
+  );
+
   if (jobStatus.contains('cancel') ||
       _toBool(job['cancelled']) ||
       _toBool(job['autoCancelled']) ||
@@ -533,5 +538,6 @@ FundiWaitingState? getFundiWaitingState({
       price: p,
     );
   }
-  return null;
+print("WAITING_STATE NULL for job=${job['title']} status=$jobStatus escrow=$escrowStatus bid=$bidStatus");
+return null;
 }

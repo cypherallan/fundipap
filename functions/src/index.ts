@@ -260,10 +260,8 @@ export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId
     const newS = (after?.status || "").toString();
     const lastBy = (after.lastCounterBy || after.counterBy || "").toString();
 
-    // get transport from job
     const jobSnap = await db().collection("jobs").doc(jobId).get();
-    const transport = (jobSnap.data() as any)?.transportFee || (jobSnap.data() as any)?.transport || 164;
-
+    const transport = Number((jobSnap.data() as any)?.transportFee ?? (jobSnap.data() as any)?.transport ?? 0);
     if (!before) {
         const tokens = await getFcmTokens(clientId);
         await sendPush(tokens, "New bid received", `${after.fundiName || 'Fundi'} bid KES ${after.amount || ''} • ${after.jobTitle || ''}`, { jobId, type: "bid" });
@@ -309,12 +307,11 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const fundiTokens = await getFcmTokens(fundiId);
     const clientTokens = await getFcmTokens(clientId);
 
-    // === LEAK-FREE CALC - FIXED ===
     const agreed = Number(after.agreedPrice || after.clientCounterAmount || after.lastCounterAmount || after.laborCost || 0);
-    const transport = Number(after.transportFee || after.transport || 0);
+    const transport = Number(after.transportFee ?? after.transport ?? 0);
     const fundiSees = agreed + transport;
 
-    // RECALC commission from USER not job - fixes 5200 bug
+    // RECALC commission from USER not job
     const fundiSnap = await db().collection("users").doc(fundiId).get();
     const u = fundiSnap.data() as any || {};
     let fundiPct = Number(u.fundiCommissionPct ?? 5);
@@ -330,18 +327,37 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const fundiReceives = agreed - fundiFee + transport;
     const clientPays = fundiSees + clientFee;
 
-    console.log(`RELEASE FIX ${jobId} badge=${u.badgeLevel} trial=${u.isTrialGold} pct=${fundiPct}% agreed ${agreed} fundiReceives ${fundiReceives} clientPays ${clientPays}`);
+    // === EXTRA LABOR - FIX LEAK ===
+    function getExtraNumbers(jobData: any) {
+        const renego = jobData.renegotiation || {};
+        const extraLaborRaw = renego.extraLabor ?? renego.extra ?? jobData.extraLabor ?? 0;
+        const extraToLockRaw = renego.extraToLock ?? jobData.extraToLock ?? jobData.extraTopupToLock ?? 0;
+        let extraLabor = Number(extraLaborRaw) || 0;
+        let extraToLock = Number(extraToLockRaw) || 0;
+
+        // If client saved extraToLock as 2100 (2000+5%), derive base 2000 for fundi
+        if (extraLabor === 0 && extraToLock > 0) {
+            // check if it looks like it includes fee (divisible trick)
+            extraLabor = Math.round(extraToLock / 1.05);
+        }
+        if (extraToLock === 0 && extraLabor > 0) {
+            extraToLock = extraLabor + Math.round(extraLabor * 0.05);
+        }
+        return { extraLabor, extraToLock };
+    }
+
+    const { extraLabor, extraToLock } = getExtraNumbers(after);
+
+    console.log(`RELEASE FIX ${jobId} badge=${u.badgeLevel} trial=${u.isTrialGold} pct=${fundiPct}% agreed ${agreed} fundiReceives ${fundiReceives} clientPays ${clientPays} extraLabor ${extraLabor} extraToLock ${extraToLock}`);
+
     // PRIORITY 1: ESCROW LOCKED
     if ((newEscHeld && !oldEscHeld) || (newEscStatus === "held" && oldEscStatus !== "held")) {
-        const extraRaw = (after as any).renegotiation?.extraToLock || (after as any).extraToLock || (after as any).extraTopupToLock || 0;
-        const extra = Number(extraRaw);
         const beforeStatus = (before?.status || "").toLowerCase();
-        const isExtraLock = extra > 0 || beforeStatus.includes("awaiting_extra") || beforeStatus.includes("in_progress") || beforeStatus.includes("site_visit");
+        const isExtraLock = extraLabor > 0 || extraToLock > 0 || beforeStatus.includes("awaiting_extra") || beforeStatus.includes("in_progress") || beforeStatus.includes("site_visit");
 
         if (isExtraLock) {
-            const extraClientPays = extra + Math.round(extra * 0.05); // client sees extra + fee
-            await sendPush(fundiTokens, `Extra KES ${extra} locked - Continue job`, `${title} • Resume work`, { jobId, type: "extra_escrow_locked" });
-            await sendPush(clientTokens, `Extra KES ${extraClientPays} locked • Fundi resuming`, `${title} • Continue job`, { jobId, type: "extra_escrow_locked" });
+            await sendPush(fundiTokens, `Extra KES ${extraLabor} locked - Continue job`, `${title} • Resume work`, { jobId, type: "extra_escrow_locked" });
+            await sendPush(clientTokens, `Extra KES ${extraToLock} locked • Fundi resuming`, `${title} • Continue job`, { jobId, type: "extra_escrow_locked" });
         } else {
             await sendPush(fundiTokens, `Escrow locked KES ${fundiSees} - Start site visit now`, `${title} • Tap to travel`, { jobId, type: "escrow_locked" });
             await sendPush(clientTokens, `Escrow locked KES ${clientPays} • Waiting for fundi`, `${title} • ${after.assignedFundiName || 'Fundi'} has NOT started travelling`, { jobId, type: "escrow_locked" });
@@ -367,11 +383,28 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
         await sendPush(fundiTokens, "Job Completed - Waiting for client", `${title} • Waiting for client to confirm`, { jobId, type: "job_completed" });
     }
     if (newS.includes("awaiting_extra") && !oldS.includes("awaiting_extra")) {
-        const extraRaw = after.renegotiation?.extraToLock || after.extraToLock || after.extraTopupToLock || 0;
-        const extra = Number(extraRaw);
-        const extraClientPays = extra + Math.round(extra * 0.05);
-        await sendPush(clientTokens, `Lock extra KES ${extraClientPays} in escrow`, `${title} • Fundi accepted`, { jobId, type: "awaiting_extra_escrow" });
-        await sendPush(fundiTokens, `Waiting for client to lock extra KES ${extra}`, `${title}`, { jobId, type: "awaiting_extra_escrow" });
+        const renego = after.renegotiation || {};
+        const extraLaborRaw = renego.extraLabor ?? renego.extra ?? after.extraLabor ?? 0;
+        let extraLabor = Number(extraLaborRaw) || 0;
+
+        const extraToLockRaw = renego.extraToLock ?? after.extraToLock ?? after.extraTopupToLock ?? 0;
+        let extraToLock = Number(extraToLockRaw) || 0;
+        if (extraLabor === 0 && extraToLock > 0) {
+            extraLabor = Math.round(extraToLock / 1.05);
+        }
+        if (extraToLock === 0 && extraLabor > 0) {
+            extraToLock = extraLabor + Math.round(extraLabor * 0.05);
+        }
+        if (extraLabor === extraToLock && extraToLock > 0 && extraToLock !== Math.round(extraLabor * 1.05)) {
+
+            const maybeBase = Math.round(extraToLock / 1.05);
+            if (maybeBase * 1.05 - maybeBase === Math.round(maybeBase * 0.05)) {
+                extraLabor = maybeBase;
+            }
+        }
+
+        await sendPush(clientTokens, `Lock extra KES ${extraToLock} in escrow`, `${title} • Fundi accepted`, { jobId, type: "awaiting_extra_escrow" });
+        await sendPush(fundiTokens, `Waiting for client to lock extra KES ${extraLabor}`, `${title}`, { jobId, type: "awaiting_extra_escrow" });
     }
     if (newS.includes("waiting_for_client_to_buy_parts") && !oldS.includes("waiting_for_client_to_buy_parts")) {
         await sendPush(clientTokens, "You will buy parts - Confirm when bought", `${title}`, { jobId, type: "waiting_for_client_to_buy_parts" });

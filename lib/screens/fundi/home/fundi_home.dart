@@ -61,12 +61,13 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
     return fb;
   }
 
-    @override
+  @override
   void initState() {
     super.initState();
+    print("FUNDI_HOME initState uid=${FirebaseAuth.instance.currentUser?.uid}");
     initOnlineStatus();
     _loadMe();
-    _loadLocation(); // ADD THIS - was missing
+    _loadLocation();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initNotificationListeners();
       _enforceMandatoryRating();
@@ -117,35 +118,33 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
 
   Future<void> _loadMe() async {
     try {
-      // TEMP - run once to fix old Firestore
       var uid = FirebaseAuth.instance.currentUser!.uid;
+      print("LOAD_ME START uid=$uid");
       var result = await FundiBadgeService.recalcAndUpdate(uid);
       print(
-        'FIXED -> Level: ${result.fundiLevel} Badge: ${result.badgeLevel} Score: ${result.score} Fee: ${result.fundiCommissionPct}%',
+        'LOAD_ME BADGE FIXED -> Level: ${result.fundiLevel} Badge: ${result.badgeLevel} Score: ${result.score}',
       );
       var doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .get();
-      if (!doc.exists) return;
+      print("LOAD_ME users/$uid exists=${doc.exists} data=${doc.data()}");
+      if (!doc.exists) {
+        print("!!! ZOMBIE: users doc missing for $uid !!!");
+        return;
+      }
       var data = doc.data()!;
       if (!mounted) return;
       setState(() {
         me = data;
-        completedJobs = (data['completedJobs'] ?? data['jobsDone'] ?? 0) as int;
-        totalEarned = (data['totalEarned'] ?? data['totalEarnings'] ?? 0)
-            .toDouble();
-        mySkill = (data['skill'] ?? data['profession'] ?? 'General').toString();
-        int pct = 0;
-        if ((data['photoUrl'] ?? data['profilePhotoUrl']) != null) pct += 20;
-        if ((data['bio'] ?? '').toString().length > 10) pct += 20;
-        if ((data['skill'] ?? data['profession']) != null) pct += 20;
-        if (data['idUploaded'] == true || data['nationalIdUrl'] != null)
-          pct += 20;
-        if ((data['phone'] ?? '').toString().isNotEmpty) pct += 20;
-        profilePct = pct.clamp(0, 100);
+        completedJobs = (data['completedJobs'] ?? 0) as int;
+        totalEarned = (data['totalEarned'] ?? 0).toDouble();
+        mySkill = (data['skill'] ?? 'General').toString();
       });
-    } catch (_) {}
+      print("LOAD_ME DONE me=${me?['name']} jobs=$completedJobs");
+    } catch (e) {
+      print("LOAD_ME ERROR $e");
+    }
   }
 
   Future<void> _loadLocation() async {
@@ -186,12 +185,13 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
     if (mounted) setState(() {});
 
     var uid = FirebaseAuth.instance.currentUser!.uid;
-
+    print("INIT LISTENERS uid=$uid");
     _bidsSub = FirebaseFirestore.instance
         .collectionGroup('bids')
         .where('fundiId', isEqualTo: uid)
         .snapshots()
         .listen((snap) {
+          print("BIDS SNAP: ${snap.docs.length} bids");
           _bids.clear();
           for (var b in snap.docs) {
             var bid = Map<String, dynamic>.from(b.data());
@@ -233,6 +233,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
         .where('assignedFundiId', isEqualTo: uid)
         .snapshots()
         .listen((snap) {
+          print("JOBS SNAP: ${snap.docs.length} assigned jobs");
           _jobsMap.clear();
           // keep excluded list but rebuild
           for (var d in snap.docs) {
@@ -340,6 +341,9 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
 
   @override
   Widget build(BuildContext context) {
+    print(
+      "BUILD FundiHome me=${me?['name']} isOnline=$isOnline bids=${_bids.length} jobs=${_assignedJobs.length}",
+    );
     BadgeResult? badgeResult;
     if (me != null) {
       try {
