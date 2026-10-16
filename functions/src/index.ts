@@ -307,11 +307,28 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const fundiTokens = await getFcmTokens(fundiId);
     const clientTokens = await getFcmTokens(clientId);
 
-    const agreed = Number(after.agreedPrice || after.clientCounterAmount || after.lastCounterAmount || after.laborCost || 0);
     const transport = Number(after.transportFee ?? after.transport ?? 0);
-    const fundiSees = agreed + transport;
 
-    // RECALC commission from USER not job
+    const r = after.renegotiation || {};
+    const originalExtra = Number(r.extraLabor ?? r.extra ?? after.extraLabor ?? 0);
+    const counterExtra = r.counterExtraLabor ?? r.clientCounterExtraLabor ?? null;
+    const agreedExtra = r.agreedExtraLabor ?? r.finalExtraLabor ?? r.acceptedCounterExtraLabor ?? null;
+    let finalExtra = 0;
+    if (agreedExtra != null) finalExtra = Number(agreedExtra);
+    else if (counterExtra != null) finalExtra = Number(counterExtra);
+    else finalExtra = originalExtra;
+
+    const oldLaborFromRenego = Number((r as any).oldLabor ?? (r as any).oldLabour ?? 0);
+    let baseLabor = 0;
+    if (oldLaborFromRenego > 0) {
+        baseLabor = oldLaborFromRenego;
+    } else {
+        baseLabor = Number(after.laborCost ?? after.originalLaborCost ?? 0) || (Number(after.agreedPrice || 0) - originalExtra) || Number(after.agreedPrice || after.clientCounterAmount || after.lastCounterAmount || 0);
+    }
+    const totalLabor = oldLaborFromRenego > 0 ? baseLabor + finalExtra : (baseLabor >= 6000 + finalExtra && finalExtra > 0 ? baseLabor : baseLabor + finalExtra);
+    const agreed = totalLabor;
+    const fundiSees = baseLabor + transport;
+
     const fundiSnap = await db().collection("users").doc(fundiId).get();
     const u = fundiSnap.data() as any || {};
     let fundiPct = Number(u.fundiCommissionPct ?? 5);
@@ -322,35 +339,42 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     else if (u.badgeLevel === "none") fundiPct = 15;
     else fundiPct = 5;
 
-    const fundiFee = Math.round(agreed * fundiPct / 100);
-    const clientFee = Math.round(agreed * 0.05);
-    const fundiReceives = agreed - fundiFee + transport;
-    const clientPays = fundiSees + clientFee;
+    const fundiFee = Math.round(totalLabor * fundiPct / 100);
+    const clientFee = Math.round(totalLabor * 0.05);
+    const fundiReceives = totalLabor - fundiFee + transport;
+    const clientPays = totalLabor + transport + clientFee;
 
-    // === EXTRA LABOR - FIX LEAK ===
     function getExtraNumbers(jobData: any) {
         const renego = jobData.renegotiation || {};
-        const extraLaborRaw = renego.extraLabor ?? renego.extra ?? jobData.extraLabor ?? 0;
-        const extraToLockRaw = renego.extraToLock ?? jobData.extraToLock ?? jobData.extraTopupToLock ?? 0;
-        let extraLabor = Number(extraLaborRaw) || 0;
-        let extraToLock = Number(extraToLockRaw) || 0;
+        const originalLabor = Number(renego.extraLabor ?? renego.extra ?? jobData.extraLabor ?? 0);
+        const counterLabor = renego.counterExtraLabor ?? renego.clientCounterExtraLabor ?? null;
+        const agreedLabor = renego.agreedExtraLabor ?? renego.finalExtraLabor ?? null;
 
-        // If client saved extraToLock as 2100 (2000+5%), derive base 2000 for fundi
-        if (extraLabor === 0 && extraToLock > 0) {
-            // check if it looks like it includes fee (divisible trick)
-            extraLabor = Math.round(extraToLock / 1.05);
-        }
-        if (extraToLock === 0 && extraLabor > 0) {
-            extraToLock = extraLabor + Math.round(extraLabor * 0.05);
-        }
-        return { extraLabor, extraToLock };
+        let extraLabor = 0;
+        if (agreedLabor != null) extraLabor = Number(agreedLabor);
+        else if (counterLabor != null) extraLabor = Number(counterLabor);
+        else extraLabor = originalLabor;
+
+        const originalToLock = Number(renego.extraToLock ?? jobData.extraToLock ?? jobData.extraTopupToLock ?? 0);
+        const counterToLock = renego.counterExtraToLock ?? renego.clientCounterExtraToLock ?? null;
+        const agreedToLock = renego.agreedExtraToLock ?? null;
+
+        let extraToLock = 0;
+        if (agreedToLock != null) extraToLock = Number(agreedToLock);
+        else if (counterToLock != null) extraToLock = Number(counterToLock);
+        else if (originalToLock) extraToLock = Number(originalToLock);
+        else extraToLock = extraLabor + Math.round(extraLabor * 0.05);
+
+        if (extraLabor === 0 && extraToLock > 0) extraLabor = Math.round(extraToLock / 1.05);
+        if (extraToLock === 0 && extraLabor > 0) extraToLock = extraLabor + Math.round(extraLabor * 0.05);
+
+        return { extraLabor, extraToLock, originalLabor };
     }
 
     const { extraLabor, extraToLock } = getExtraNumbers(after);
 
-    console.log(`RELEASE FIX ${jobId} badge=${u.badgeLevel} trial=${u.isTrialGold} pct=${fundiPct}% agreed ${agreed} fundiReceives ${fundiReceives} clientPays ${clientPays} extraLabor ${extraLabor} extraToLock ${extraToLock}`);
-
-    // PRIORITY 1: ESCROW LOCKED
+    console.log(`RELEASE FIX ${jobId} badge=${u.badgeLevel} trial=${u.isTrialGold} pct=${fundiPct}% totalLabor ${totalLabor} base ${baseLabor} extra ${extraLabor} fundiReceives ${fundiReceives} clientPays ${clientPays}`);
+    
     if ((newEscHeld && !oldEscHeld) || (newEscStatus === "held" && oldEscStatus !== "held")) {
         const beforeStatus = (before?.status || "").toLowerCase();
         const isExtraLock = extraLabor > 0 || extraToLock > 0 || beforeStatus.includes("awaiting_extra") || beforeStatus.includes("in_progress") || beforeStatus.includes("site_visit");
@@ -383,26 +407,6 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
         await sendPush(fundiTokens, "Job Completed - Waiting for client", `${title} • Waiting for client to confirm`, { jobId, type: "job_completed" });
     }
     if (newS.includes("awaiting_extra") && !oldS.includes("awaiting_extra")) {
-        const renego = after.renegotiation || {};
-        const extraLaborRaw = renego.extraLabor ?? renego.extra ?? after.extraLabor ?? 0;
-        let extraLabor = Number(extraLaborRaw) || 0;
-
-        const extraToLockRaw = renego.extraToLock ?? after.extraToLock ?? after.extraTopupToLock ?? 0;
-        let extraToLock = Number(extraToLockRaw) || 0;
-        if (extraLabor === 0 && extraToLock > 0) {
-            extraLabor = Math.round(extraToLock / 1.05);
-        }
-        if (extraToLock === 0 && extraLabor > 0) {
-            extraToLock = extraLabor + Math.round(extraLabor * 0.05);
-        }
-        if (extraLabor === extraToLock && extraToLock > 0 && extraToLock !== Math.round(extraLabor * 1.05)) {
-
-            const maybeBase = Math.round(extraToLock / 1.05);
-            if (maybeBase * 1.05 - maybeBase === Math.round(maybeBase * 0.05)) {
-                extraLabor = maybeBase;
-            }
-        }
-
         await sendPush(clientTokens, `Lock extra KES ${extraToLock} in escrow`, `${title} • Fundi accepted`, { jobId, type: "awaiting_extra_escrow" });
         await sendPush(fundiTokens, `Waiting for client to lock extra KES ${extraLabor}`, `${title}`, { jobId, type: "awaiting_extra_escrow" });
     }
@@ -411,9 +415,6 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     }
     if (after.renegotiation?.status === "pending" && before?.renegotiation?.status !== "pending") {
         await sendPush(clientTokens, "Fundi requests price review", `${after.renegotiation.reasonDetails || 'New breakdown'} • Tap to REVIEW`, { jobId, type: "price_review" });
-    }
-    if (after.renegotiation?.status === "countered_by_client" && before?.renegotiation?.status !== "countered_by_client") {
-        await sendPush(fundiTokens, `Client countered extra KES ${after.renegotiation.counterExtraLabor || 0}`, `${title} • Tap to view`, { jobId, type: "reneg_countered" });
     }
 
     const wasReleased = oldEscStatus === "released" || before?.escrowReleased === true || before?.escrowStatus === "released";

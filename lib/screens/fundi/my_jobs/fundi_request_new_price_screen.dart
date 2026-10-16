@@ -188,12 +188,16 @@ class _FundiRequestNewPriceScreenState
           .collection('jobs')
           .doc(widget.jobId)
           .update({
+            'originalLaborCost':
+                widget.job['originalLaborCost'] ?? oldLabor, // save once
+            'laborCost': oldLabor, // keep original until approved
             'renegotiation': {
               'requested': true,
               'status': 'pending',
               'reasons': selectedReasons.toList(),
               'reasonDetails': detailsCtrl.text.trim(),
               'oldLabor': oldLabor,
+              'originalLabor': widget.job['originalLaborCost'] ?? oldLabor,
               'extraLabor': extraLabor,
               'newLaborTotal': newLaborTotal,
               'pendingLabor': extraLabor,

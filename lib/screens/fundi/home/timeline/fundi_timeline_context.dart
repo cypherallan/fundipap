@@ -146,13 +146,13 @@ class FundiTimelineContext {
 
     int fundiAppFee = (labour * fundiPct / 100).round();
     int fundiReceives =
-        labour - fundiAppFee + transport; // 6000+183-300=5883 for trial gold
+        labour - fundiAppFee + transport;
     int fundiSeesWaiting = labour + transport;
     int newTotalFundiLocked = newLabour + transport;
     int newFundiReceivesVal =
         newLabour - (newLabour * fundiPct / 100).round() + transport;
     bool isCounterAccepted = counterExtra > 0;
-    int releasedAmount = fundiReceives; // SAME - no more 5283 vs 5583 bug
+    int releasedAmount = fundiReceives;
 
     bool siteDone = toBool(job['siteVisitDone']) || toBool(job['siteVisited']);
     bool travelling = toBool(job['travelling']) || status == 'travelling';

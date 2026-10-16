@@ -35,24 +35,56 @@ Widget? buildCurrentWaiting({
   String lowPhase = (renego?['currentPhase'] ?? '').toString().toLowerCase();
   bool hasParts = hasPartsInRenego(renego);
 
-  // FIXED CALC - correct, no client total leak
-  int labour = toInt(
-    job['laborCost'] ?? job['agreedPrice'] ?? job['price'] ?? 0,
-  );
-  int transport = toInt(job['transportFee'] ?? 0);
-  int fundiFee = toInt(job['fundiAppFee'] ?? (labour * 0.10).round());
-  int fundiReceives = toInt(
-    job['fundiReceives'] ?? labour - fundiFee + transport,
-  );
-
-  int extraLabourToShow = toInt(
-    renego?['acceptedCounterExtraLabor'] ??
-        renego?['extraLabor'] ??
-        renego?['counterExtraLabor'] ??
+  // FIXED CALC - S3 handles counter 1000 not 2000
+  int origExtra = toInt(
+    renego?['extraLabor'] ??
+        renego?['extra'] ??
         renego?['extraLaborAmount'] ??
         job['extraLaborAmount'] ??
         0,
   );
+  int counterExtra = toInt(
+    renego?['counterExtraLabor'] ?? renego?['clientCounterExtraLabor'] ?? 0,
+  );
+  int agreedExtra = toInt(
+    renego?['agreedExtraLabor'] ??
+        renego?['acceptedCounterExtraLabor'] ??
+        renego?['finalExtraLabor'] ??
+        0,
+  );
+  int finalExtra = agreedExtra > 0
+      ? agreedExtra
+      : (counterExtra > 0 ? counterExtra : origExtra);
+  int extraLabourToShow = finalExtra; // S3 = 1000
+
+  int oldLaborRenego = toInt(renego?['oldLabor'] ?? renego?['oldLabour'] ?? 0);
+  int origBase = toInt(
+    job['originalLaborCost'] ?? job['initialLaborCost'] ?? 0,
+  );
+  int currentLaborCost = toInt(job['laborCost'] ?? 0);
+  int agreed = toInt(job['agreedPrice'] ?? 0);
+
+  int baseLabour = 0;
+  if (oldLaborRenego > 0) {
+    baseLabour = oldLaborRenego;
+  } else if (origBase > 0) {
+    baseLabour = origBase;
+  } else if (currentLaborCost > 0 && currentLaborCost > finalExtra) {
+    // laborCost still original before approval
+    baseLabour = currentLaborCost;
+  } else if (agreed > finalExtra) {
+    // agreed is total after approval, subtract extra to get base
+    baseLabour = agreed - finalExtra;
+  } else {
+    baseLabour = currentLaborCost > 0 ? currentLaborCost : agreed;
+  }
+  int totalLabour = baseLabour + finalExtra;
+  int labour = totalLabour > 0
+      ? totalLabour
+      : toInt(job['laborCost'] ?? job['agreedPrice'] ?? job['price'] ?? 0);
+  int transport = toInt(job['transportFee'] ?? 0);
+  int fundiFee = (labour * 0.05).round();
+  int fundiReceives = labour - fundiFee + transport;
 
   // FIX NO PARTS: Skip materials waiting, show START JOB / New Price directly
   if ((status == 'waiting_for_client_to_buy_parts' ||

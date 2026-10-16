@@ -247,7 +247,7 @@ mixin ActionsMixin
           'extraLabor': counterExtraLabor,
           'title': 'Client countered extra work',
           'body':
-              'Client countered your extra KES $extraRequested with KES $counterExtraLabor (KES $counterExtraToLock with fee)',
+              'Client countered your extra KES $extraRequested with KES $counterExtraLabor',
           'isRead': false,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -270,7 +270,7 @@ mixin ActionsMixin
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Counter sent: KES $counterExtraToLock (labour $counterExtraLabor + fee $counterExtraFee)',
+            'Counter sent: KES $counterExtraLabor (you will lock KES $counterExtraToLock)',
           ),
         ),
       );

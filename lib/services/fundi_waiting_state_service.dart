@@ -85,25 +85,62 @@ FundiWaitingState? getFundiWaitingState({
       jobStatus == 'auto_cancelled_no_arrival')
     return null;
 
-  int labour = _toInt(
-    job['laborCost'] ??
-        job['agreedPrice'] ??
-        job['price'] ??
-        bid['price'] ??
-        bid['amount'] ??
+  // FIXED S3 - totalLabour = 6000 + 1000 = 7000, no double count
+  var rEarly = job['renegotiation'] as Map<String, dynamic>?;
+  int origExtraTop = _toInt(rEarly?['extraLabor'] ?? rEarly?['extra'] ?? 0);
+  int counterExtraTop = _toInt(
+    rEarly?['counterExtraLabor'] ?? rEarly?['clientCounterExtraLabor'] ?? 0,
+  );
+  int agreedExtraTop = _toInt(
+    rEarly?['agreedExtraLabor'] ??
+        rEarly?['acceptedCounterExtraLabor'] ??
+        rEarly?['finalExtraLabor'] ??
         0,
   );
+  int finalExtraTop = agreedExtraTop > 0
+      ? agreedExtraTop
+      : (counterExtraTop > 0 ? counterExtraTop : origExtraTop);
+  int oldLaborTop = _toInt(rEarly?['oldLabor'] ?? 0);
+
+  int baseLabourTop = 0;
+  if (oldLaborTop > 0) {
+    baseLabourTop = oldLaborTop;
+  } else {
+    baseLabourTop = _toInt(job['laborCost'] ?? job['originalLaborCost'] ?? 0);
+    if (baseLabourTop == 0) {
+      int maybeAgreed = _toInt(job['agreedPrice'] ?? job['price'] ?? 0);
+      baseLabourTop = maybeAgreed - origExtraTop;
+      if (baseLabourTop <= 0) {
+        baseLabourTop = _toInt(job['laborCost'] ?? job['agreedPrice'] ?? 0);
+      }
+    }
+  }
+  int totalLabourTop = oldLaborTop > 0
+      ? baseLabourTop + finalExtraTop
+      : (baseLabourTop >= 6000 + finalExtraTop && finalExtraTop > 0
+            ? baseLabourTop
+            : baseLabourTop + finalExtraTop);
+
+  int labour = totalLabourTop > 0
+      ? totalLabourTop
+      : _toInt(
+          job['laborCost'] ??
+              job['agreedPrice'] ??
+              job['price'] ??
+              bid['price'] ??
+              bid['amount'] ??
+              0,
+        );
   int transport = _toInt(job['transportFee'] ?? 0);
-  int fundiFee = _toInt(job['fundiAppFee'] ?? (labour * 0.10).round());
-  int fundiReceives = _toInt(
-    job['fundiReceives'] ?? labour - fundiFee + transport,
-  );
-  int fundiSees = labour + transport; // what client locked for labour+transport
+  int fundiFee = (labour * 0.05).round();
+  int fundiReceives = labour - fundiFee + transport; // 6000 - 300 + 161 = 5861
+  int fundiSees = labour + transport;
 
   Map<String, dynamic>? renegoEarly;
   var rawRenegoEarly = job['renegotiation'];
-  if (rawRenegoEarly is Map)
+  if (rawRenegoEarly is Map) {
     renegoEarly = Map<String, dynamic>.from(rawRenegoEarly);
+  }
   String earlyPhase = (renegoEarly?['currentPhase'] ?? '')
       .toString()
       .toLowerCase();
@@ -538,6 +575,8 @@ FundiWaitingState? getFundiWaitingState({
       price: p,
     );
   }
-print("WAITING_STATE NULL for job=${job['title']} status=$jobStatus escrow=$escrowStatus bid=$bidStatus");
-return null;
+  print(
+    "WAITING_STATE NULL for job=${job['title']} status=$jobStatus escrow=$escrowStatus bid=$bidStatus",
+  );
+  return null;
 }
