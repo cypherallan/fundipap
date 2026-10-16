@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// This is your original fundiCard from widgets/timeline_card.dart - unchanged
 Widget fundiCard({
   required Color color,
   required Color border,

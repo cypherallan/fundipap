@@ -1,4 +1,3 @@
-// lib/screens/fundi/home/visit_customer_tab.dart - FIXED
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -116,7 +115,7 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
   bool isMarking = false;
 
   double calculateTransportFee(double meters) {
-    if (meters <= 1000) return 100; // YOUR RULE: <=1km = 100 round trip
+    if (meters <= 1000) return 100;
     double km = meters / 1000;
     return 100 + ((km - 1) * 60);
   }
@@ -185,7 +184,7 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
-            distanceFilter: 5, // strict check every 5m
+            distanceFilter: 5,
           ),
         ).listen(
           (p) async {
@@ -211,7 +210,6 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
               });
             }
 
-            // LIVE TRACKING FOR CUSTOMER - this makes TRACK LIVE work
             try {
               await FirebaseFirestore.instance
                   .collection('jobs')
@@ -225,7 +223,6 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
                   });
             } catch (_) {}
 
-            // AUTO-DETECT: prompt when within 100m
             if (d != null && d <= 100 && mounted && !isMarking) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -273,7 +270,6 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
   }
 
   Future<void> _markVisited() async {
-    // FRESH strict check - no stale distance
     if (pos == null || clientLat == null || clientLng == null) {
       ScaffoldMessenger.of(
         context,
@@ -288,7 +284,6 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
       clientLng!,
     );
 
-    // HARD BLOCK if >100m - cannot bypass even if app was backgrounded
     if (freshDistance > 100) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -327,7 +322,7 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
           'fundiLngAtVisit': pos?.longitude,
           'transportDistanceMeters': finalDistance,
           'transportFee': fee,
-          'arrivalDistance': finalDistance, // proof
+          'arrivalDistance': finalDistance,
           'travelling': false,
           'status': 'site_visit',
           'updatedAt': FieldValue.serverTimestamp(),
@@ -356,7 +351,6 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
     bool canMark =
         pos != null && distance != null && distance! <= 100 && !isMarking;
     bool within100 = distance != null && distance! <= 100;
-    // FIXED: use locked transportFee, not new GPS calc
     double lockedFee =
         (widget.job['transportFee'] ??
                 widget.job['transportFeeLocked'] ??

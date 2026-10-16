@@ -26,7 +26,6 @@ bool toBool(dynamic v, [bool fb = false]) {
   return fb;
 }
 
-// NEW: Check if materials/parts were checked during extra price request
 bool hasPartsInRenego(Map<String, dynamic>? renego) {
   if (renego == null) return false;
   var list = renego['partsNeeded'] as List?;

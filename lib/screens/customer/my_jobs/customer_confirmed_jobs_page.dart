@@ -29,14 +29,12 @@ class _CustomerConfirmedJobsPageState extends State<CustomerConfirmedJobsPage> {
     super.initState();
     _highlightedId = widget.initialJobId;
 
-    // Auto-navigate for deep-link actions
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_didAutoNav) return;
       if (widget.initialJobId == null) return;
 
       if (widget.initialAction == 'new_price') {
         _didAutoNav = true;
-        // Will be handled after we fetch job data in builder via flag, but keep as fallback
       }
     });
   }
@@ -74,7 +72,6 @@ class _CustomerConfirmedJobsPageState extends State<CustomerConfirmedJobsPage> {
           }
           var docs = snap.data!.docs.toList();
 
-          // Bring initialJobId to top
           if (widget.initialJobId != null) {
             docs.sort((a, b) {
               if (a.id == widget.initialJobId) return -1;
@@ -89,7 +86,6 @@ class _CustomerConfirmedJobsPageState extends State<CustomerConfirmedJobsPage> {
             );
           }
 
-          // Auto-open price approval if banner tapped on new_price
           if (!_didAutoNav &&
               widget.initialAction == 'new_price' &&
               widget.initialJobId != null) {
@@ -123,7 +119,6 @@ class _CustomerConfirmedJobsPageState extends State<CustomerConfirmedJobsPage> {
                   .toDouble();
               bool isHighlighted = jobId == _highlightedId;
 
-              // Determine current phase for banner inside card
               String phase = '';
               if (job['travelling'] == true ||
                   job['siteVisitStarted'] == true ||
@@ -203,7 +198,6 @@ class _CustomerConfirmedJobsPageState extends State<CustomerConfirmedJobsPage> {
                       ),
                       const SizedBox(height: 8),
 
-                      // PHASE BANNERS - this is what the banner tap should show
                       if (phase == 'travelling')
                         _phaseTile(
                           Icons.directions_bike,
@@ -252,9 +246,7 @@ class _CustomerConfirmedJobsPageState extends State<CustomerConfirmedJobsPage> {
                           Colors.green.shade100,
                           'Fundi completed job',
                           '${job['title']} • Review & release',
-                          () {
-                            // TODO: push to your completion review screen
-                          },
+                          () {},
                         ),
 
                       if (reneg != null &&

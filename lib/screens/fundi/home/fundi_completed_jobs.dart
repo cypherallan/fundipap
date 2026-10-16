@@ -67,7 +67,6 @@ class FundiCompletedJobs extends StatelessWidget {
                       'createdAt': FieldValue.serverTimestamp(),
                     });
 
-                // get current average correctly
                 var clientDoc = await FirebaseFirestore.instance
                     .collection('users')
                     .doc(clientId)

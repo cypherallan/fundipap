@@ -59,7 +59,6 @@ class FundiHomeHeader extends StatelessWidget {
             Positioned(
               bottom: 0,
               right: 0,
-              // change InkWell to GestureDetector too
               child: GestureDetector(
                 onTap: onProfileTap,
                 child: Container(
@@ -113,7 +112,6 @@ class FundiHomeHeader extends StatelessWidget {
                   fontSize: 12,
                 ),
               ),
-              // SHOW OTHER SKILLS AS CHIPS - for your case
               if ((me?['otherSkills'] as List?)?.isNotEmpty ?? false) ...[
                 const SizedBox(height: 4),
                 Wrap(

@@ -173,7 +173,6 @@ class PendingJobTile extends StatelessWidget {
               ],
             ),
           ),
-          // EDIT + DELETE ICONS INSTEAD OF 3 DOTS
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

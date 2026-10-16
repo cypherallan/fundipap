@@ -65,7 +65,6 @@ class _FundiRequestNewPriceScreenState
       p['model']?.clear();
       p['estPrice']?.text = '0';
     }
-    // keep one empty row so UI doesn't disappear
     if (partsNeeded.length > 1) {
       partsNeeded = [partsNeeded.first];
     }
@@ -188,9 +187,8 @@ class _FundiRequestNewPriceScreenState
           .collection('jobs')
           .doc(widget.jobId)
           .update({
-            'originalLaborCost':
-                widget.job['originalLaborCost'] ?? oldLabor, // save once
-            'laborCost': oldLabor, // keep original until approved
+            'originalLaborCost': widget.job['originalLaborCost'] ?? oldLabor,
+            'laborCost': oldLabor,
             'renegotiation': {
               'requested': true,
               'status': 'pending',
@@ -308,7 +306,6 @@ class _FundiRequestNewPriceScreenState
                       selectedReasons.add(r);
                     } else {
                       selectedReasons.remove(r);
-                      // CLEAR ON DESELECT - FIX
                       bool stillNeedsLabor =
                           selectedReasons.contains(
                             'Job bigger / more work than expected',

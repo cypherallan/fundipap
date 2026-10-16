@@ -47,7 +47,6 @@ class FundiHomeJobList extends StatelessWidget {
           )
           .snapshots(),
       builder: (context, snap) {
-        // FIX 1: don't spinner forever - handle waiting + error
         if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
           return const Center(
             child: CircularProgressIndicator(
@@ -123,9 +122,8 @@ class FundiHomeJobList extends StatelessWidget {
             double? km = FundiHomeLogic.distanceKm(currentPos, data);
             var uid = FirebaseAuth.instance.currentUser!.uid;
 
-            // FIX 2: 30km filter - was hidden because no filter, but with null pos it flickered. Now allow 16.4km
             if (km != null && km > 30) {
-              return const SizedBox.shrink(); // hide beyond 30km, not 5km
+              return const SizedBox.shrink();
             }
 
             bool jobIsCancelled =

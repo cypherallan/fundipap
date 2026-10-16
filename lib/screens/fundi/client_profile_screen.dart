@@ -83,7 +83,6 @@ class ClientProfileScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // REAL past jobs count from jobs collection
                   StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
                         .collection('jobs')

@@ -22,10 +22,8 @@ class ClientCancelService {
     required String jobId,
     required Map<String, dynamic> job,
   }) async {
-    // --- SINGLE SOURCE OF TRUTH ---
     final calc = ClientCancelCalculator.calculate(job);
 
-    // debug - see exactly what goes wrong
     for (var l in calc.logs) {
       if (kDebugMode) debugPrint('[CANCEL_AUDIT] $l');
     }
@@ -41,7 +39,6 @@ class ClientCancelService {
 
     bool effectiveArrived = calc.arrived || calc.priceRequestPending;
 
-    // CANCEL 1: BEFORE ESCROW
     if (calc.stage == ClientCancelStage.beforeEscrow) {
       bool? ok = await showDialog<bool>(
         context: context,
@@ -93,7 +90,6 @@ class ClientCancelService {
       return;
     }
 
-    // CANCEL 2-6: WITH ESCROW LOCKED
     int labourForCalc = calc.labourForCalc;
     int transport = calc.transport;
     int totalLocked = calc.totalLockedDisplay;
@@ -434,7 +430,6 @@ class ClientCancelService {
           'releasedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
 
-        // Fundi notification - this is what fundi sees
         await db.collection('notifications').add({
           'userId': fundiId,
           'jobId': jobId,

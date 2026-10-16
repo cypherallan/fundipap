@@ -124,7 +124,6 @@ class FundiHomeLogic {
     return score;
   }
 
-  // NEW: Real-time distance
   static double? distanceKm(Position? currentPos, Map job) {
     var lat = job['lat'] ?? job['latitude'];
     var lng = job['lng'] ?? job['longitude'];

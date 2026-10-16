@@ -30,12 +30,11 @@ class FundiTimelineActions {
       int pct = PricingService.getFundiCommissionFromResult(badge);
       await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
         'fundiId': fundiId,
-        'fundiBadgeLevel':
-            badge.badgeLevel.name, // gold / silver / bronze / none
+        'fundiBadgeLevel': badge.badgeLevel.name,
         'badgeLevel': badge.badgeLevel.name,
         'isTrialGold': badge.isTrialGold,
         'fundiIsTrialGold': badge.isTrialGold,
-        'fundiCommissionPct': pct, // 5 for trial
+        'fundiCommissionPct': pct,
         'fundiBadgeUpdatedAt': FieldValue.serverTimestamp(),
       });
     } catch (_) {}

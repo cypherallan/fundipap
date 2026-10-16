@@ -32,7 +32,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
   @override
   void initState() {
     super.initState();
-    // WATCH: if fundi cancels this assigned job while client is inside timeline
     watchCancellation(jobId: widget.jobId, context: context);
   }
 
@@ -118,7 +117,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
           bool isCancelled = status.toLowerCase().contains('cancel');
           bool canClientCancel = !isStarted && !isCancelled;
 
-          // Extract fixed job location for banner
           var jobLoc =
               job['location'] ?? widget.jobData['location'] ?? 'Job site';
           var jobGeo =
@@ -139,7 +137,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
             onReleasing: (v) => setState(() => _releasing = v),
           );
 
-          // Fixed location banner - ALWAYS at top
           Widget locationBanner = Container(
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             padding: const EdgeInsets.all(12),
@@ -188,7 +185,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
             ),
           );
 
-          // STATE 1: You countered 2000 -> 1000, waiting for fundi
           if (isRenegCountered) {
             int extraLabor = _toInt(reneg?['counterExtraLabor']);
             int extraToLock = _toInt(

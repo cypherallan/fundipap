@@ -28,7 +28,7 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
   Map<String, dynamic>? _job;
   bool _loadingJob = true;
   bool _hasRated = false;
-  bool? _wouldRefer; // NEW: null = not selected, true = Yes, false = No
+  bool? _wouldRefer;
 
   @override
   void initState() {
@@ -126,7 +126,6 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
           'updatedAt': FieldValue.serverTimestamp(),
         });
       } else {
-        // 1. Save review
         await FirebaseFirestore.instance
             .collection('fundis')
             .doc(effectiveFundiId)
@@ -143,7 +142,6 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
               'createdAt': FieldValue.serverTimestamp(),
             });
 
-        // 2. Update averageRating
         var fundiRef = FirebaseFirestore.instance
             .collection('fundis')
             .doc(effectiveFundiId);
@@ -161,7 +159,6 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
           'lastRatedAt': FieldValue.serverTimestamp(),
         };
 
-        // 3. REFERRAL LOGIC - if Yes
         if (_wouldRefer == true) {
           var referralRef = fundiRef.collection('referrals').doc(clientId);
           var referralSnap = await referralRef.get();
@@ -185,7 +182,6 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
 
         await fundiRef.update(fundiUpdates);
 
-        // Also update users doc (your enrichBids reads both)
         try {
           await FirebaseFirestore.instance
               .collection('users')

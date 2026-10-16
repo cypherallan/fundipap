@@ -41,7 +41,6 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
   Future<void> initOnlineStatus() async {
     try {
       var uid = FirebaseAuth.instance.currentUser!.uid;
-      // check both collections - your app uses both
       var fundiDoc = await FirebaseFirestore.instance
           .collection('fundis')
           .doc(uid)
@@ -54,7 +53,7 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
           fundiDoc.data()?['isOnline'] == true ||
           userDoc.data()?['isOnline'] == true;
 
-      await loadLocation(context); // always load location first
+      await loadLocation(context);
 
       if (wasOnline && mounted) {
         setState(() => _isOnline = true);
@@ -83,7 +82,6 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
       await _posSub?.cancel();
       if (!mounted) return;
       setState(() => _isOnline = false);
-      // FIX: PERSIST OFF
       await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
         'isOnline': false,
         'lastSeen': FieldValue.serverTimestamp(),
@@ -107,7 +105,6 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
       }
       if (!mounted) return;
       setState(() => _isOnline = true);
-      // FIX: PERSIST ON
       await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
         'isOnline': true,
         'lastSeen': FieldValue.serverTimestamp(),

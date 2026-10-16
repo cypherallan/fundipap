@@ -22,7 +22,6 @@ class PartsSteps {
     final status = (c.status).toString();
     final bool hasParts = _hasParts(c.reneg);
 
-    // FIX: Skip entire parts flow when no materials were checked
     if (!hasParts) {
       return false;
     }
@@ -58,8 +57,7 @@ class PartsSteps {
             c.reneg?['extraApp'] ??
             (extraLaborVal * 0.05).round(),
       );
-      final extraToLockVal =
-          extraLaborVal + extraAppVal; // 1000+50=1050 not 2100
+      final extraToLockVal = extraLaborVal + extraAppVal;
       final newTotalVal = alreadyLockedBase + extraToLockVal;
       final totalLockedNow = toInt(c.job['escrowAmount'] ?? newTotalVal);
       final isCounter = counterExtraLabor > 0;
@@ -88,7 +86,7 @@ class PartsSteps {
           ),
         ),
       );
-      return true; // FIX: stop here, don't go straight to START JOB
+      return true;
     }
 
     if (c.phase == 'client_claims_parts_bought' ||

@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class FundiPenaltyService {
-  // Suspension durations
   static const Duration suspend24h = Duration(hours: 24);
   static const Duration suspend7d = Duration(days: 7);
   static const Duration suspend30d = Duration(days: 30);
@@ -28,7 +27,6 @@ class FundiPenaltyService {
         'at': DateTime.now().toIso8601String(),
       });
 
-      // Keep only last 90 days for rate check
       DateTime cutoff = DateTime.now().subtract(const Duration(days: 30));
       int recentCancels = cancellations.where((c) {
         try {
@@ -39,7 +37,6 @@ class FundiPenaltyService {
         }
       }).length;
 
-      // Determine suspension
       Duration? suspension;
       String? suspensionReason;
       if (recentCancels == 1) {
@@ -61,9 +58,7 @@ class FundiPenaltyService {
         'cancellationHistory': cancellations,
         'recentCancellationCount': recentCancels,
         'lastCancellationAt': FieldValue.serverTimestamp(),
-        'penaltyScore': FieldValue.increment(
-          50,
-        ), // pushes fundi to bottom of search
+        'penaltyScore': FieldValue.increment(50),
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -89,7 +84,6 @@ class FundiPenaltyService {
       }, SetOptions(merge: true));
     });
 
-    // Flag for admin
     await db.collection('adminFlags').add({
       'type': 'fundi_cancel',
       'fundiId': fundiId,
@@ -109,9 +103,8 @@ class FundiPenaltyService {
     if (data['isSuspended'] == true) {
       Timestamp? until = data['suspendedUntil'];
       if (until != null && until.toDate().isAfter(DateTime.now())) {
-        return false; // still suspended
+        return false;
       } else {
-        // auto unsuspend
         await snap.reference.update({
           'isSuspended': false,
           'suspendedUntil': FieldValue.delete(),
@@ -123,7 +116,6 @@ class FundiPenaltyService {
   }
 
   static Future<void> onJobCompletedOnTime(String fundiId) async {
-    // Reduce penaltyScore by 5 for good behavior
     await FirebaseFirestore.instance.collection('fundis').doc(fundiId).set({
       'penaltyScore': FieldValue.increment(-5),
     }, SetOptions(merge: true));

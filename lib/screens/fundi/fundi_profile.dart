@@ -26,11 +26,10 @@ class _FundiProfileState extends State<FundiProfile> {
   bool uploadingPhoto = false;
 
   String selectedCategoryId = 'plumbing_waterworks';
-  List<String> selectedCategoryIds = []; // other categories fundi can do
+  List<String> selectedCategoryIds = [];
   List<String> selectedSubcategoryIds = [];
   int profilePct = 0;
 
-  // Helper to get category by id
   Map<String, dynamic> get selectedCategory =>
       FundiTaxonomy.categories.firstWhere(
         (c) => c['id'] == selectedCategoryId,
@@ -117,7 +116,6 @@ class _FundiProfileState extends State<FundiProfile> {
         (combined['experienceYears'] ?? combined['experience'] ?? '')
             .toString();
 
-    // Map old profession string to new 24 categories
     String oldProf =
         combined['profession'] ??
         combined['skill'] ??
@@ -132,18 +130,15 @@ class _FundiProfileState extends State<FundiProfile> {
       selectedCategoryId = 'plumbing_waterworks';
     }
 
-    // Load other categories
     List<String> catIds = List<String>.from(
       combined['categoryIds'] ?? combined['categories'] ?? [],
     );
     if (catIds.isEmpty && combined['otherSkills'] != null) {
-      // migrate old otherSkills strings to categoryIds
       var oldOthers = List<String>.from(combined['otherSkills']);
       for (var s in oldOthers) {
         catIds.add(_mapOldProfessionToCategoryId(s));
       }
     }
-    // Remove primary from others and dedup
     catIds = catIds.toSet().where((id) => id != selectedCategoryId).toList();
     selectedCategoryIds = catIds;
 
@@ -248,14 +243,12 @@ class _FundiProfileState extends State<FundiProfile> {
     ].toSet().toList();
 
     await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
-      // NEW 24 CATEGORIES SYSTEM
       'primaryCategoryId': selectedCategoryId,
       'primaryCategoryName': cat['name'],
       'primaryCategorySlug': cat['slug'],
       'categoryIds': allCatIds,
-      'categories': allCatIds, // backward compat
+      'categories': allCatIds,
       'subcategoryIds': selectedSubcategoryIds,
-      // OLD FIELDS - kept for backward compat with old job matching
       'profession': cat['name'],
       'skill': cat['name'],
       'searchKeyword': finalKeyword,
@@ -500,8 +493,7 @@ class _FundiProfileState extends State<FundiProfile> {
               }).toList(),
               onChanged: (v) => setState(() {
                 selectedCategoryId = v!;
-                selectedSubcategoryIds =
-                    []; // reset subcategories when primary changes
+                selectedSubcategoryIds = [];
               }),
             ),
             const SizedBox(height: 12),

@@ -278,8 +278,7 @@ class CustomerFundiProfileScreen extends StatelessWidget {
                               const Spacer(),
                               Row(
                                 children: List.generate(
-                                  ((r['rating'] ?? 5) as num)
-                                      .toInt(), // FIXED HERE
+                                  ((r['rating'] ?? 5) as num).toInt(),
                                   (_) => const Icon(
                                     Icons.star,
                                     size: 12,

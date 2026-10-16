@@ -178,7 +178,6 @@ class _HomeNavigatorState extends State<HomeNavigator> {
       return Scaffold(appBar: _buildAppBar(), body: const AdminScreen());
     }
 
-    // CLIENT NOW HAS 4 TABS ONLY - Notifications removed (now on Home)
     final pages = [
       CustomerHome(key: ValueKey('ch_$_refreshId')),
       PostJobScreen(

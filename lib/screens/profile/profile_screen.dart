@@ -20,8 +20,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _mpesaCtrl = TextEditingController();
   final _currentPassCtrl = TextEditingController();
   final _newPassCtrl = TextEditingController();
-  final _emailCtrl =
-      TextEditingController(); // FIXED: was creating new controller in build every time
+  final _emailCtrl = TextEditingController();
 
   bool _loading = true;
   bool _saving = false;
@@ -187,12 +186,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // FIX 1: Loading must have Scaffold + Material ancestor
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // FIX 2: Wrap entire screen in Scaffold so TextField has Material ancestor
     return Scaffold(
       backgroundColor: const Color(0xFFF6F6F6),
       appBar: AppBar(
@@ -283,7 +280,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               keyboard: TextInputType.phone,
             ),
             const SizedBox(height: 12),
-            // FIX 3: Don't create new controller in build - use _emailCtrl
             TextField(
               enabled: false,
               controller: _emailCtrl,

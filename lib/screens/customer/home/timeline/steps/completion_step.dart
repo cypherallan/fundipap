@@ -16,10 +16,8 @@ class CompletionSteps {
             oldLabour + toInt(c.reneg?['extraLabor'] ?? 0),
       );
       int transportVal = toInt(c.job['transportFee'] ?? 0);
-      int clientFee = (newLabour * 0.05)
-          .round(); // 5% - YOUR profit from client
-      int totalClientPays =
-          newLabour + transportVal + clientFee; // what client locked
+      int clientFee = (newLabour * 0.05).round();
+      int totalClientPays = newLabour + transportVal + clientFee;
 
       int totalToRelease = toInt(
         c.reneg?['newTotalClientPays'] ?? totalClientPays,
@@ -36,8 +34,7 @@ class CompletionSteps {
           extra: ReleaseFeeBreakdown(
             labour: newLabour,
             transport: transportVal,
-            clientFee:
-                clientFee, // CLIENT SEES HIS OWN 5% ONLY - never fundi commission
+            clientFee: clientFee,
             total: totalToRelease,
           ),
           action: SizedBox(
@@ -79,7 +76,6 @@ class CompletionSteps {
         ),
       );
     }
-    // ... rest same
     if (c.status == 'in_progress' ||
         c.phase == 'fundi_working' ||
         c.status == 'job_completed' ||

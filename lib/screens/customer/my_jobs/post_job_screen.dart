@@ -136,7 +136,7 @@ class _PostJobScreenState extends State<PostJobScreen>
                           .where(
                             (d) => [
                               'assigned',
-                              'confirmed', // <-- ADD THIS
+                              'confirmed',
                               'travelling',
                               'site_visit',
                               'in_progress',

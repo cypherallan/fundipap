@@ -44,11 +44,11 @@ class DynamicPricingService {
   }) {
     List<Map<String, dynamic>> sorted = List.from(bids);
     sorted.sort((a, b) {
-      // LOCKED: GOLD always first, regardless of sortBy
       int scoreA = (a['badgeScore'] ?? 0) as int;
       int scoreB = (b['badgeScore'] ?? 0) as int;
-      if (scoreB != scoreA)
-        return scoreB.compareTo(scoreA); // gold 110 > silver 70 > bronze 35
+      if (scoreB != scoreA) {
+        return scoreB.compareTo(scoreA);
+      }
 
       double getVal(Map<String, dynamic> bid) {
         switch (sortBy) {
@@ -77,7 +77,6 @@ class DynamicPricingService {
     return sorted;
   }
 
-  // FIXES "recordBid isn't defined"
   static Future<void> recordBid({
     required String categoryId,
     required String subcategoryId,

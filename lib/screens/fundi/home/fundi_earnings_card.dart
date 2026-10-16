@@ -5,7 +5,7 @@ import '../../../theme/app_theme.dart';
 class FundiEarningsCard extends StatelessWidget {
   final Map<String, dynamic>? me;
   final double
-  totalEarned; // MUST be sum of fundiReceives: labour - fundiAppFee + transport
+  totalEarned;
   final int completedJobs;
   final int profilePct;
 

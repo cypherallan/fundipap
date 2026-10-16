@@ -35,13 +35,11 @@ class FundiJobCard extends StatelessWidget {
         ? '${distanceKm!.toStringAsFixed(1)}km away'
         : 'Calculating...';
 
-    // NEW: detect cancellation directly from job data
     bool isCancelled =
         (data['cancelled'] == true) ||
         (data['autoCancelled'] == true) ||
         (data['status'] ?? '').toString().toLowerCase().contains('cancel');
 
-    // NEW: check bid-level cancellation
     bool bidCancelledByClient =
         (bidStatus ?? data['bidStatus'] ?? '').toString() ==
         'cancelled_by_client';
@@ -92,9 +90,6 @@ class FundiJobCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // inside build, after you define clientCancelled
-
-            // CANCELLED BANNER FOR FUNDI
             if (isCancelled) ...[
               Container(
                 width: double.infinity,
@@ -148,7 +143,6 @@ class FundiJobCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // FIX: show X for ANY cancelled job, not just bid status
                     if (isCancelled) ...[
                       const SizedBox(width: 4),
                       InkWell(
@@ -187,7 +181,6 @@ class FundiJobCard extends StatelessWidget {
               ),
             ],
 
-            // Client row
             Row(
               children: [
                 CircleAvatar(
@@ -326,7 +319,6 @@ class FundiJobCard extends StatelessWidget {
               style: GoogleFonts.inter(fontSize: 10, color: Colors.black54),
             ),
             const SizedBox(height: 10),
-            // BID BUTTON OR CANCELLED STATE
             if (isCancelled)
               Container(
                 width: double.infinity,

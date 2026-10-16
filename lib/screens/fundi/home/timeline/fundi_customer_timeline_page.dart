@@ -43,7 +43,6 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        // FIX: job deleted from Firestore -> show no longer available
         if (!jobSnap.data!.exists || jobSnap.data!.data() == null) {
           return Scaffold(
             appBar: AppBar(
@@ -255,10 +254,8 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
             var bidDoc = bidsSnap.data!.docs.first;
             var bid = bidDoc.data() as Map<String, dynamic>;
 
-            // FIX: open job cancelled by fundi (deletedForFundi) -> show only cancelled
             String bidStatus = (bid['status'] ?? '').toString();
 
-            // NEW: client removed this fundi (before escrow)
             if (bidStatus == 'cancelled_by_client') {
               return Scaffold(
                 appBar: AppBar(

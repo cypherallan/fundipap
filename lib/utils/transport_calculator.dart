@@ -91,16 +91,16 @@ class TransportCalculator {
       int fee;
       String mode;
       if (km < 1.0) {
-        fee = 100; // your fixed RT
+        fee = 100;
         mode = 'boda';
       } else if (km <= 5.0) {
         mode = 'boda';
-        fee = (km * 60).round(); // 30 one-way *2 RT
+        fee = (km * 60).round();
         if (fee < 100) fee = 100;
       } else {
         mode = 'matatu';
-        fee = (km * 10).round(); // 5 one-way *2 RT = matatu average
-        if (fee < 150) fee = 150; // minimum matatu RT
+        fee = (km * 10).round();
+        if (fee < 150) fee = 150;
       }
 
       return {'km': km, 'fee': fee, 'mode': mode, 'meters': meters};

@@ -21,8 +21,9 @@ class AuthService {
   Future<GeoPoint?> _getGeo() async {
     try {
       var perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied)
+      if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
+      }
       if (perm == LocationPermission.denied ||
           perm == LocationPermission.deniedForever)
         return null;
@@ -46,7 +47,6 @@ class AuthService {
     GeoPoint? geo = await _getGeo();
 
     if (token != null) {
-      // remove this device token from any OTHER fundi who had it before
       try {
         var old = await _db
             .collection('fundis')
@@ -65,7 +65,6 @@ class AuthService {
       } catch (_) {}
     }
 
-    // update current user + fundi with fresh token & location
     await _db.collection('users').doc(uid).set({
       'fcmToken': token,
       'lastLoginAt': FieldValue.serverTimestamp(),
@@ -113,7 +112,6 @@ class AuthService {
       geo = await _getGeo();
     } catch (_) {}
 
-    // clean token from old accounts if reinstall
     if (fcmToken != null) {
       try {
         var old = await _db
@@ -121,11 +119,12 @@ class AuthService {
             .where('fcmToken', isEqualTo: fcmToken)
             .get();
         for (var d in old.docs) {
-          if (d.id != uid)
+          if (d.id != uid) {
             await d.reference.update({
               'fcmToken': FieldValue.delete(),
               'fcmTokens': FieldValue.arrayRemove([fcmToken]),
             });
+          }
         }
       } catch (_) {}
     }

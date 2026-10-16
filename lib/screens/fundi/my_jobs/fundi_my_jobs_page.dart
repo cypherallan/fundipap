@@ -7,7 +7,7 @@ import 'fundi_pending_tab.dart';
 import 'fundi_confirmed_tab.dart';
 import 'fundi_rejected_tab.dart';
 import 'fundi_completed_tab.dart';
-import 'fundi_cancelled_tab.dart'; // <-- NEW
+import 'fundi_cancelled_tab.dart';
 
 class FundiMyJobsPage extends StatefulWidget {
   const FundiMyJobsPage({super.key});
@@ -21,7 +21,7 @@ class _FundiMyJobsPageState extends State<FundiMyJobsPage>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 5, vsync: this); // 4 -> 5
+    _tab = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -54,7 +54,7 @@ class _FundiMyJobsPageState extends State<FundiMyJobsPage>
             Tab(text: 'CONFIRMED'),
             Tab(text: 'REJECTED'),
             Tab(text: 'COMPLETED'),
-            Tab(text: 'CANCELLED'), // <-- NEW
+            Tab(text: 'CANCELLED'),
           ],
         ),
       ),

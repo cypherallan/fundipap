@@ -61,7 +61,6 @@ class FundiBadgeService {
             (fundi['toolPhotos'] as List).isNotEmpty) ||
         fundi['hasTools'] == true;
 
-    // ===== TRIAL: 0-9 JOBS = ZERO SCORE, GOLD PRIVILEGES =====
     if (completedJobs < 10) {
       DateTime? trialExpiresAt;
       if (fundi['trialExpiresAt'] is Timestamp) {
@@ -73,7 +72,7 @@ class FundiBadgeService {
       return BadgeResult(
         fundiLevel: FundiLevel.L1_NEW,
         badgeLevel: BadgeLevel.gold,
-        score: 0, // ZERO as you asked
+        score: 0,
         isVerified: false,
         isTrialGold: true,
         trialExpiresAt: trialExpiresAt,
@@ -86,7 +85,6 @@ class FundiBadgeService {
       );
     }
 
-    // ===== AFTER 10 JOBS - REAL CALCULATION =====
     int score = 0;
     Map<String, int> b = {};
     double rating = _toDouble(fundi['averageRating'] ?? fundi['rating'] ?? 0);
@@ -101,7 +99,6 @@ class FundiBadgeService {
     int arrivalOk = (stats['onTimeArrivalCount'] ?? 0) as int;
     int arrivalTotal = (stats['arrivalTotal'] ?? completedJobs) as int;
 
-    // cancellations
     double cancelRate = completedJobs > 0 ? cancels / completedJobs : 0;
     if (cancels == 0) {
       b['cancellations'] = 10;
@@ -117,9 +114,9 @@ class FundiBadgeService {
     b['fraud'] = fraud == 0 ? 10 : 0;
     score += b['fraud']!;
 
-    if (rating >= 4.8)
+    if (rating >= 4.8) {
       b['rating'] = 15;
-    else if (rating >= 4.5)
+    } else if (rating >= 4.5)
       b['rating'] = 10;
     else if (rating >= 4.0)
       b['rating'] = 5;
@@ -155,9 +152,9 @@ class FundiBadgeService {
     score += fastPts;
 
     double arrivalRate = arrivalTotal > 0 ? arrivalOk / arrivalTotal : 0;
-    if (arrivalRate >= 0.9 || arrivalOk >= 5)
+    if (arrivalRate >= 0.9 || arrivalOk >= 5) {
       b['arrival'] = 10;
-    else if (arrivalRate >= 0.7)
+    } else if (arrivalRate >= 0.7)
       b['arrival'] = 5;
     else
       b['arrival'] = 0;
@@ -172,17 +169,17 @@ class FundiBadgeService {
     score += b['trust']!;
 
     double referralRate = completedJobs > 0 ? referrals / completedJobs : 0;
-    if (referralRate >= 0.15 || repeatClients >= 3)
+    if (referralRate >= 0.15 || repeatClients >= 3) {
       b['referral'] = 10;
-    else if (referralRate >= 0.08 || repeatClients >= 1)
+    } else if (referralRate >= 0.08 || repeatClients >= 1)
       b['referral'] = 5;
     else
       b['referral'] = 0;
     score += b['referral']!;
 
-    if (completedJobs >= 100)
+    if (completedJobs >= 100) {
       b['milestone'] = 25;
-    else if (completedJobs >= 50)
+    } else if (completedJobs >= 50)
       b['milestone'] = 15;
     else if (completedJobs >= 10)
       b['milestone'] = 5;
@@ -195,18 +192,16 @@ class FundiBadgeService {
 
     score = score.clamp(0, 130);
 
-    // LEVEL
     FundiLevel fundiLevel;
-    if (completedJobs >= 100)
+    if (completedJobs >= 100) {
       fundiLevel = FundiLevel.L4_ELITE;
-    else if (completedJobs >= 50)
+    } else if (completedJobs >= 50)
       fundiLevel = FundiLevel.L3_PRO;
     else if (completedJobs >= 10)
       fundiLevel = FundiLevel.L2_HUSTLER;
     else
       fundiLevel = FundiLevel.L1_NEW;
 
-    // BADGE AFTER TRIAL - YOUR RULE: CLEAN = BRONZE, FAIL = NONE
     bool isClean =
         profileComplete &&
         kyc &&
@@ -221,11 +216,10 @@ class FundiBadgeService {
     else if (score >= silverMin)
       badge = BadgeLevel.silver;
     else if (isClean || score >= bronzeMin)
-      badge = BadgeLevel.bronze; // clean after 10 = bronze
+      badge = BadgeLevel.bronze;
     else
-      badge = BadgeLevel.none; // fail = none 15%
+      badge = BadgeLevel.none;
 
-    // COMMISSION - FIXED 15/10/8/5
     int fundiComm;
     if (badge == BadgeLevel.gold)
       fundiComm = 5;
@@ -316,7 +310,6 @@ class FundiBadgeService {
       var result = await recalcAndUpdate(fundiId);
       return result;
     } catch (_) {
-      // fallback if fundi doc missing - force trial
       return BadgeResult(
         fundiLevel: FundiLevel.L1_NEW,
         badgeLevel: BadgeLevel.gold,

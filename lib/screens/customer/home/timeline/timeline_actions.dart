@@ -246,7 +246,6 @@ class TimelineActions {
       var j = snap.data() as Map<String, dynamic>;
       var reneg = j['renegotiation'] as Map<String, dynamic>?;
 
-      // FIXED - recalc from FUNDI badge, not stale job doc
       var fundiSnap = await FirebaseFirestore.instance
           .collection('users')
           .doc(fundiId)
@@ -304,7 +303,6 @@ class TimelineActions {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // ADD THIS - updates total earned that FundiHome reads
       try {
         await FirebaseFirestore.instance
             .collection('users')

@@ -82,7 +82,7 @@ class FundiLevelProgressWidget extends StatelessWidget {
                 fundiLevel: badge.fundiLevel,
                 isVerified: badge.isVerified,
                 isTrialGold: badge.isTrialGold,
-                trialExpiresAt: badge.trialExpiresAt, // ADD THIS
+                trialExpiresAt: badge.trialExpiresAt,
                 commissionPct: badge.fundiCommissionPct,
                 jobsDone: completedJobs,
                 compact: true,

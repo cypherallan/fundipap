@@ -23,7 +23,6 @@ class FundiHomeHeaderSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // badge calculated live from me doc (which has rating, cancels, referrals, etc)
     BadgeResult? badge;
     if (me != null) {
       try {
@@ -55,7 +54,6 @@ class FundiHomeHeaderSection extends StatelessWidget {
               ? FundiProfileIncompleteBanner(profilePct: profilePct)
               : const FundiProfileCompleteBanner(),
         ),
-        // NEW BADGE BANNER - shows Gold/Silver/Bronze + how many pts to next level
         if (badge != null) ...[
           const SizedBox(height: 10),
           Padding(

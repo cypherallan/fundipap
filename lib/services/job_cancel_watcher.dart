@@ -42,18 +42,12 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
             if (d == null) return;
             String st = (d['status'] ?? '').toString().toLowerCase();
 
-            // FIX: client removed fundi before escrow
             if (st == 'cancelled_by_client') {
-              _showCancelledAndClose(
-                context,
-                {
-                  ...d,
-                  'cancelledBy': 'client',
-                  'cancelReason':
-                      d['cancelReason'] ?? 'Cancelled before escrow',
-                },
-                isBidOnly: false, // show as client cancelled, not withdrawn
-              );
+              _showCancelledAndClose(context, {
+                ...d,
+                'cancelledBy': 'client',
+                'cancelReason': d['cancelReason'] ?? 'Cancelled before escrow',
+              }, isBidOnly: false);
               return;
             }
 
@@ -96,8 +90,6 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
         ? fundiId != uid
         : false;
 
-    // FIX: treat missing cancelledBy as client cancel when fundi is viewing
-    // because fundi didn't cancel
     bool isClientCancel =
         cancelledBy == 'client' ||
         status == 'cancelled_by_client' ||
@@ -138,7 +130,6 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
             : 'Client cancelled this job. It is now in your cancelled tab.';
       }
     } else {
-      // fundi cancelled
       if (viewerIsClient) {
         title = 'Fundi cancelled this job';
         msg =

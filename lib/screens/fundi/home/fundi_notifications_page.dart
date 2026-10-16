@@ -277,7 +277,6 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     final uid = FirebaseAuth.instance.currentUser!.uid;
     Map<String, Map<String, dynamic>> grouped = {};
 
-    // 1. Build assigned jobs FIRST - they have highest priority
     for (var doc in _assignedJobs) {
       var job = doc.data() as Map<String, dynamic>;
       var title = (job['title'] ?? 'Job').toString();
@@ -345,12 +344,10 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       };
     }
 
-    // 2. All jobIds that already have progress - NEVER show bid_sent for them
     Set<String> jobsWithProgress = grouped.keys.toSet();
     jobsWithProgress.addAll(_acceptedBids.map((e) => e['jobId'] as String));
     jobsWithProgress.addAll(_acceptedCounters.map((e) => e['jobId'] as String));
     jobsWithProgress.addAll(_clientCounters.map((e) => e['jobId'] as String));
-    // also any job in _jobsMap with agreedPrice / escrow
     for (var entry in _jobsMap.entries) {
       var j = entry.value.data() as Map<String, dynamic>;
       int agreed = _toInt(j['agreedPrice'] ?? j['acceptedBidAmount'] ?? 0);
@@ -363,7 +360,6 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       }
     }
 
-    // 3. Now add other notifications ONLY if jobId not already has progress
     for (var b in _clientCounters) {
       if (jobsWithProgress.contains(b['jobId'])) continue;
       if (_excludedJobIds.contains(b['jobId'])) continue;
@@ -438,7 +434,6 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       };
     }
 
-    // 4. Bid sent LAST and with same jobId check - this is where 20000 was leaking
     for (var b in _sentBids) {
       if (jobsWithProgress.contains(b['jobId'])) continue;
       if (_excludedJobIds.contains(b['jobId'])) continue;

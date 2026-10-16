@@ -13,7 +13,6 @@ class LocationService {
   static double? _lastLat;
   static double? _lastLng;
 
-  // FIX FOR ANDROID BLACK SCREEN - use instanceFor with explicit URL
   static FirebaseDatabase get _rtdb {
     return FirebaseDatabase.instanceFor(
       app: Firebase.app(),
@@ -60,8 +59,9 @@ class LocationService {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) return false;
       var p = await Geolocator.checkPermission();
-      if (p == LocationPermission.denied)
+      if (p == LocationPermission.denied) {
         p = await Geolocator.requestPermission();
+      }
       if (p == LocationPermission.denied ||
           p == LocationPermission.deniedForever)
         return false;
@@ -72,7 +72,6 @@ class LocationService {
     }
   }
 
-  // THIS WAS MISSING - needed by fundi_home_actions_mixin
   static Stream<Position> getPositionStream() {
     return Geolocator.getPositionStream(locationSettings: _streamSettings());
   }

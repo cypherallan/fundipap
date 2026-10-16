@@ -15,7 +15,7 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
       await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
         'status': 'confirmed',
         'escrowStatus': 'held',
-        'escrowAmount': amount, // CLIENT SEES ONLY THIS - no fee
+        'escrowAmount': amount,
         'escrowHeldAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -26,7 +26,7 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
           .set({
             'status': 'held',
             'escrowStatus': 'held',
-            'amount': amount, // full amount held
+            'amount': amount,
             'paidAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
@@ -83,7 +83,6 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
-  // FIXED: WITH FEE CALCULATION - CLIENT SEES TOTAL, FUNDI SEES PAYOUT
   Future<void> confirmCompletionClient(String jobId) async {
     var jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
     var snap = await jobRef.get();
@@ -116,10 +115,9 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
     });
 
     if (fundiDone) {
-      // ---- CALCULATE FEE ----
       String fundiId = (j['assignedFundiId'] ?? j['assignedFundi'] ?? '')
           .toString();
-      int commissionPct = 10; // default
+      int commissionPct = 10;
       if (fundiId.isNotEmpty) {
         try {
           var fundiDoc = await FirebaseFirestore.instance
@@ -131,7 +129,7 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
               fundiDoc.data()!,
               fundiDoc.data()!,
             );
-            commissionPct = badge.fundiCommissionPct; // 10 / 7 / 5
+            commissionPct = badge.fundiCommissionPct;
           }
         } catch (_) {}
       }
@@ -143,16 +141,15 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
         'escrowStatus': 'released',
         'extraEscrowStatus': 'released',
         'completedAt': FieldValue.serverTimestamp(),
-        'totalReleasedAmount': totalRelease, // CLIENT SEES THIS - 5000
-        'fundiPayoutAmount': fundiPayout, // FUNDI SEES THIS - 4500
-        'platformFee': platformFee, // NEVER SHOW TO CLIENT - 500
+        'totalReleasedAmount': totalRelease,
+        'fundiPayoutAmount': fundiPayout,
+        'platformFee': platformFee,
         'fundiCommissionPct': commissionPct,
         'initialEscrowReleased': initialAmount,
         'extraEscrowReleased': extraAmount,
         'fundiHasUnread': true,
       });
 
-      // Pay fundi - PAYOUT NOT TOTAL
       if (fundiId.isNotEmpty) {
         try {
           await FirebaseFirestore.instance
@@ -191,7 +188,6 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
     String jobId,
     Map<String, dynamic> job,
   ) async {
-    // ... keep your existing rating code same ...
     int rating = 5;
     final commentCtrl = TextEditingController();
     await showDialog(

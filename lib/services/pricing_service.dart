@@ -5,8 +5,7 @@ import 'fundi_badge_service.dart';
 class PricingService {
   static const String version = 'v3_2026_badge_commission';
 
-  // LOCKED COMMISSIONS - FINAL
-  static const int clientCommissionPercent = 5; // client always 5%
+  static const int clientCommissionPercent = 5;
   static const int fundiCommissionGold = 5;
   static const int fundiCommissionSilver = 8;
   static const int fundiCommissionBronze = 10;

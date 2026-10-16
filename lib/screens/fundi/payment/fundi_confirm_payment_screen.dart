@@ -111,7 +111,6 @@ class _FundiConfirmPaymentScreenState extends State<FundiConfirmPaymentScreen> {
       job['transportFee'] ?? reneg['oldTransportFee'] ?? 100,
     );
 
-    // FIX: use badge commission - gold 5%, silver 8%, bronze 10%, none 15%
     String badgeLevel =
         (job['fundiBadgeLevel'] ??
                 job['badgeLevel'] ??
@@ -125,8 +124,8 @@ class _FundiConfirmPaymentScreenState extends State<FundiConfirmPaymentScreen> {
       isTrialGold: isTrialGold,
     );
 
-    int appFee = (finalLabor * fundiPct / 100).round(); // bronze 10% = 600
-    int fundiReceives = finalLabor - appFee + transport; // 6000-600+179=5579
+    int appFee = (finalLabor * fundiPct / 100).round();
+    int fundiReceives = finalLabor - appFee + transport;
     int clientFee = (finalLabor * 5 / 100).round();
     int totalClientPays = finalLabor + transport + clientFee;
 

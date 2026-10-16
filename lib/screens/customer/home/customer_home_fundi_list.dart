@@ -60,13 +60,10 @@ class CustomerHomeFundiList extends StatelessWidget {
             ),
           );
         } else if (filter == 'rated')
-          // ignore: curly_braces_in_flow_control_structures
           docs.sort((a, b) => (b['rating'] ?? 0).compareTo(a['rating'] ?? 0));
         else if (filter == 'cheap')
-          // ignore: curly_braces_in_flow_control_structures
           docs.sort((a, b) => (a['price'] ?? 0).compareTo(b['price'] ?? 0));
         else if (filter == 'expensive')
-          // ignore: curly_braces_in_flow_control_structures
           docs.sort((a, b) => (b['price'] ?? 0).compareTo(a['price'] ?? 0));
 
         if (docs.isEmpty) {

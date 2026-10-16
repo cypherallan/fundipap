@@ -228,10 +228,10 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
         'total': fundiPayout,
       },
       'escrowAmount': 0,
-      'escrowStatus': 'pending', // only once
+      'escrowStatus': 'pending',
       'escrowJob': labour,
       'escrowTransport': transportFee,
-      'status': 'pending_escrow', // stays in Pending until Pay - only once
+      'status': 'pending_escrow',
       'acceptedBidAmount': labour,
       'updatedAt': FieldValue.serverTimestamp(),
       'fundiHasUnread': true,

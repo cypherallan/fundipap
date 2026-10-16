@@ -131,7 +131,7 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
             (job['escrowAmount'] ?? 0) == 0 &&
             (job['escrowStatus'] ?? 'pending') != 'held';
         bool isReposting = _reposting.contains(doc.id);
-        bool alreadyReposted = job['reposted'] == true; // <-- key check
+        bool alreadyReposted = job['reposted'] == true;
         String cancelledBy = (job['cancelledBy'] ?? '')
             .toString()
             .toLowerCase();

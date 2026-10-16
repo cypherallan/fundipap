@@ -282,12 +282,11 @@ mixin FundiMyJobsActionsMixin<T extends StatefulWidget> on State<T> {
     );
     if (result == null) return;
     double newPrice = double.tryParse(result['price']) ?? 0;
-    // FIX: set extraToLock fields that fundi_waiting_state_service reads
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'renegotiation': {
         'requested': true,
         'newPrice': newPrice,
-        'extraToLock': newPrice, // FIX for waiting state
+        'extraToLock': newPrice,
         'extraLabor': newPrice,
         'pendingLabor': newPrice,
         'reason': result['reason'],

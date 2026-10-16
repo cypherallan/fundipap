@@ -13,7 +13,7 @@ class FundiDisputesScreen extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection('disputes')
           .where('fundiId', isEqualTo: uid)
-          .snapshots(), // removed orderBy to avoid index
+          .snapshots(),
       builder: (context, snap) {
         if (snap.hasError) {
           return Center(
@@ -48,7 +48,6 @@ class FundiDisputesScreen extends StatelessWidget {
             ),
           );
         }
-        // sort in memory
         var docs = snap.data!.docs.toList();
         docs.sort((a, b) {
           var ad = (a.data() as Map)['createdAt'];

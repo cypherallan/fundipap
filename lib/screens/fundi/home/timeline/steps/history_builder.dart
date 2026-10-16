@@ -181,7 +181,6 @@ List<Widget> buildDoneHistory({
         ),
       );
     }
-    // FIX: Only show materials confirmed if parts were actually requested
     if (hasParts) {
       bool materialsConfirmed =
           toBool(renego['materialsConfirmed']) ||

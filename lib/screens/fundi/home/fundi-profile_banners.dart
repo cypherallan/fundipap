@@ -88,7 +88,6 @@ class FundiProfileCompleteBanner extends StatelessWidget {
   }
 }
 
-// REPLACED - LOCKED SYSTEM
 class FundiBadgeProgressBanner extends StatelessWidget {
   final BadgeResult badge;
   final int completedJobs;

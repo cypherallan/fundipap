@@ -7,10 +7,9 @@ class ChatGuard {
   );
 
   static bool containsPhone(String text) {
-    // strip spaces for 07xx xxx xxx
     String compact = text.replaceAll(RegExp(r'[\s-]'), '');
     if (phoneRegex.hasMatch(text) || phoneRegex.hasMatch(compact)) return true;
-    // words like zero seven one...
+
     if (text.toLowerCase().contains('zero seven')) return true;
     return false;
   }
@@ -28,12 +27,11 @@ class ChatGuard {
     await FirebaseFirestore.instance.collection('flaggedContacts').add({
       'jobId': jobId,
       'senderId': senderId,
-      'senderRole': senderRole, // client / fundi
+      'senderRole': senderRole,
       'rawText': text,
       'createdAt': FieldValue.serverTimestamp(),
       'type': 'phone_number_attempt',
     });
-    // also mark job for admin review
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'hasFlaggedContact': true,
       'lastFlaggedAt': FieldValue.serverTimestamp(),

@@ -4,7 +4,7 @@ import '../widgets/timeline_card.dart';
 import '../fundi_timeline_actions.dart';
 import '../fundi_timeline_context.dart';
 import '../../../my_jobs/fundi_request_new_price_screen.dart';
-import '../../fundi_visit_customer_tab.dart'; // FIX: public VisitCustomerScreen
+import '../../fundi_visit_customer_tab.dart';
 
 bool _toBool(dynamic v) {
   if (v == null) return false;
@@ -39,7 +39,6 @@ bool handleSiteVisitSteps(List<Widget> timeline, FundiTimelineContext c) {
       (reneg['status'] ?? 'pending') == 'pending';
   if (renegPending) return false;
 
-  // 1. TRAVELLING - OPEN TRACKING
   if (travelling && !siteDone) {
     timeline.add(
       fundiCard(
@@ -66,7 +65,6 @@ bool handleSiteVisitSteps(List<Widget> timeline, FundiTimelineContext c) {
     return true;
   }
 
-  // 2. ESCROW LOCKED
   if (!siteDone && escrowDone) {
     timeline.add(
       fundiCard(
@@ -101,7 +99,6 @@ bool handleSiteVisitSteps(List<Widget> timeline, FundiTimelineContext c) {
     return true;
   }
 
-  // 3. SITE DONE -> START JOB
   if (siteDone) {
     bool isStarted = [
       'in_progress',

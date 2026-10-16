@@ -6,7 +6,7 @@ import '../../../../../services/fundi_badge_service.dart';
 
 class PendingFilterBar extends StatelessWidget {
   final FilterType value;
-  final double distanceKm; // 0-20
+  final double distanceKm;
   final ValueChanged<FilterType> onChanged;
   final ValueChanged<double> onDistanceChanged;
 

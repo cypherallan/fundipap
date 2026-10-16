@@ -18,7 +18,6 @@ class WorkSteps {
   static bool handle(List<Widget> timeline, TimelineContext c) {
     bool hasParts = _hasParts(c.reneg);
 
-    // FIX: Exact same logic as HomeStatusWidget that shows notification correctly
     bool isSiteVisitPhase =
         c.status == 'site_visit' ||
         c.phase == 'waiting_for_client_to_buy_parts' ||

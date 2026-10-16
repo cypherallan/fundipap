@@ -3,9 +3,6 @@ import 'package:flutter/material.dart';
 import '../data/job_taxonomy.dart';
 import '../services/pricing_service.dart';
 
-/// Run this once from admin_screen.dart to seed all 24 categories + pricing
-/// Add a button in admin_screen: ElevatedButton(onPressed: seedAllTaxonomy)
-
 Future<void> seedAllTaxonomy(BuildContext context) async {
   var db = FirebaseFirestore.instance;
   int catCount = 0;
@@ -16,7 +13,6 @@ Future<void> seedAllTaxonomy(BuildContext context) async {
       String catId = cat['id'];
       var subs = cat['subcategories'] as List;
 
-      // 1. Seed category doc
       await db.collection('jobCategories').doc(catId).set({
         'name': cat['name'],
         'slug': cat['slug'],
@@ -34,7 +30,6 @@ Future<void> seedAllTaxonomy(BuildContext context) async {
       }, SetOptions(merge: true));
       catCount++;
 
-      // 2. Seed subcategories sub-collection
       for (var sub in subs) {
         var s = sub as Map<String, dynamic>;
         await db
@@ -54,7 +49,6 @@ Future<void> seedAllTaxonomy(BuildContext context) async {
             }, SetOptions(merge: true));
         subCount++;
 
-        // 3. Seed pricingRules (system dictated)
         String pricingDocId = '${catId}__${s['id']}';
         await db.collection('pricingRules').doc(pricingDocId).set({
           'categoryId': catId,

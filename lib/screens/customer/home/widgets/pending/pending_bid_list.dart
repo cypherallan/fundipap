@@ -12,7 +12,7 @@ class PendingBidList extends StatelessWidget {
   final String jobId;
   final Map<String, dynamic> job;
   final FilterType filter;
-  final double maxDistanceKm; // <-- slider value 0-20
+  final double maxDistanceKm;
   final Position? userPos;
   final BuildContext? parentContextForNav;
   final BuildContext? sheetContextForClose;
@@ -22,7 +22,7 @@ class PendingBidList extends StatelessWidget {
     required this.jobId,
     required this.job,
     required this.filter,
-    this.maxDistanceKm = 20, // default max
+    this.maxDistanceKm = 20,
     required this.userPos,
     this.parentContextForNav,
     this.sheetContextForClose,
@@ -39,7 +39,6 @@ class PendingBidList extends StatelessWidget {
       builder: (_, bSnap) {
         if (!bSnap.hasData) return const LinearProgressIndicator();
 
-        // FIX: filter out cancelled/withdrawn bids at source - only that specific bid removed
         var validDocs = bSnap.data!.docs.where((d) {
           var data = d.data() as Map<String, dynamic>;
           String st = (data['status'] ?? '').toString().toLowerCase();

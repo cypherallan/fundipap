@@ -72,7 +72,6 @@ FundiWaitingState? getFundiWaitingState({
       .toLowerCase();
   bool escrowDone = ['held', 'paid', 'released'].contains(escrowStatus);
 
-  // ADD
   print(
     "WAITING_STATE CHECK job=${job['title']} status=$jobStatus escrow=$escrowStatus travelling=${job['travelling']} siteDone=${job['siteVisited']} bidStatus=${bid['status']}",
   );
@@ -85,7 +84,6 @@ FundiWaitingState? getFundiWaitingState({
       jobStatus == 'auto_cancelled_no_arrival')
     return null;
 
-  // FIXED S3 - totalLabour = 6000 + 1000 = 7000, no double count
   var rEarly = job['renegotiation'] as Map<String, dynamic>?;
   int origExtraTop = _toInt(rEarly?['extraLabor'] ?? rEarly?['extra'] ?? 0);
   int counterExtraTop = _toInt(
@@ -133,7 +131,7 @@ FundiWaitingState? getFundiWaitingState({
         );
   int transport = _toInt(job['transportFee'] ?? 0);
   int fundiFee = (labour * 0.05).round();
-  int fundiReceives = labour - fundiFee + transport; // 6000 - 300 + 161 = 5861
+  int fundiReceives = labour - fundiFee + transport;
   int fundiSees = labour + transport;
 
   Map<String, dynamic>? renegoEarly;
@@ -160,7 +158,6 @@ FundiWaitingState? getFundiWaitingState({
 
   if (isCompletedLike) {
     if (escrowStatus == 'released' || _toBool(job['escrowReleased'])) {
-      // FIXED: show fundi payout, not totalClientPays (leak)
       return FundiWaitingState(
         type: FundiWaitingType.jobCompleted,
         title: 'Client released KES $fundiReceives - Tap to view receipt',

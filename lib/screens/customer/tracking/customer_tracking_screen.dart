@@ -70,7 +70,6 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
             );
           }
 
-          // LIVE FROM RTDB - this is the fix
           return StreamBuilder<DatabaseEvent>(
             stream: FirebaseDatabase.instance
                 .ref('live_locations/$fundiId')

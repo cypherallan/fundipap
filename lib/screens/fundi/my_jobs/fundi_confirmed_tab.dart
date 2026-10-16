@@ -29,7 +29,7 @@ class FundiConfirmedTab extends StatelessWidget {
     if (v is bool) return v;
     if (v is int) return v != 0;
     if (v is String) return v == 'true' || v == '1';
-    return true; // if Timestamp / exists, treat as true
+    return true;
   }
 
   Future<void> _startSiteVisit(
@@ -37,12 +37,12 @@ class FundiConfirmedTab extends StatelessWidget {
     String jobId,
     Map<String, dynamic> job,
   ) async {
-    // 1. get fundi current pos FIRST
     Position? pos;
     try {
       var perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied)
+      if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
+      }
       pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
@@ -63,10 +63,8 @@ class FundiConfirmedTab extends StatelessWidget {
 
     if (!context.mounted) return;
 
-    // 2. Prompt to open Maps immediately with both points
     double cLat = (job['customerLat'] ?? job['lat'] ?? -0.0917).toDouble();
     double cLng = (job['customerLng'] ?? job['lng'] ?? 34.7680).toDouble();
-    // handle GeoPoint too
     if (job['clientLocation'] is GeoPoint) {
       cLat = (job['clientLocation'] as GeoPoint).latitude;
       cLng = (job['clientLocation'] as GeoPoint).longitude;
@@ -99,7 +97,6 @@ class FundiConfirmedTab extends StatelessWidget {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     }
 
-    // 3. Still open your tracking screen so fundiLive continues updating
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -126,10 +123,12 @@ class FundiConfirmedTab extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: jobsStream,
       builder: (_, snap) {
-        if (snap.hasError)
+        if (snap.hasError) {
           return Center(child: SelectableText('Error: ${snap.error}'));
-        if (!snap.hasData)
+        }
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
         final allDocs = snap.data!.docs;
         var docs = allDocs.where((d) {
@@ -146,13 +145,14 @@ class FundiConfirmedTab extends StatelessWidget {
           ].contains(s);
         }).toList();
 
-        if (docs.isEmpty)
+        if (docs.isEmpty) {
           return Center(
             child: Text(
               'No confirmed jobs',
               style: GoogleFonts.inter(color: Colors.black45),
             ),
           );
+        }
 
         return ListView.builder(
           padding: const EdgeInsets.all(12),
@@ -272,7 +272,6 @@ class FundiConfirmedTab extends StatelessWidget {
                       ),
                     ),
 
-                  // 2. ESCROW DONE
                   if (escrowDone) ...[
                     if (renegPending) ...[
                       Container(
@@ -568,15 +567,15 @@ class _VisitCustomerScreenState extends State<_VisitCustomerScreen> {
           'siteVisitedAt': FieldValue.serverTimestamp(),
           'fundiLatAtVisit': currentPos?.latitude,
           'fundiLngAtVisit': currentPos?.longitude,
-          'travelling': false, // FIX: force false
-          'travellingAt': FieldValue.delete(), // clear travelling
+          'travelling': false,
+          'travellingAt': FieldValue.delete(),
           'status': 'site_visit',
           'fundiHasUnread': false,
           'customerHasUnread': true,
           'updatedAt': FieldValue.serverTimestamp(),
         });
     if (!mounted) return;
-    Navigator.pop(context); // back to list
+    Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(

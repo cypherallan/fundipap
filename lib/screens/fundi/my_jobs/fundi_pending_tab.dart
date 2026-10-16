@@ -25,10 +25,12 @@ class FundiPendingTab extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: bidsStream,
       builder: (_, snap) {
-        if (snap.hasError)
+        if (snap.hasError) {
           return Center(child: SelectableText('Error: ${snap.error}'));
-        if (!snap.hasData)
+        }
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
         var filtered = snap.data!.docs.where((d) {
           var data = d.data() as Map<String, dynamic>;

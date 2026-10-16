@@ -624,7 +624,7 @@ class _BidsSheetWithFilter extends StatefulWidget {
 
 class _BidsSheetWithFilterState extends State<_BidsSheetWithFilter> {
   FilterType _filter = FilterType.all;
-  double _distance = 20; // min 0 max 20
+  double _distance = 20;
 
   @override
   Widget build(BuildContext context) {

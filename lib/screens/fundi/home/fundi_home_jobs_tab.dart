@@ -51,7 +51,6 @@ class FundiHomeJobsTab extends StatelessWidget {
           const SizedBox(height: 10),
           Builder(
             builder: (context) {
-              // real city from fundi profile, fallback to "Near you"
               final String locName =
                   (me != null &&
                       me!['location'] != null &&

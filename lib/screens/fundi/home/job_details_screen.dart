@@ -27,7 +27,6 @@ class JobDetailsScreen extends StatefulWidget {
   State<JobDetailsScreen> createState() => _JobDetailsScreenState();
 }
 
-// change this line
 class _JobDetailsScreenState extends State<JobDetailsScreen>
     with JobCancelWatcher {
   int _toInt(dynamic v, [int fb = 0]) {
@@ -421,7 +420,6 @@ class _JobDetailsScreenState extends State<JobDetailsScreen>
             .doc(jobId)
             .snapshots(),
         builder: (ctx, jobSnap) {
-          // FIX: job deleted
           if (jobSnap.hasData &&
               (!jobSnap.data!.exists || jobSnap.data!.data() == null)) {
             return Center(
@@ -864,7 +862,7 @@ class _JobDetailsScreenState extends State<JobDetailsScreen>
             builder: (ctx, jobSnap) {
               if (jobSnap.hasData &&
                   (!jobSnap.data!.exists || jobSnap.data!.data() == null)) {
-                return const SizedBox.shrink(); // hide BID NOW button when deleted
+                return const SizedBox.shrink();
               }
               var jData =
                   (jobSnap.data?.data() as Map<String, dynamic>?) ?? widget.job;
@@ -882,7 +880,6 @@ class _JobDetailsScreenState extends State<JobDetailsScreen>
                       widget.hasBid ||
                       (bidSnap.hasData && bidSnap.data!.exists);
 
-                  // FIX: client cancelled this fundi
                   if (bidStatus == 'cancelled_by_client') {
                     return Container(
                       padding: const EdgeInsets.all(14),

@@ -227,7 +227,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
           if (mounted) setState(() {});
         });
 
-    // FIX: DO NOT exclude completed - we need it to show Client released
     _assignedSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('assignedFundiId', isEqualTo: uid)
@@ -235,7 +234,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
         .listen((snap) {
           print("JOBS SNAP: ${snap.docs.length} assigned jobs");
           _jobsMap.clear();
-          // keep excluded list but rebuild
           for (var d in snap.docs) {
             var job = d.data();
             var status = (job['status'] ?? '').toString().toLowerCase();
@@ -294,7 +292,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
   }
 
   Future<void> bidForJob(BuildContext context, Map<String, dynamic> job) async {
-    // ONLINE CHECK
     if (!isOnline) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -304,7 +301,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
       return;
     }
 
-    // SUSPENSION CHECK (from mixin)
     final uid = FirebaseAuth.instance.currentUser!.uid;
     bool canBid = await FundiPenaltyService.canFundiBid(uid);
     if (!canBid) {
@@ -350,9 +346,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
         badgeResult = FundiBadgeService.calculate(me!, me!);
       } catch (_) {}
     }
-    // NEW LOCKED SYSTEM
     BadgeLevel level = badgeResult?.badgeLevel ?? BadgeLevel.none;
-    // always show L1
     String nextBadgeLabel = 'BRONZE';
     if (level == BadgeLevel.none)
       nextBadgeLabel = 'BRONZE';
@@ -376,14 +370,12 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
           (b['jobData'] as Map<String, dynamic>? ?? <String, dynamic>{});
       var bidDataForNotif = (b['bidData'] as Map<String, dynamic>?) ?? b;
 
-      // FIX: filter client-cancelled bids
       String bStatus = (bidDataForNotif['status'] ?? b['status'] ?? '')
           .toString()
           .toLowerCase();
 
-      // If bid was cancelled by client before escrow - don't show as active notification
       if (bStatus == 'cancelled_by_client') {
-        continue; // moved to cancelled, not pending
+        continue;
       }
 
       bool isInAssigned = assignedMap.containsKey(b['jobId']);
@@ -575,7 +567,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        // NEW BADGE CHIP WITH LEVEL
                         if (badgeResult != null)
                           FundiBadgeChip(
                             level: badgeResult.badgeLevel,
@@ -589,7 +580,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                             showLevel: true,
                           ),
                         if (badgeResult != null) const SizedBox(height: 6),
-                        // PROGRESS BAR
                         if (badgeResult != null)
                           SizedBox(
                             width: 130,
@@ -650,7 +640,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                 ),
               ),
             ),
-            // ONLINE TOGGLE - ADD HERE
             SliverToBoxAdapter(
               child: Container(
                 margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
@@ -700,7 +689,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                 ),
               ),
             ),
-            // LEVEL PROGRESS - NEW
             if (badgeResult != null)
               SliverToBoxAdapter(
                 child: Container(
@@ -719,7 +707,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                 ),
               ),
 
-            // FIXED NOTIFICATIONS - ALL WAITING STATES ORANGE
             SliverToBoxAdapter(
               child: Container(
                 color: FundipapColors.blackGray,
@@ -883,7 +870,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                           ),
                         );
                       }
-                      // GREEN - escrowLocked, travelling, siteVisited
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(

@@ -35,7 +35,6 @@ Widget? buildCurrentWaiting({
   String lowPhase = (renego?['currentPhase'] ?? '').toString().toLowerCase();
   bool hasParts = hasPartsInRenego(renego);
 
-  // FIXED CALC - S3 handles counter 1000 not 2000
   int origExtra = toInt(
     renego?['extraLabor'] ??
         renego?['extra'] ??
@@ -55,7 +54,7 @@ Widget? buildCurrentWaiting({
   int finalExtra = agreedExtra > 0
       ? agreedExtra
       : (counterExtra > 0 ? counterExtra : origExtra);
-  int extraLabourToShow = finalExtra; // S3 = 1000
+  int extraLabourToShow = finalExtra;
 
   int oldLaborRenego = toInt(renego?['oldLabor'] ?? renego?['oldLabour'] ?? 0);
   int origBase = toInt(
@@ -70,10 +69,8 @@ Widget? buildCurrentWaiting({
   } else if (origBase > 0) {
     baseLabour = origBase;
   } else if (currentLaborCost > 0 && currentLaborCost > finalExtra) {
-    // laborCost still original before approval
     baseLabour = currentLaborCost;
   } else if (agreed > finalExtra) {
-    // agreed is total after approval, subtract extra to get base
     baseLabour = agreed - finalExtra;
   } else {
     baseLabour = currentLaborCost > 0 ? currentLaborCost : agreed;
@@ -86,7 +83,6 @@ Widget? buildCurrentWaiting({
   int fundiFee = (labour * 0.05).round();
   int fundiReceives = labour - fundiFee + transport;
 
-  // FIX NO PARTS: Skip materials waiting, show START JOB / New Price directly
   if ((status == 'waiting_for_client_to_buy_parts' ||
           lowPhase == 'waiting_for_client_to_buy_parts' ||
           lowStat == 'waiting_for_client_to_buy_parts') &&

@@ -94,7 +94,6 @@ class HomeStatusWidget extends StatelessWidget {
     String renegStatus = (reneg?['status'] ?? '').toString();
     String phase = (reneg?['currentPhase'] ?? '').toString();
 
-    // FIX: Cover all extra escrow statuses
     bool needsExtraEscrow =
         renegStatus.contains('pending_extra_escrow') ||
         renegStatus.contains('extra_pending_escrow') ||
@@ -166,7 +165,6 @@ class HomeStatusWidget extends StatelessWidget {
       );
     }
 
-    // Travelling states
     if (!isTravelling &&
         !siteDone &&
         status != 'site_visit' &&
@@ -200,7 +198,6 @@ class HomeStatusWidget extends StatelessWidget {
       );
     }
 
-    // FIX: Show lock extra after price preview
     if (needsExtraEscrow) {
       int counterExtra = toInt(
         reneg?['acceptedCounterExtraLabor'] ?? reneg?['counterExtraLabor'] ?? 0,
@@ -244,7 +241,6 @@ class HomeStatusWidget extends StatelessWidget {
 
     bool hasParts = _hasParts(reneg);
 
-    // Parts flow - only if hasParts
     if (phase == 'waiting_for_client_to_buy_parts' && hasParts) {
       return const OrangeAnimatedWaitingCard(
         title: 'You will buy parts - Confirm when bought',
@@ -265,7 +261,6 @@ class HomeStatusWidget extends StatelessWidget {
       );
     }
 
-    // FIX: After locking extra with NO parts, show waiting for fundi to start job
     bool isSiteVisitPhase =
         status == 'site_visit' ||
         phase == 'waiting_for_client_to_buy_parts' ||
@@ -274,7 +269,6 @@ class HomeStatusWidget extends StatelessWidget {
         phase == 'parts_confirmed_by_fundi';
 
     if (isSiteVisitPhase) {
-      // If hasParts is false, skip parts and show waiting for fundi to start
       if (!hasParts) {
         return const OrangeAnimatedWaitingCard(
           title: 'Waiting for fundi to start job',
@@ -282,7 +276,6 @@ class HomeStatusWidget extends StatelessWidget {
               'Extra labour locked. Fundi will start working now - no parts needed.',
         );
       }
-      // If hasParts true but we are already past parts, still show waiting for fundi
       if (phase == 'parts_confirmed_by_fundi' || phase.isEmpty) {
         return const OrangeAnimatedWaitingCard(
           title: 'Waiting for fundi to start job',

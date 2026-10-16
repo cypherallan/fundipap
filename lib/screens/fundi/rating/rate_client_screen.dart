@@ -213,22 +213,19 @@ class _RateClientScreenState extends State<RateClientScreen> {
         }, SetOptions(merge: true));
       }
 
-      // MARK RATED + CLOSE
       await jobRef.update({
         'fundiRated': true,
         'fundiRatedClient': true,
         'fundiRating': _rating,
         'fundiReview': _reviewCtrl.text.trim(),
         'fundiRatedAt': FieldValue.serverTimestamp(),
-        'status':
-            'closed', // <- was 'completed', now closed so home query removes it
+        'status': 'closed',
         'fundiTimelineCleared': true,
         'customerHasUnread': true,
         'fundiHasUnread': false,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // DELETE NOTIFICATIONS - only after rating
       var uid = FirebaseAuth.instance.currentUser!.uid;
       try {
         var bidsSnap = await jobRef
@@ -296,8 +293,9 @@ class _RateClientScreenState extends State<RateClientScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loadingJob)
+    if (_loadingJob) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     String status = (_job?['status'] ?? '').toString();
     if (['cancelled', 'cancelled_after_arrival'].contains(status)) {
@@ -307,7 +305,6 @@ class _RateClientScreenState extends State<RateClientScreen> {
       );
     }
 
-    // --- your original beautiful UI calculations ---
     String location =
         (_job?['location'] ?? _job?['address'] ?? 'Client location').toString();
     var reneg = _job?['renegotiation'] as Map<String, dynamic>?;

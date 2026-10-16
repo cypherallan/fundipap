@@ -160,7 +160,6 @@ class ClientCompletedTab extends StatelessWidget {
                         foregroundColor: Colors.white,
                       ),
                       onPressed: () {
-                        // Use your new mandatory screen
                         Navigator.push(
                           context,
                           MaterialPageRoute(

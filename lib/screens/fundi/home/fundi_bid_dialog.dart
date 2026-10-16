@@ -5,9 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../theme/app_theme.dart';
 import '../../../services/dynamic_pricing_service.dart';
 
-/// FUNDI BID DIALOG - NEW MARKET-DRIVEN PRICING
-/// Fundi dictates first price, sees average guidance, system learns
-
 class FundiBidDialog extends StatefulWidget {
   final String jobId;
   final Map<String, dynamic> jobData;
@@ -84,7 +81,6 @@ class _FundiBidDialogState extends State<FundiBidDialog> {
       var u = userDoc.data() ?? {};
       var f = fundiDoc.data() ?? {};
 
-      // 1. Create bid
       await FirebaseFirestore.instance
           .collection('jobs')
           .doc(widget.jobId)
@@ -109,7 +105,6 @@ class _FundiBidDialogState extends State<FundiBidDialog> {
             'createdAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
 
-      // 2. Record for dynamic average
       await DynamicPricingService.recordBid(
         categoryId: categoryId,
         subcategoryId: subcategoryId,
@@ -119,7 +114,6 @@ class _FundiBidDialogState extends State<FundiBidDialog> {
         jobId: widget.jobId,
       );
 
-      // 3. NEW - Create fundi notification "bid sent"
       await FirebaseFirestore.instance.collection('notifications').add({
         'toUserId': uid,
         'toRole': 'fundi',
@@ -162,7 +156,7 @@ class _FundiBidDialogState extends State<FundiBidDialog> {
     var jobTitle = widget.jobData['title'] ?? 'Job';
     var catName = widget.jobData['categoryName'] ?? categoryId;
     var subName = widget.jobData['subcategoryName'] ?? subcategoryId;
-    final stats = _stats; // LOCAL COPY - fixes non-final promotion
+    final stats = _stats;
 
     return AlertDialog(
       title: Text(

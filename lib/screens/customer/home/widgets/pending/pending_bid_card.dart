@@ -32,7 +32,7 @@ class PendingBidCard extends StatefulWidget {
 }
 
 class _PendingBidCardState extends State<PendingBidCard> {
-  double? _lastKm; // keeps distance stable, stops glitch
+  double? _lastKm;
 
   FirebaseDatabase get _rtdb => FirebaseDatabase.instanceFor(
     app: Firebase.app(),
@@ -41,7 +41,6 @@ class _PendingBidCardState extends State<PendingBidCard> {
 
   @override
   Widget build(BuildContext context) {
-    //... keep your openConfirm and cancelAccepted methods exactly same...
     Future<void> openConfirm() async {
       if (widget.sheetContextForClose != null &&
           widget.sheetContextForClose!.mounted) {
@@ -154,7 +153,6 @@ class _PendingBidCardState extends State<PendingBidCard> {
 
     final status = (widget.bid.bid['status'] ?? '').toString();
     final statusLower = status.toLowerCase();
-    // FIX: hide cancelled / withdrawn bids from client bid list
     if (statusLower.contains('cancel') ||
         statusLower == 'withdrawn' ||
         statusLower == 'deleted' ||
@@ -247,7 +245,6 @@ class _PendingBidCardState extends State<PendingBidCard> {
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
-                          // FIXED DISTANCE - no glitch
                           StreamBuilder<DatabaseEvent>(
                             stream: _rtdb
                                 .ref('live_locations/$fundiId')

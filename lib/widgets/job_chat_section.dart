@@ -6,7 +6,7 @@ import '../services/chat_guard.dart';
 
 class JobChatSection extends StatefulWidget {
   final String jobId;
-  final bool isClient; // true if client view
+  final bool isClient;
   const JobChatSection({
     super.key,
     required this.jobId,
@@ -43,7 +43,6 @@ class _JobChatSectionState extends State<JobChatSection> {
           ),
         ),
       );
-      // optional: show masked version? block completely:
       return;
     }
 

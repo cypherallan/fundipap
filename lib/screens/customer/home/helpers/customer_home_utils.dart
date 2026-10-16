@@ -127,7 +127,6 @@ Future<List<BidWithFundi>> enrichBids(
         }
       }
 
-      // FIXED FINAL: read from fundis first, then users
       var src = fundiLive ?? f;
       double rating = toDouble(
         src?['averageRating'] ??

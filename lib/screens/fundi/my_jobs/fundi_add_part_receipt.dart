@@ -52,7 +52,6 @@ class _FundiAddPartReceiptScreenState extends State<FundiAddPartReceiptScreen> {
     setState(() => uploading = true);
     try {
       List<String> urls = [];
-      // PHOTOS OPTIONAL FOR SPARK PLAN
       if (_images.isNotEmpty) {
         for (var x in _images) {
           String path =
@@ -70,7 +69,7 @@ class _FundiAddPartReceiptScreenState extends State<FundiAddPartReceiptScreen> {
             'partName': partCtrl.text.trim(),
             'cost': int.tryParse(costCtrl.text) ?? 0,
             'shopName': shopCtrl.text.trim(),
-            'photoUrls': urls, // empty if Spark plan - no storage used
+            'photoUrls': urls,
             'hasPhotos': urls.isNotEmpty,
             'fundiId': FirebaseAuth.instance.currentUser!.uid,
             'createdAt': FieldValue.serverTimestamp(),
@@ -89,7 +88,6 @@ class _FundiAddPartReceiptScreenState extends State<FundiAddPartReceiptScreen> {
       ).showSnackBar(const SnackBar(content: Text('Part added ✓')));
       Navigator.pop(context);
     } catch (e) {
-      // If storage fails on Spark, still save without photos
       if (e.toString().contains('storage') || e.toString().contains('quota')) {
         await FirebaseFirestore.instance
             .collection('jobs')
@@ -271,7 +269,6 @@ class _FundiAddPartReceiptScreenState extends State<FundiAddPartReceiptScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            // Show previous receipts
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('jobs')

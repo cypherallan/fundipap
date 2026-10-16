@@ -119,7 +119,6 @@ class FundiTimelineContext {
     );
     int labour = newLabour;
 
-    // --- FIXED: 5 STAGES FEE ---
     String badgeLevel =
         (job['fundiBadgeLevel'] ??
                 job['badgeLevel'] ??
@@ -133,9 +132,9 @@ class FundiTimelineContext {
         job['isTrial'] == true;
 
     int fundiPct;
-    if (isTrialGold)
+    if (isTrialGold) {
       fundiPct = 5;
-    else if (badgeLevel == 'gold')
+    } else if (badgeLevel == 'gold')
       fundiPct = 5;
     else if (badgeLevel == 'silver')
       fundiPct = 8;
@@ -145,8 +144,7 @@ class FundiTimelineContext {
       fundiPct = 15;
 
     int fundiAppFee = (labour * fundiPct / 100).round();
-    int fundiReceives =
-        labour - fundiAppFee + transport;
+    int fundiReceives = labour - fundiAppFee + transport;
     int fundiSeesWaiting = labour + transport;
     int newTotalFundiLocked = newLabour + transport;
     int newFundiReceivesVal =

@@ -57,7 +57,6 @@ class ClientConfirmedTab extends StatelessWidget {
         int totalToRelease = newTotal > 0 ? newTotal : initialAmt + extraAmt;
         if (totalToRelease == 0) totalToRelease = initialAmt;
 
-        // For cancel math - transport needed for UI message, labour calc handled inside service
         int transport = (job['transportFee'] ?? job['escrowTransport'] ?? 0)
             .toInt();
 
@@ -326,7 +325,6 @@ class ClientConfirmedTab extends StatelessWidget {
                     ),
                   ),
 
-                // CANCEL BUTTON - CLIENT (FINAL LOGIC)
                 if (canClientCancel) ...[
                   const SizedBox(height: 12),
                   const Divider(),

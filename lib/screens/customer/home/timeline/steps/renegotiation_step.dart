@@ -65,9 +65,9 @@ class RenegotiationSteps {
         int newTotalClient = toInt(c.reneg?['newTotalClientPays'] ?? 0);
         if (newTotalClient > 0) extraToLock = newTotalClient - c.alreadyLocked;
       }
-      // ENSURE 1000 -> 1050 not 2100
-      if (extraToLock == 0)
+      if (extraToLock == 0) {
         extraToLock = extraLaborToShow + (extraLaborToShow * 0.05).round();
+      }
 
       int newTotalClient = toInt(
         c.reneg?['newTotalClientPays'] ?? c.alreadyLocked + extraToLock,
@@ -92,8 +92,8 @@ class RenegotiationSteps {
             ),
             onPressed: () => TimelineActions.payExtraEscrow(
               c.jobId,
-              extraLaborToShow, // 2000
-              extraToLock, // 2100
+              extraLaborToShow,
+              extraToLock,
               whoBuys,
             ),
             child: Text('LOCK EXTRA KES $extraToLock NOW'),

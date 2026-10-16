@@ -14,11 +14,11 @@ class EscrowSteps {
         icon: Icons.verified,
         isDone: true,
         extra: FeeBreakdown(
-          labour: c.labour, // 5000
-          transport: c.transport, // 100 - FIXED
+          labour: c.labour,
+          transport: c.transport,
           transportLabel: c.transportLabel,
-          clientAppFee: c.clientAppFee, // 250
-          totalToPay: c.totalToPay, // 5350 - FIXED
+          clientAppFee: c.clientAppFee,
+          totalToPay: c.totalToPay,
         ),
       ),
     );
@@ -27,7 +27,7 @@ class EscrowSteps {
       TimelineCard(
         title: c.escrowDone
             ? 'Escrow locked - KES ${c.alreadyLocked} secured'
-            : 'Lock KES ${c.totalToPay} to escrow now', // now 5350
+            : 'Lock KES ${c.totalToPay} to escrow now',
         body: c.escrowDone
             ? 'KES ${c.alreadyLocked} is secured. It will be released to ${c.fundiNameStr} after you confirm the job is completed.'
             : 'This amount will be held in FundiApp and only released to Fundi ${c.fundiNameStr} after you confirm the job is completed.',
@@ -44,9 +44,7 @@ class EscrowSteps {
                   ),
                 ),
                 onPressed: () => TimelineActions.payEscrow(c.jobId, c.agreed),
-                child: Text(
-                  'Pay KES ${c.totalToPay} to Escrow',
-                ), // now Pay KES 5350
+                child: Text('Pay KES ${c.totalToPay} to Escrow'),
               )
             : null,
       ),

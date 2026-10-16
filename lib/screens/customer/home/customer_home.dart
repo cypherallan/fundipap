@@ -48,7 +48,6 @@ class _CustomerHomeState extends State<CustomerHome> {
     for (var s in _bidsSubs.values) s.cancel();
     _bidsSubs.clear();
 
-    // FIX: include counter_accepted so notification stays after restart
     _jobsSub = FirebaseFirestore.instance
         .collection('jobs')
         .where('customerId', isEqualTo: uid)
@@ -66,7 +65,6 @@ class _CustomerHomeState extends State<CustomerHome> {
         .snapshots()
         .listen((jobsSnap) {
           var currentJobIds = jobsSnap.docs.map((d) => d.id).toSet();
-          // remove bids for jobs that are now cancelled/closed
           _bidsSubs.keys
               .where((id) => !currentJobIds.contains(id))
               .toList()
@@ -119,12 +117,11 @@ class _CustomerHomeState extends State<CustomerHome> {
     final Map<String, DocumentSnapshot> activeMap = {};
 
     void _updateActive() {
-      // FILTER OUT CANCELLED
       var filtered = activeMap.values.where((d) {
         var j = d.data() as Map<String, dynamic>?;
         if (j == null) return false;
         String s = (j['status'] ?? '').toString().toLowerCase();
-        return !s.contains('cancel'); // hide cancelled
+        return !s.contains('cancel');
       }).toList();
       if (mounted) setState(() => _activeJobs = filtered);
     }
@@ -150,13 +147,11 @@ class _CustomerHomeState extends State<CustomerHome> {
         )
         .snapshots()
         .listen((snap) {
-          // REMOVE docs that left the query (cancelled)
           var currentIds = snap.docs.map((d) => d.id).toSet();
           activeMap.removeWhere(
             (id, _) =>
                 !snap.docs.any((d) => d.id == id) && !currentIds.contains(id),
           );
-          // Also remove any that became cancelled in this batch
           for (var d in snap.docs) {
             var data = d.data();
             String s = (data['status'] ?? '').toString().toLowerCase();
@@ -166,7 +161,6 @@ class _CustomerHomeState extends State<CustomerHome> {
               activeMap[d.id] = d;
             }
           }
-          // Clean any old cancelled that still in map
           activeMap.removeWhere((_, doc) {
             var data = doc.data() as Map<String, dynamic>?;
             String s = (data?['status'] ?? '').toString().toLowerCase();
@@ -175,7 +169,6 @@ class _CustomerHomeState extends State<CustomerHome> {
           _updateActive();
         });
 
-    // extra listener for renegotiation waiting states
     FirebaseFirestore.instance
         .collection('jobs')
         .where('customerId', isEqualTo: uid)
@@ -200,7 +193,6 @@ class _CustomerHomeState extends State<CustomerHome> {
           _updateActive();
         });
 
-    // extra listener for renegotiation waiting states
     FirebaseFirestore.instance
         .collection('jobs')
         .where('customerId', isEqualTo: uid)
@@ -223,7 +215,6 @@ class _CustomerHomeState extends State<CustomerHome> {
   Future<void> _markThisFundiAsRead(String fundiKey) async {
     setState(() {
       for (var b in _bids) {
-        // FIX: also check jobId == fundiKey because grouped uses jobId as key
         if (b['fundiId'] == fundiKey ||
             b['fundiName'] == fundiKey ||
             b['jobId'] == fundiKey)
@@ -417,7 +408,6 @@ class _CustomerHomeState extends State<CustomerHome> {
         return bT.compareTo(aT);
       });
 
-      // FIX: if any bid is accepted counter, prioritize it
       var acceptedBids = entry.value
           .where(
             (x) => (x['status'] ?? '').toString().contains(
@@ -456,7 +446,7 @@ class _CustomerHomeState extends State<CustomerHome> {
         'bidData': bidDataSafe,
         'bidId': (latest['bidId'] ?? '').toString(),
         'bidCount': entry.value.length,
-        'bidStatus': (latest['status'] ?? '').toString(), // FIX: send status
+        'bidStatus': (latest['status'] ?? '').toString(),
         'agreedPrice':
             bidDataSafe['agreedPrice'] ??
             bidDataSafe['clientCounterAmount'] ??
@@ -467,9 +457,7 @@ class _CustomerHomeState extends State<CustomerHome> {
             : DateTime.now(),
         'type': isAccepted ? 'counter_accepted_by_fundi' : 'bid',
         'isPendingBid': true,
-        'isRead': isAccepted
-            ? false
-            : unread == 0, // FIX: accepted always shows as new until proceed
+        'isRead': isAccepted ? false : unread == 0,
       };
     }
     for (var doc in _activeJobs) {
@@ -497,7 +485,6 @@ class _CustomerHomeState extends State<CustomerHome> {
             (b['latestAt'] as DateTime).compareTo((a['latestAt'] as DateTime)),
       );
 
-    // FIX: sort accepted counters to top
     list.sort((a, b) {
       bool aAcc =
           (a['bidStatus'] ?? '').toString().contains(

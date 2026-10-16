@@ -7,7 +7,7 @@ class FundiBadgeChip extends StatelessWidget {
   final FundiLevel fundiLevel;
   final bool isVerified;
   final bool isTrialGold;
-  final DateTime? trialExpiresAt; // ADD THIS
+  final DateTime? trialExpiresAt;
   final int referralCount;
   final int jobsDone;
   final int commissionPct;
@@ -21,10 +21,10 @@ class FundiBadgeChip extends StatelessWidget {
     this.fundiLevel = FundiLevel.L1_NEW,
     this.isVerified = false,
     this.isTrialGold = false,
-    this.trialExpiresAt, // ADD THIS
+    this.trialExpiresAt,
     this.referralCount = 0,
     this.jobsDone = 0,
-    this.commissionPct = 15, // none = 15% default
+    this.commissionPct = 15,
     this.showLevel = true,
     this.compact = false,
     this.hideCommission = false,
@@ -78,7 +78,6 @@ class FundiBadgeChip extends StatelessWidget {
         break;
     }
 
-    // FIX: calculate days left
     int trialDaysLeft = 0;
     if (isTrialGold && trialExpiresAt != null) {
       trialDaysLeft = trialExpiresAt!
