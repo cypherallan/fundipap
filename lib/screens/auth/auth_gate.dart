@@ -19,7 +19,6 @@ class AuthGate extends StatelessWidget {
         }
         if (snapshot.hasData && snapshot.data != null) {
           final user = snapshot.data!;
-          // HARD ADMIN CHECK - don't wait for Firestore
           if (user.email == 'agwonamallan@gmail.com') {
             return HomeNavigator(role: 'admin', email: user.email ?? '');
           }
@@ -34,7 +33,7 @@ class AuthGate extends StatelessWidget {
               String role = roleSnap.data ?? 'client';
               if (role == 'admin') {
                 role =
-                    'client'; // only your email can be admin, already handled above
+                    'client';
               }
               return HomeNavigator(role: role, email: user.email ?? '');
             },

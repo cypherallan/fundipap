@@ -234,6 +234,7 @@ export const onNotificationPush = onDocumentCreated({ document: "notifications/{
     if (!d) return;
     const toUserId = d.toUserId as string;
     if (!toUserId) return;
+    if ((d.title || '').toLowerCase().includes('counter offer received')) return; // <-- ADD THIS LINE HERE
 
     const tokens = await getFcmTokens(toUserId);
     if (tokens.length === 0) {
@@ -269,7 +270,7 @@ export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId
     }
     if ((newS === "countered" || newS === "client_counter") && lastBy !== fundiId && oldS !== newS) {
         const tokens = await getFcmTokens(fundiId);
-        await sendPush(tokens, `Client countered KES ${after.clientCounterAmount || 0}`, `${after.jobTitle || 'Job'} • Tap to Accept/Counter`, { jobId, type: "client_counter" });
+        await sendPush(tokens, `Client countered KES ${after.clientCounterAmount || after.lastCounterAmount || 0}`, `Tap to Accept/Counter`, { jobId, type: "client_counter" });
     }
     if (newS === "countered" && lastBy === fundiId && oldS !== newS) {
         const tokens = await getFcmTokens(clientId);
@@ -374,7 +375,7 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const { extraLabor, extraToLock } = getExtraNumbers(after);
 
     console.log(`RELEASE FIX ${jobId} badge=${u.badgeLevel} trial=${u.isTrialGold} pct=${fundiPct}% totalLabor ${totalLabor} base ${baseLabor} extra ${extraLabor} fundiReceives ${fundiReceives} clientPays ${clientPays}`);
-    
+
     if ((newEscHeld && !oldEscHeld) || (newEscStatus === "held" && oldEscStatus !== "held")) {
         const beforeStatus = (before?.status || "").toLowerCase();
         const isExtraLock = extraLabor > 0 || extraToLock > 0 || beforeStatus.includes("awaiting_extra") || beforeStatus.includes("in_progress") || beforeStatus.includes("site_visit");

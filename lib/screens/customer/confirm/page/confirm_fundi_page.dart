@@ -124,7 +124,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
       if (trans < 100) trans = 100;
       if (km <= 1.0 && trans < 100) trans = 100;
 
-      // LOCKED COMMISSION - from badge
       String badgeLevelStr = (widget.bidData['badgeLevel'] ?? 'none')
           .toString();
       bool isTrial = (widget.bidData['isTrialGold'] ?? false) as bool;
@@ -290,7 +289,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         ? totalClientPays
         : labor + effectiveTransport + clientAppFee;
 
-    // BADGE FOR DISPLAY
     BadgeLevel bLevel;
     FundiLevel fLevel;
     try {

@@ -32,7 +32,6 @@ class _AdminScreenState extends State<AdminScreen> {
         String catId = cat['id'];
         var subs = cat['subcategories'] as List;
 
-        // 1. Category doc
         await db.collection('jobCategories').doc(catId).set({
           'name': cat['name'],
           'slug': cat['slug'],
@@ -50,7 +49,6 @@ class _AdminScreenState extends State<AdminScreen> {
         }, SetOptions(merge: true));
         catCount++;
 
-        // 2. Subcategories + pricingRules
         for (var sub in subs) {
           var s = sub as Map<String, dynamic>;
           await db
@@ -85,7 +83,7 @@ class _AdminScreenState extends State<AdminScreen> {
             'siteVisitFeeOther': FundiTaxonomy.siteVisitFeeOther,
             'currency': 'KES',
             'pricingVersion': PricingService.version,
-            'priceDictatedBy': 'system', // SYSTEM DICTATES, NOT CLIENT/FUNDI
+            'priceDictatedBy': 'system',
             'requiresSiteVisit': true,
             'maxExtraPercent': 100,
             'commissionPercent': PricingService.commissionPercent,
@@ -224,13 +222,11 @@ class _AdminScreenState extends State<AdminScreen> {
             ),
           ],
         ),
-        // ... rest of body same
         body: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // === SEED CONTROLS ===
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
@@ -336,7 +332,6 @@ class _AdminScreenState extends State<AdminScreen> {
                       ),
                     ],
                     const SizedBox(height: 12),
-                    // Live count from Firestore
                     StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('jobCategories')

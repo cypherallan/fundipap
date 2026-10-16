@@ -52,7 +52,6 @@ class ConfirmFundiBidCard extends StatelessWidget {
     );
     String note = (bidData['note'] ?? '').toString();
 
-    // BADGE PARSING
     BadgeLevel bLevel;
     try {
       bLevel = BadgeLevel.values.byName(
@@ -70,7 +69,6 @@ class ConfirmFundiBidCard extends StatelessWidget {
       fLevel = FundiLevel.L1_NEW;
     }
 
-    // USE PARENT'S RTDB VALUES DIRECTLY - don't recalculate
     int transport = _toInt(bidData['transportFee'], 100);
     double distanceKm = (bidData['distanceKm'] as num?)?.toDouble() ?? 0.0;
     String mode =
@@ -130,7 +128,6 @@ class ConfirmFundiBidCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          // NEW BADGE CHIP FOR CLIENT
           FundiBadgeChip(
             level: bLevel,
             fundiLevel: fLevel,
@@ -142,7 +139,7 @@ class ConfirmFundiBidCard extends StatelessWidget {
                 bidData['completedJobs'] ?? bidData['fundiJobsCompleted'] ?? 0,
             showLevel: true,
             compact: false,
-            hideCommission: true, // <- ADD THIS LINE HERE AT BOTTOM
+            hideCommission: true,
           ),
           const SizedBox(height: 10),
           Row(

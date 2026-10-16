@@ -266,9 +266,16 @@ Widget? buildCurrentWaiting({
       int displayClientAmt = isRenegoCounter && clientExtraCounter > 0
           ? clientExtraCounter
           : clientCounterAmt;
+      int fallbackMyBid = toInt(
+        job['originalLaborCost'] ??
+            job['agreedPrice'] ??
+            job['laborCost'] ??
+            myBidPrice ??
+            0,
+      );
       int displayMyBid = isRenegoCounter && myExtraBid > 0
           ? myExtraBid
-          : myBidPrice;
+          : fallbackMyBid;
       String uid = FirebaseAuth.instance.currentUser!.uid;
       return Container(
         padding: const EdgeInsets.all(14),
@@ -375,19 +382,10 @@ Widget? buildCurrentWaiting({
                         int currentAgreed = toInt(
                           job['agreedPrice'] ??
                               job['laborCost'] ??
-                              job['price'] ??
-                              5000,
+                              renego['oldLabor'] ??
+                              job['originalLaborCost'] ??
+                              0,
                         );
-                        if (currentAgreed > 6000) {
-                          int lastCorrectLock = toInt(
-                            job['renegotiation']?['oldTotalClientPays'] ?? 5350,
-                          );
-                          int lastTrans = toInt(job['transportFee'] ?? 100);
-                          int calcOldLab =
-                              ((lastCorrectLock - lastTrans) / 1.05).round();
-                          if (calcOldLab > 0 && calcOldLab < currentAgreed)
-                            currentAgreed = calcOldLab;
-                        }
                         int approvedExtra = toInt(
                           renego['counterExtraLabor'] ?? 0,
                         );
@@ -396,9 +394,7 @@ Widget? buildCurrentWaiting({
                               (approvedExtra * 1.05).round(),
                         );
                         int oldTrans = toInt(
-                          job['transportFee'] ??
-                              renego['oldTransportFee'] ??
-                              100,
+                          job['transportFee'] ?? renego['transportFee'] ?? 0,
                         );
                         int newLabourTotal = currentAgreed + approvedExtra;
                         int newTotalPay =

@@ -33,8 +33,6 @@ class ChatListScreen extends StatelessWidget {
             .snapshots(),
         builder: (_, snap) {
           if (snap.hasError) {
-            // First time this query runs, Firestore will throw missing index
-            // Check debug console for link to create it
             debugPrint('Chat list error: ${snap.error}');
             return Center(
               child: Text(

@@ -16,7 +16,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final emailCtrl = TextEditingController();
   final passCtrl = TextEditingController();
   bool loading = false;
-  bool showPass = false; // <-- added
+  bool showPass = false; 
 
   void _login() async {
     setState(() => loading = true);
@@ -28,7 +28,6 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user == null) throw 'Login failed';
       var role = await _auth.getUserRole(user.uid);
 
-      // Strict admin check - only your email can be admin
       if (role == 'admin' && user.email != 'agwonamallan@gmail.com') {
         throw 'Only agwonamallan@gmail.com can login as admin';
       }

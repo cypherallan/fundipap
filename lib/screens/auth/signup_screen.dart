@@ -28,8 +28,6 @@ class _SignupScreenState extends State<SignupScreen> {
   Color strengthColor = Colors.red;
   double strengthValue = 0;
 
-  // ALPHABETICAL + Other last + Electricals/Electronics Repair
-  // NEW - profession for fundi only
   String selectedProfession = 'Carpentry';
   final professions = [
     'Carpentry',
@@ -42,10 +40,9 @@ class _SignupScreenState extends State<SignupScreen> {
     'Painting',
     'Plumbing',
     'Welding',
-    'Other', // always last
+    'Other',
   ];
 
-  // NEW - for multi-skills
   List<String> selectedSkills = [];
   final allSkills = [
     'Carpentry',
@@ -131,7 +128,6 @@ class _SignupScreenState extends State<SignupScreen> {
       ).showSnackBar(const SnackBar(content: Text("Enter username")));
       return;
     }
-    // If Other selected, validate custom fields
     if (widget.role == 'fundi' && selectedProfession == 'Other') {
       if (otherProfessionCtrl.text.trim().isEmpty) {
         ScaffoldMessenger.of(
@@ -162,7 +158,7 @@ class _SignupScreenState extends State<SignupScreen> {
         role: widget.role,
         phone: phoneCtrl.text.trim(),
         name: nameCtrl.text.trim(),
-        username: usernameCtrl.text.trim(), // <--- NEW
+        username: usernameCtrl.text.trim(),
         profession: finalProfession,
         searchKeyword: finalKeyword,
       );

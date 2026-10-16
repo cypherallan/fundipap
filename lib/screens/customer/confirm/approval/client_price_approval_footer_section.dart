@@ -6,7 +6,6 @@ mixin FooterSectionMixin
         FieldsMixin,
         HelpersMixin,
         ActionsMixin {
-  // FIXED - No more LOCK button here, only redirect to timeline
   Widget buildNeedsExtraEscrowSection(
     Map<String, dynamic> job,
     int alreadyLockedCorrect,
@@ -55,7 +54,7 @@ mixin FooterSectionMixin
               onPressed: () {
                 Navigator.pop(
                   context,
-                ); // Back to timeline where real LOCK button lives
+                );
               },
               child: Text(
                 'GO TO TIMELINE TO LOCK KES $extraToLock',
@@ -68,7 +67,6 @@ mixin FooterSectionMixin
     );
   }
 
-  // Keep buildPendingActionsSection and buildStatusDoneSection SAME as before
   Widget buildPendingActionsSection(
     Map<String, dynamic> job,
     int newLabor,

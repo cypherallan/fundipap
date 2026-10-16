@@ -69,7 +69,6 @@ class _ChatScreenState extends State<ChatScreen> {
           'createdAt': FieldValue.serverTimestamp(),
         });
 
-    // PASTE HERE - after adding message
     await FirebaseFirestore.instance.collection('chats').doc(chatId).update({
       'unreadCounts.$fundiId': FieldValue.increment(1),
       'unreadCounts.$myId': 0,
@@ -82,9 +81,7 @@ class _ChatScreenState extends State<ChatScreen> {
         .doc(chatId)
         .get();
     if (chatDoc.exists)
-      return true; // customer already started, fundi can reply
-
-    // check my role
+      return true; 
     var userDoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(myId)
@@ -103,7 +100,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       return false;
     }
-    return true; // customer can always start
+    return true;
   }
 
   @override
