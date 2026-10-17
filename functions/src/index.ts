@@ -294,7 +294,7 @@ export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId
         const tokens = await getFcmTokens(clientId);
         await sendPush(tokens, `Your counter offer of KES ${after.agreedPrice || ''} has been accepted`, `${after.fundiName || 'Fundi'} accepted • Tap to proceed`, { jobId, type: "counter_accepted_by_fundi" });
     }
-    
+
     if ((newS === 'withdrawn' || newS.includes('cancel')) && !oldS.includes('cancel') && oldS !== 'withdrawn') {
         // this is your _performFundiWithdraw case
         const jobSnap2 = await db().collection('jobs').doc(jobId).get();
@@ -329,11 +329,9 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
 
         if (by === 'fundi') {
             await sendPush(clientTokens, `Fundi cancelled • ${jobTitle}`, reason || 'Fundi cancelled this job • Find another fundi', { jobId, type: "job_cancelled" });
-            await db().collection('notifications').add({ toUserId: clientIdLocal, title: `Fundi cancelled • ${jobTitle}`, body: reason, type: 'cancelled', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
         } else if (by === 'client') {
             if (fundiId) {
                 await sendPush(fundiTokens, `Client cancelled • ${jobTitle}`, reason || 'Client cancelled', { jobId, type: "job_cancelled" });
-                await db().collection('notifications').add({ toUserId: fundiId, title: `Client cancelled • ${jobTitle}`, body: reason, type: 'cancelled', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
             }
         } else if (by === 'system') {
             await sendPush(clientTokens, `Job auto-cancelled • Refund KES ${after.clientRefund || 0}`, jobTitle, { jobId, type: "job_cancelled" });
