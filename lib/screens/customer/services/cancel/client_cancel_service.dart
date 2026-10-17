@@ -265,7 +265,7 @@ class ClientCancelService {
                   wasPriceRequestPending: calc.priceRequestPending,
                 );
               },
-              child: Text('Yes, Cancel - Lose KES $platformFee'),
+              child: Text('Yes, Cancel - Lose KES ${platformFee + fundiGets}'),
             ),
           ],
         ),

@@ -157,15 +157,9 @@ class ClientCancelCalculator {
     int actualEscrowInDb = _toInt(job['escrowAmount'] ?? 0);
     bool extraPaid = (job['extraEscrowStatus'] ?? '').toString() == 'paid';
     bool needsTopup = job['clientNeedsToTopup'] == true;
-    String escrowStatusStr = (job['escrowStatus'] ?? '').toString();
-    bool escrowLocked =
-        actualEscrowInDb > 0 ||
-        escrowStatusStr == 'held' ||
-        escrowStatusStr == 'locked' ||
-        job['escrowDone'] == true;
-
-    bool priceRequestPending = _isFundiPriceRequestPending(job);
-
+    String escrowStatusStr = (job['escrowStatus'] ?? '')
+        .toString()
+        .toLowerCase();
     String status = (job['status'] ?? '').toString().toLowerCase();
     bool travelling = job['travelling'] == true || status == 'travelling';
     bool siteDone =
@@ -176,8 +170,21 @@ class ClientCancelCalculator {
       'in_progress',
       'pending_completion',
       'job_completed',
+      'completed',
     ].contains(status);
     bool arrived = travelling || siteDone;
+
+    // FIX: if fundi is already travelling, escrow must be considered locked
+    bool escrowLocked =
+        actualEscrowInDb > 0 ||
+        escrowStatusStr == 'held' ||
+        escrowStatusStr == 'locked' ||
+        escrowStatusStr == 'paid' ||
+        job['escrowDone'] == true ||
+        arrived ||
+        isStarted;
+
+    bool priceRequestPending = _isFundiPriceRequestPending(job);
 
     logs.add(
       'oldLabour=$oldLabour extraLabour=$extraLabour totalLabour=$totalLabour',
