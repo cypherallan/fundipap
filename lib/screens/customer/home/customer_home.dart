@@ -147,29 +147,20 @@ class _CustomerHomeState extends State<CustomerHome> {
             'waiting_for_client_to_buy_parts',
             'fundi_buying_parts',
             'job_completed',
+            'cancelled',
+            'cancelled_after_arrival',
+            'cancelled_before_escrow',
           ],
         )
         .snapshots()
         .listen((snap) {
-          var currentIds = snap.docs.map((d) => d.id).toSet();
-          activeMap.removeWhere(
-            (id, _) =>
-                !snap.docs.any((d) => d.id == id) && !currentIds.contains(id),
-          );
+          activeMap.clear();
           for (var d in snap.docs) {
             var data = d.data();
             String s = (data['status'] ?? '').toString().toLowerCase();
-            if (s.contains('cancel')) {
-              activeMap.remove(d.id);
-            } else {
-              activeMap[d.id] = d;
-            }
+            bool cancelled = data['cancelled'] == true || s.contains('cancel');
+            if (!cancelled) activeMap[d.id] = d;
           }
-          activeMap.removeWhere((_, doc) {
-            var data = doc.data() as Map<String, dynamic>?;
-            String s = (data?['status'] ?? '').toString().toLowerCase();
-            return s.contains('cancel');
-          });
           updateActive();
         });
 
@@ -193,26 +184,6 @@ class _CustomerHomeState extends State<CustomerHome> {
             if (!s.contains('cancel')) {
               activeMap[d.id] = d;
             }
-          }
-          updateActive();
-        });
-
-    FirebaseFirestore.instance
-        .collection('jobs')
-        .where('customerId', isEqualTo: uid)
-        .where(
-          'status',
-          whereIn: [
-            'awaiting_extra_escrow',
-            'renegotiation_countered_by_client',
-            'countered_by_client',
-            'renegotiation_countered',
-          ],
-        )
-        .snapshots()
-        .listen((snap) {
-          for (var d in snap.docs) {
-            activeMap[d.id] = d;
           }
           updateActive();
         });

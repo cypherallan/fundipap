@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../theme/app_theme.dart';
+import '../../../services/job_cancel_watcher.dart';
 
 class FundiVisitCustomerTab extends StatelessWidget {
   const FundiVisitCustomerTab({super.key});
@@ -104,7 +105,8 @@ class VisitCustomerScreen extends StatefulWidget {
   State<VisitCustomerScreen> createState() => _VisitCustomerScreenState();
 }
 
-class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
+class _VisitCustomerScreenState extends State<VisitCustomerScreen>
+    with JobCancelWatcher {
   Position? pos;
   double? distance;
   StreamSubscription<Position>? sub;
@@ -125,6 +127,9 @@ class _VisitCustomerScreenState extends State<VisitCustomerScreen> {
     super.initState();
     _extractClientLatLng();
     _startTracking();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      watchCancellation(jobId: widget.jobId, context: context);
+    });
   }
 
   void _extractClientLatLng() {

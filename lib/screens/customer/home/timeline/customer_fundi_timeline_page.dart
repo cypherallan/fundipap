@@ -129,6 +129,46 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
                 '${jobGeo.latitude.toStringAsFixed(4)}, ${jobGeo.longitude.toStringAsFixed(4)}';
           }
 
+          // ADD THIS CHECK AT TOP - before building timeline
+          bool isCancelledNow =
+              (job['cancelled'] == true) ||
+              (job['status'] ?? '').toString().toLowerCase().contains('cancel');
+
+          if (isCancelledNow) {
+            // Don't build normal timeline, show cancelled state
+            return TimelineCancelWrapper(
+              canCancel: false,
+              jobId: widget.jobId,
+              job: job,
+              isClient: true,
+              child: Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.cancel, size: 64, color: Colors.grey),
+                      SizedBox(height: 16),
+                      Text(
+                        'Job cancelled',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        job['cancelReason'] ?? 'This job was cancelled',
+                        style: GoogleFonts.inter(fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+
           List<Widget> timeline = TimelineStepsBuilder.build(
             context: context,
             job: job,
