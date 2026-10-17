@@ -2,33 +2,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class ClientRejectedTab extends StatelessWidget {
+class ClientRejectedTab extends StatefulWidget {
   final List<QueryDocumentSnapshot> allJobDocs;
   const ClientRejectedTab({super.key, required this.allJobDocs});
 
-  Future<List<Map<String, dynamic>>> _getRejected() async {
-    List<Map<String, dynamic>> result = [];
-    for (var jobDoc in allJobDocs) {
-      var jobData = jobDoc.data() as Map<String, dynamic>;
-      var bidSnap = await FirebaseFirestore.instance
-          .collection('jobs')
-          .doc(jobDoc.id)
-          .collection('bids')
-          .where('status', isEqualTo: 'rejected')
-          .get();
+  @override
+  State<ClientRejectedTab> createState() => _ClientRejectedTabState();
+}
 
-      for (var b in bidSnap.docs) {
-        var data = b.data();
-        if (data['deletedForClient'] == true) continue;
-        result.add({'bidDoc': b, 'bid': data, 'jobData': jobData});
-      }
-    }
-    return result;
-  }
-
+class _ClientRejectedTabState extends State<ClientRejectedTab> {
   @override
   Widget build(BuildContext context) {
-    if (allJobDocs.isEmpty) {
+    if (widget.allJobDocs.isEmpty) {
       return Center(
         child: Text(
           'You have not rejected any job',
@@ -36,7 +21,6 @@ class ClientRejectedTab extends StatelessWidget {
         ),
       );
     }
-
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _getRejected(),
       builder: (_, snap) {
@@ -60,6 +44,8 @@ class ClientRejectedTab extends StatelessWidget {
             var bidDoc = item['bidDoc'] as QueryDocumentSnapshot;
             var bid = item['bid'] as Map<String, dynamic>;
             var jobData = item['jobData'] as Map<String, dynamic>;
+            int amount =
+                (bid['amount'] ?? bid['bidAmount'] ?? bid['price'] ?? 0) as int;
             return Card(
               color: Colors.red.shade50,
               child: ListTile(
@@ -71,13 +57,14 @@ class ClientRejectedTab extends StatelessWidget {
                   ),
                 ),
                 subtitle: Text(
-                  'Fundi: ${bid['fundiName'] ?? 'Fundi'} • KES ${bid['price']}\n${bid['rejectionReason'] ?? ''}',
+                  'Fundi: ${bid['fundiName'] ?? 'Fundi'} • KES $amount\n${bid['rejectionReason'] ?? bid['rejectionCategory'] ?? ''}',
                   style: GoogleFonts.inter(fontSize: 11),
                 ),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete, size: 16),
                   onPressed: () async {
                     await bidDoc.reference.update({'deletedForClient': true});
+                    setState(() {});
                   },
                 ),
               ),
@@ -86,5 +73,24 @@ class ClientRejectedTab extends StatelessWidget {
         );
       },
     );
+  }
+
+  Future<List<Map<String, dynamic>>> _getRejected() async {
+    List<Map<String, dynamic>> result = [];
+    for (var jobDoc in widget.allJobDocs) {
+      var jobData = jobDoc.data() as Map<String, dynamic>;
+      var bidSnap = await FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(jobDoc.id)
+          .collection('bids')
+          .where('status', isEqualTo: 'rejected')
+          .get();
+      for (var b in bidSnap.docs) {
+        var data = b.data();
+        if (data['deletedForClient'] == true) continue;
+        result.add({'bidDoc': b, 'bid': data, 'jobData': jobData});
+      }
+    }
+    return result;
   }
 }

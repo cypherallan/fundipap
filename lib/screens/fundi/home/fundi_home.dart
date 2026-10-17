@@ -374,7 +374,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
           .toString()
           .toLowerCase();
 
-      if (bStatus == 'cancelled_by_client') {
+      if (bStatus == 'cancelled_by_client' || bStatus == 'rejected') {
         continue;
       }
 

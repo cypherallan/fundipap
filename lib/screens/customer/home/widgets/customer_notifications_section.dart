@@ -124,6 +124,9 @@ class CustomerNotificationsSection extends StatelessWidget {
             final isBid = type == 'bid';
             final bidStatus = (g['bidStatus'] ?? job['bidStatus'] ?? '')
                 .toString();
+            if (bidStatus.toLowerCase() == 'rejected') {
+              return const SizedBox.shrink();
+            }
             final isCounterAccepted =
                 bidStatus.contains('counter_accepted_by_fundi') ||
                 type == 'counter_accepted_by_fundi' ||

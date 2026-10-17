@@ -92,7 +92,8 @@ class _CustomerHomeState extends State<CustomerHome> {
                     if (bid['deletedForFundi'] == true) continue;
                     if (bStatus.contains('cancel') ||
                         bStatus == 'withdrawn' ||
-                        bStatus == 'deleted')
+                        bStatus == 'deleted' ||
+                        bStatus == 'rejected')
                       continue;
                     var jobRaw = jobDoc.data();
                     _bids.add({
@@ -389,7 +390,10 @@ class _CustomerHomeState extends State<CustomerHome> {
     for (var b in _bids) {
       if (activeJobIds.contains(b['jobId'])) continue;
       String bs = (b['status'] ?? '').toString().toLowerCase();
-      if (bs.contains('cancel') || bs == 'withdrawn' || bs == 'deleted')
+      if (bs.contains('cancel') ||
+          bs == 'withdrawn' ||
+          bs == 'deleted' ||
+          bs == 'rejected')
         continue;
       var jobDataRaw = b['jobData'] as Map;
       var jobDataSafe = Map<String, dynamic>.from(jobDataRaw);
