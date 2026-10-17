@@ -145,9 +145,9 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
       // auto-detect filter from existing subcategory
       if (subcategoryId != null) {
         var sid = subcategoryId!.toLowerCase();
-        if (sid.contains('install'))
+        if (sid.contains('install')) {
           serviceFilter = 'install';
-        else if (sid.contains('repair') || sid.contains('_'))
+        } else if (sid.contains('repair') || sid.contains('_'))
           serviceFilter = 'repair';
       }
     } else {
@@ -463,7 +463,7 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: categoryId,
+              initialValue: categoryId,
               isExpanded: true,
               alignment: AlignmentDirectional.centerStart,
               decoration: const InputDecoration(
@@ -533,7 +533,7 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
             const SizedBox(height: 12),
             if (filteredSubcategories.isNotEmpty)
               DropdownButtonFormField<String>(
-                value: subcategoryId,
+                initialValue: subcategoryId,
                 isExpanded: true,
                 alignment: AlignmentDirectional.centerStart,
                 decoration: InputDecoration(
@@ -568,7 +568,7 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
             const SizedBox(height: 12),
             if (faults.isNotEmpty)
               DropdownButtonFormField<String>(
-                value: faultId,
+                initialValue: faultId,
                 isExpanded: true,
                 alignment: AlignmentDirectional.centerStart,
                 decoration: const InputDecoration(

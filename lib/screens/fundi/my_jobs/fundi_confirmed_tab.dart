@@ -494,8 +494,9 @@ class _VisitCustomerScreenState extends State<_VisitCustomerScreen> {
 
   Future<void> _track() async {
     var perm = await Geolocator.checkPermission();
-    if (perm == LocationPermission.denied)
+    if (perm == LocationPermission.denied) {
       perm = await Geolocator.requestPermission();
+    }
     Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,

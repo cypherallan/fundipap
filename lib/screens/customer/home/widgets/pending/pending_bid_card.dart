@@ -290,8 +290,9 @@ class _PendingBidCardState extends State<PendingBidCard> {
                                   }
                                 } catch (_) {}
                               }
-                              if (_lastKm == null)
+                              if (_lastKm == null) {
                                 return const SizedBox.shrink();
+                              }
                               return Text(
                                 '(${_lastKm!.toStringAsFixed(1)} km)',
                                 style: GoogleFonts.montserrat(
@@ -339,7 +340,7 @@ class _PendingBidCardState extends State<PendingBidCard> {
                           ),
                           const SizedBox(width: 2),
                           Text(
-                            '${widget.bid.rating.toStringAsFixed(1)}',
+                            widget.bid.rating.toStringAsFixed(1),
                             style: GoogleFonts.inter(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,

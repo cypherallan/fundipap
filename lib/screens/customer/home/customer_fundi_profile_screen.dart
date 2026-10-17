@@ -158,7 +158,7 @@ class CustomerFundiProfileScreen extends StatelessWidget {
               children: [
                 _statCard(
                   'Jobs',
-                  '${(fundi['jobs'] ?? fundi['completedJobs'] ?? 0).toString()}',
+                  (fundi['jobs'] ?? fundi['completedJobs'] ?? 0).toString(),
                 ),
                 const SizedBox(width: 10),
                 _statCard('Price', 'KES ${fundi['price'] ?? '-'}'),

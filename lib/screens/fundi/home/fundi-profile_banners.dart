@@ -104,9 +104,9 @@ class FundiBadgeProgressBanner extends StatelessWidget {
         : (badge.breakdown['referral'] ?? 0);
 
     String nextBadge;
-    if (badge.badgeLevel == BadgeLevel.none)
+    if (badge.badgeLevel == BadgeLevel.none) {
       nextBadge = 'Bronze (35pts) 15%→10%';
-    else if (badge.badgeLevel == BadgeLevel.bronze)
+    } else if (badge.badgeLevel == BadgeLevel.bronze)
       nextBadge = 'Silver (70pts) 10%→8%';
     else if (badge.badgeLevel == BadgeLevel.silver)
       nextBadge = 'Gold (110pts) 8%→5%';
@@ -114,9 +114,9 @@ class FundiBadgeProgressBanner extends StatelessWidget {
       nextBadge = 'MAX 5%';
 
     String nextLevel;
-    if (badge.fundiLevel == FundiLevel.L1_NEW)
+    if (badge.fundiLevel == FundiLevel.L1_NEW) {
       nextLevel = 'L2 HUSTLER (10 jobs)';
-    else if (badge.fundiLevel == FundiLevel.L2_HUSTLER)
+    } else if (badge.fundiLevel == FundiLevel.L2_HUSTLER)
       nextLevel = 'L3 PRO (50 jobs)';
     else if (badge.fundiLevel == FundiLevel.L3_PRO)
       nextLevel = 'L4 ELITE (100 jobs)';

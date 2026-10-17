@@ -247,7 +247,9 @@ class _RateClientScreenState extends State<RateClientScreen> {
             .collection('notifications')
             .where('jobId', isEqualTo: widget.jobId)
             .get();
-        for (var doc in n1.docs) await doc.reference.delete();
+        for (var doc in n1.docs) {
+          await doc.reference.delete();
+        }
       } catch (_) {}
       try {
         var n2 = await FirebaseFirestore.instance
@@ -255,7 +257,9 @@ class _RateClientScreenState extends State<RateClientScreen> {
             .where('toUserId', isEqualTo: uid)
             .where('jobId', isEqualTo: widget.jobId)
             .get();
-        for (var doc in n2.docs) await doc.reference.delete();
+        for (var doc in n2.docs) {
+          await doc.reference.delete();
+        }
       } catch (_) {}
 
       await _goHome();
@@ -271,9 +275,9 @@ class _RateClientScreenState extends State<RateClientScreen> {
 
   Widget _buildStar(int index) {
     IconData icon;
-    if (_rating >= index + 1)
+    if (_rating >= index + 1) {
       icon = Icons.star;
-    else if (_rating >= index + 0.5)
+    } else if (_rating >= index + 0.5)
       icon = Icons.star_half;
     else
       icon = Icons.star_border;

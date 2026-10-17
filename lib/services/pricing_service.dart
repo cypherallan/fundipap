@@ -33,8 +33,9 @@ class PricingService {
 
   static int getSiteVisitFee([String? categoryId, bool isOther = false]) {
     if (isOther) return FundiTaxonomy.siteVisitFeeOther;
-    if (categoryId != null && categoryId.toLowerCase().contains('other'))
+    if (categoryId != null && categoryId.toLowerCase().contains('other')) {
       return FundiTaxonomy.siteVisitFeeOther;
+    }
     return FundiTaxonomy.siteVisitFeeStandard;
   }
 
@@ -114,7 +115,7 @@ class PricingService {
     int count = 0;
     String source = 'static_fallback';
     try {
-      String docId = '${categoryId}__${subcategoryId}';
+      String docId = '${categoryId}__$subcategoryId';
       if (faultId != null && faultId.isNotEmpty) docId = '${docId}__$faultId';
       var db = FirebaseFirestore.instance;
       var statsDoc = await db.collection('pricingStats').doc(docId).get();

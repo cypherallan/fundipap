@@ -48,11 +48,12 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
           .collection('jobs')
           .doc(widget.jobId)
           .get();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _job = doc.data();
           _loadingJob = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingJob = false);
     }
@@ -61,9 +62,9 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
   void _onStarTap(int index) {
     double halfRating = index + 0.5;
     double fullRating = index + 1.0;
-    if (_rating == halfRating)
+    if (_rating == halfRating) {
       setState(() => _rating = fullRating);
-    else if (_rating == fullRating)
+    } else if (_rating == fullRating)
       setState(() => _rating = halfRating);
     else
       setState(() => _rating = halfRating);
@@ -229,9 +230,9 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
 
   Widget _buildStar(int index) {
     IconData icon;
-    if (_rating >= index + 1)
+    if (_rating >= index + 1) {
       icon = Icons.star;
-    else if (_rating >= index + 0.5)
+    } else if (_rating >= index + 0.5)
       icon = Icons.star_half;
     else
       icon = Icons.star_border;
@@ -430,9 +431,9 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
           _job?['escrowAmount'] ??
           _job?['agreedPrice'] ??
           0;
-      if (v is int)
+      if (v is int) {
         paid = v;
-      else if (v is double)
+      } else if (v is double)
         paid = v.toInt();
       else
         paid = int.tryParse(v.toString()) ?? 0;

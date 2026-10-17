@@ -277,8 +277,9 @@ class _FundiAddPartReceiptScreenState extends State<FundiAddPartReceiptScreen> {
                   .orderBy('createdAt', descending: true)
                   .snapshots(),
               builder: (_, snap) {
-                if (!snap.hasData || snap.data!.docs.isEmpty)
+                if (!snap.hasData || snap.data!.docs.isEmpty) {
                   return const SizedBox();
+                }
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

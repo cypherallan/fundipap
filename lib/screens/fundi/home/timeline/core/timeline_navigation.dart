@@ -11,7 +11,7 @@ void goBack(BuildContext context, int tab) {
       builder: (_) => HomeNavigator(
         role: 'fundi',
         email: email,
-        initialIndex: 2,
+        initialIndex: 0,
         initialJobStatusTab: tab,
       ),
     ),

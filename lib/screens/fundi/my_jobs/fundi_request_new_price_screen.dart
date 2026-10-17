@@ -541,8 +541,9 @@ class _FundiRequestNewPriceScreenState
             OutlinedButton.icon(
               onPressed: () async {
                 var imgs = await picker.pickMultiImage(imageQuality: 60);
-                if (imgs.isNotEmpty)
+                if (imgs.isNotEmpty) {
                   setState(() => evidencePhotos.addAll(imgs));
+                }
               },
               icon: const Icon(Icons.photo, size: 16),
               label: const Text(

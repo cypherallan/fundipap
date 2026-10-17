@@ -47,8 +47,9 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen>
             .doc(widget.jobId)
             .snapshots(),
         builder: (context, snap) {
-          if (!snap.hasData)
+          if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
           var job = snap.data!.data() as Map<String, dynamic>;
           var reneg = (job['renegotiation'] as Map<String, dynamic>?) ?? {};
           String renegStatus = (reneg['status'] ?? 'pending').toString();
@@ -63,8 +64,9 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen>
           int newLaborRaw = _toInt(
             reneg['newLaborTotal'] ?? reneg['newLaborPrice'] ?? 0,
           );
-          if (newLaborRaw == 0)
+          if (newLaborRaw == 0) {
             newLaborRaw = oldLabor + _toInt(reneg['extraLabor'] ?? 0);
+          }
 
           int acceptedCounterLabour = _toInt(
             reneg['acceptedCounterExtraLabor'] ??
@@ -102,12 +104,13 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen>
             reneg['newClientAppFee'] ?? (newLabor * 0.05).round(),
           );
           int extraAppFee = (newClientFee - oldClientFee).clamp(0, 999999);
-          if (isCounterAccepted)
+          if (isCounterAccepted) {
             extraAppFee = _toInt(
               reneg['acceptedCounterExtraAppFee'] ??
                   reneg['counterExtraAppFee'] ??
                   extraAppFee,
             );
+          }
           int alreadyLockedCorrect = oldLabor + oldTransport + oldClientFee;
           int extraToLock = extraLabor + extraAppFee;
           int newTotal = alreadyLockedCorrect + extraToLock;
@@ -132,8 +135,9 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen>
           );
           int partsEstimateTotal = _toInt(reneg['partsEstimateTotal']);
           int calc = 0;
-          for (var p in partsNeeded)
+          for (var p in partsNeeded) {
             calc += _toInt(p['qty'], 1) * _toInt(p['estPrice']);
+          }
           if (partsEstimateTotal == 0) partsEstimateTotal = calc;
 
           bool isMaterialsOnly = extraLabor == 0 && partsNeeded.isNotEmpty;

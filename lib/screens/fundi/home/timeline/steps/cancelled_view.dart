@@ -80,8 +80,9 @@ Widget buildCancelledView(BuildContext context, FundiTimelineContext c) {
               .limit(1)
               .get(),
           builder: (ctx, repSnap) {
-            if (!repSnap.hasData || repSnap.data!.docs.isEmpty)
+            if (!repSnap.hasData || repSnap.data!.docs.isEmpty) {
               return const SizedBox();
+            }
             var newDoc = repSnap.data!.docs.first;
             return Card(
               color: Colors.green.shade50,

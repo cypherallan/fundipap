@@ -23,7 +23,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
   List<DocumentSnapshot> _assignedJobs = [];
   StreamSubscription? _jobsSub;
   StreamSubscription? _jobsSub2;
-  Set<String> _excludedJobIds = {};
+  final Set<String> _excludedJobIds = {};
   final Map<String, DocumentSnapshot> _jobsMap = {};
 
   int _toInt(dynamic v, [int fb = 0]) {
@@ -516,7 +516,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(12),
                     itemCount: list.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (_, i) {
                       var g = list[i];
                       FundiWaitingType wt =
@@ -535,10 +535,10 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
 
                       if (isOrange) {
                         String msg;
-                        if (wt == FundiWaitingType.clientCounter)
+                        if (wt == FundiWaitingType.clientCounter) {
                           msg =
                               "${g['clientName']} • Tap to Accept / Counter / Reject";
-                        else if (wt == FundiWaitingType.waitingEscrow)
+                        } else if (wt == FundiWaitingType.waitingEscrow)
                           msg = "${g['clientName']} • Waiting to lock escrow";
                         else if (wt == FundiWaitingType.escrowLocked)
                           msg = "${g['clientName']} • Tap to Start site visit";

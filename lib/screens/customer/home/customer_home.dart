@@ -45,7 +45,9 @@ class _CustomerHomeState extends State<CustomerHome> {
     var uid = FirebaseAuth.instance.currentUser!.uid;
     _jobsSub?.cancel();
     _activeSub?.cancel();
-    for (var s in _bidsSubs.values) s.cancel();
+    for (var s in _bidsSubs.values) {
+      s.cancel();
+    }
     _bidsSubs.clear();
 
     _jobsSub = FirebaseFirestore.instance
@@ -93,8 +95,9 @@ class _CustomerHomeState extends State<CustomerHome> {
                     if (bStatus.contains('cancel') ||
                         bStatus == 'withdrawn' ||
                         bStatus == 'deleted' ||
-                        bStatus == 'rejected')
+                        bStatus == 'rejected') {
                       continue;
+                    }
                     var jobRaw = jobDoc.data();
                     _bids.add({
                       'jobId': jobId,
@@ -117,7 +120,7 @@ class _CustomerHomeState extends State<CustomerHome> {
 
     final Map<String, DocumentSnapshot> activeMap = {};
 
-    void _updateActive() {
+    void updateActive() {
       var filtered = activeMap.values.where((d) {
         var j = d.data() as Map<String, dynamic>?;
         if (j == null) return false;
@@ -167,7 +170,7 @@ class _CustomerHomeState extends State<CustomerHome> {
             String s = (data?['status'] ?? '').toString().toLowerCase();
             return s.contains('cancel');
           });
-          _updateActive();
+          updateActive();
         });
 
     FirebaseFirestore.instance
@@ -191,7 +194,7 @@ class _CustomerHomeState extends State<CustomerHome> {
               activeMap[d.id] = d;
             }
           }
-          _updateActive();
+          updateActive();
         });
 
     FirebaseFirestore.instance
@@ -208,8 +211,10 @@ class _CustomerHomeState extends State<CustomerHome> {
         )
         .snapshots()
         .listen((snap) {
-          for (var d in snap.docs) activeMap[d.id] = d;
-          _updateActive();
+          for (var d in snap.docs) {
+            activeMap[d.id] = d;
+          }
+          updateActive();
         });
   }
 
@@ -218,8 +223,9 @@ class _CustomerHomeState extends State<CustomerHome> {
       for (var b in _bids) {
         if (b['fundiId'] == fundiKey ||
             b['fundiName'] == fundiKey ||
-            b['jobId'] == fundiKey)
+            b['jobId'] == fundiKey) {
           b['isRead'] = true;
+        }
       }
     });
     try {
@@ -327,7 +333,9 @@ class _CustomerHomeState extends State<CustomerHome> {
           .where('status', isEqualTo: 'completed')
           .get();
       final Map<String, QueryDocumentSnapshot> map = {};
-      for (var d in [...snap1.docs, ...snap2.docs]) map[d.id] = d;
+      for (var d in [...snap1.docs, ...snap2.docs]) {
+        map[d.id] = d;
+      }
       final unrated = map.values.where((d) {
         var data = Map<String, dynamic>.from(d.data() as Map);
         bool notRated = data['clientRated'] != true;
@@ -377,7 +385,9 @@ class _CustomerHomeState extends State<CustomerHome> {
   void dispose() {
     _jobsSub?.cancel();
     _activeSub?.cancel();
-    for (var s in _bidsSubs.values) s.cancel();
+    for (var s in _bidsSubs.values) {
+      s.cancel();
+    }
     super.dispose();
   }
 
@@ -393,8 +403,9 @@ class _CustomerHomeState extends State<CustomerHome> {
       if (bs.contains('cancel') ||
           bs == 'withdrawn' ||
           bs == 'deleted' ||
-          bs == 'rejected')
+          bs == 'rejected') {
         continue;
+      }
       var jobDataRaw = b['jobData'] as Map;
       var jobDataSafe = Map<String, dynamic>.from(jobDataRaw);
       if ((jobDataSafe['status'] ?? '').toString() == 'completed') continue;

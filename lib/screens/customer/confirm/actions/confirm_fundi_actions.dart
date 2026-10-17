@@ -169,7 +169,7 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                value: selectedReason,
+                initialValue: selectedReason,
                 decoration: const InputDecoration(
                   labelText: 'Reason',
                   border: OutlineInputBorder(),

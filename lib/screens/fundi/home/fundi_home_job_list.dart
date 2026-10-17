@@ -80,8 +80,9 @@ class FundiHomeJobList extends StatelessWidget {
               .toLowerCase();
           if (m['reposted'] == true) return false;
           if (status.contains('complete') || status == 'closed') return false;
-          if (['held', 'paid', 'locked', 'released'].contains(escrow))
+          if (['held', 'paid', 'locked', 'released'].contains(escrow)) {
             return false;
+          }
           return true;
         }).toList();
 

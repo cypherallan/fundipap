@@ -91,11 +91,13 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
             .doc(widget.jobId)
             .snapshots(),
         builder: (_, snap) {
-          if (snap.connectionState == ConnectionState.waiting)
+          if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
           if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
-          if (!snap.hasData || !snap.data!.exists)
+          if (!snap.hasData || !snap.data!.exists) {
             return const Center(child: Text('Job not found'));
+          }
           var job = snap.data!.data() as Map<String, dynamic>;
 
           var status = (job['status'] ?? '').toString();
@@ -298,8 +300,9 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
                           );
                           var reneg =
                               job['renegotiation'] as Map<String, dynamic>?;
-                          if (reneg != null && reneg['oldLabor'] != null)
+                          if (reneg != null && reneg['oldLabor'] != null) {
                             oldLabour = _toInt(reneg['oldLabor']);
+                          }
 
                           int transport = _toInt(
                             job['transportFee'] ??

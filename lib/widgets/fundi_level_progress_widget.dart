@@ -23,8 +23,9 @@ class FundiLevelProgressWidget extends StatelessWidget {
       int left = 10 - completedJobs;
       levelNextText =
           '$left jobs left in trial - finish KYC + video + tools or drop to NEW 15%';
-      if (left <= 0)
+      if (left <= 0) {
         levelNextText = 'Trial ending - complete profile to avoid NEW 15%';
+      }
     } else if (badge.fundiLevel == FundiLevel.L1_NEW) {
       levelProgress = (completedJobs / 10).clamp(0, 1).toDouble();
       levelNextText = '${10 - completedJobs} jobs to L2 HUSTLER';

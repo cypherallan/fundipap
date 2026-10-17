@@ -110,8 +110,9 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
         var status = c.status.toLowerCase();
 
         if (c.escrowReleased) {
-          if (!c.fundiConfirmedPayment || !c.fundiRatedClient)
+          if (!c.fundiConfirmedPayment || !c.fundiRatedClient) {
             return buildCompletedReleasedView(context, c);
+          }
         }
         var escrowStatus = (job['escrowStatus'] ?? 'pending')
             .toString()
@@ -208,10 +209,11 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
               .where('fundiId', isEqualTo: uid)
               .snapshots(),
           builder: (context, bidsSnap) {
-            if (!bidsSnap.hasData)
+            if (!bidsSnap.hasData) {
               return const Scaffold(
                 body: Center(child: CircularProgressIndicator()),
               );
+            }
             if (bidsSnap.data!.docs.isEmpty) {
               return Scaffold(
                 appBar: AppBar(
@@ -511,7 +513,7 @@ class _FundiCustomerTimelinePageState extends State<FundiCustomerTimelinePage> {
                     child: ListView.separated(
                       padding: const EdgeInsets.all(12),
                       itemCount: timeline.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (_, i) => timeline[i],
                     ),
                   ),

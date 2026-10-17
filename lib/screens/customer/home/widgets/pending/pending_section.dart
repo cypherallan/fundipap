@@ -61,8 +61,12 @@ class CustomerPendingSection extends StatelessWidget {
               );
             }
             final Map<String, QueryDocumentSnapshot> map = {};
-            if (snap1.hasData) for (var d in snap1.data!.docs) map[d.id] = d;
-            if (snap2.hasData) for (var d in snap2.data!.docs) map[d.id] = d;
+            if (snap1.hasData) for (var d in snap1.data!.docs) {
+              map[d.id] = d;
+            }
+            if (snap2.hasData) for (var d in snap2.data!.docs) {
+              map[d.id] = d;
+            }
             var jobs = map.values.toList();
 
             jobs = jobs.where((d) {

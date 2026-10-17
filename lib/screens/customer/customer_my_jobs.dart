@@ -133,8 +133,9 @@ class CustomerMyJobs extends StatelessWidget {
           .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting)
+        if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
+        }
         if (!snap.hasData || snap.data!.docs.isEmpty) {
           return Center(
             child: Text(

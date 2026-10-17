@@ -212,8 +212,9 @@ mixin FundiMyJobsActionsMixin<T extends StatefulWidget> on State<T> {
                   ),
                   onPressed: () async {
                     final imgs = await picker.pickMultiImage(imageQuality: 70);
-                    if (imgs.isNotEmpty)
+                    if (imgs.isNotEmpty) {
                       setDialog(() => pickedImages.addAll(imgs));
+                    }
                   },
                 ),
                 if (isUploading) ...[

@@ -39,8 +39,9 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
             .doc(widget.jobId)
             .snapshots(),
         builder: (_, jobSnap) {
-          if (!jobSnap.hasData)
+          if (!jobSnap.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
           var jobData = jobSnap.data!.data() as Map<String, dynamic>? ?? {};
           var merged = {...widget.job, ...jobData};
 

@@ -87,8 +87,9 @@ class FundiHomeLogic {
     if ((combined['name'] ?? '').toString().length > 2) pct += 15;
     if ((combined['profession'] ?? combined['skill'] ?? '')
         .toString()
-        .isNotEmpty)
+        .isNotEmpty) {
       pct += 15;
+    }
     if ((combined['bio'] ?? '').toString().length > 20) pct += 20;
     if (combined['photoUrl'] != null) pct += 20;
     if ((combined['phone'] ?? '').toString().length > 5) pct += 5;

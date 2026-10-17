@@ -197,7 +197,7 @@ Widget buildCompletedReleasedView(
     body: ListView.separated(
       padding: const EdgeInsets.all(12),
       itemCount: doneTimeline.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (_, i) => doneTimeline[i],
     ),
   );

@@ -20,8 +20,9 @@ class ReversedTimelineList extends StatelessWidget {
   }
 
   static Widget buildList(List<Widget> timeline) {
-    if (timeline.length <= 2)
+    if (timeline.length <= 2) {
       return ListView(padding: const EdgeInsets.all(12), children: timeline);
+    }
     final header = timeline[0];
     final divider = timeline[1];
     final notifications = timeline.sublist(2).reversed.toList();

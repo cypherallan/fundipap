@@ -25,8 +25,9 @@ class AuthService {
         perm = await Geolocator.requestPermission();
       }
       if (perm == LocationPermission.denied ||
-          perm == LocationPermission.deniedForever)
+          perm == LocationPermission.deniedForever) {
         return null;
+      }
       var pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );

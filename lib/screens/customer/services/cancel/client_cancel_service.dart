@@ -198,7 +198,7 @@ class ClientCancelService {
                 ),
                 SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  value: reason,
+                  initialValue: reason,
                   decoration: InputDecoration(
                     labelText: 'Reason',
                     border: OutlineInputBorder(),

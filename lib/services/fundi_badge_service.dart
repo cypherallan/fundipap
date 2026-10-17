@@ -125,9 +125,9 @@ class FundiBadgeService {
     score += b['rating']!;
 
     double onTimeRate = onTimeTotal > 0 ? onTime / onTimeTotal : 0;
-    if (onTimeRate >= 0.9)
+    if (onTimeRate >= 0.9) {
       b['onTime'] = 10;
-    else if (onTimeRate >= 0.8)
+    } else if (onTimeRate >= 0.8)
       b['onTime'] = 5;
     else
       b['onTime'] = 0;
@@ -160,9 +160,9 @@ class FundiBadgeService {
       b['arrival'] = 0;
     score += b['arrival']!;
 
-    if (disputes == 0 && negComments == 0)
+    if (disputes == 0 && negComments == 0) {
       b['trust'] = 10;
-    else if (disputes == 0)
+    } else if (disputes == 0)
       b['trust'] = 5;
     else
       b['trust'] = 0;
@@ -211,9 +211,9 @@ class FundiBadgeService {
         fraud == 0 &&
         disputes == 0;
     BadgeLevel badge;
-    if (score >= goldMin)
+    if (score >= goldMin) {
       badge = BadgeLevel.gold;
-    else if (score >= silverMin)
+    } else if (score >= silverMin)
       badge = BadgeLevel.silver;
     else if (isClean || score >= bronzeMin)
       badge = BadgeLevel.bronze;
@@ -221,9 +221,9 @@ class FundiBadgeService {
       badge = BadgeLevel.none;
 
     int fundiComm;
-    if (badge == BadgeLevel.gold)
+    if (badge == BadgeLevel.gold) {
       fundiComm = 5;
-    else if (badge == BadgeLevel.silver)
+    } else if (badge == BadgeLevel.silver)
       fundiComm = 8;
     else if (badge == BadgeLevel.bronze)
       fundiComm = 10;
@@ -242,17 +242,17 @@ class FundiBadgeService {
         kyc;
 
     int jobsToNext = 0;
-    if (fundiLevel == FundiLevel.L1_NEW)
+    if (fundiLevel == FundiLevel.L1_NEW) {
       jobsToNext = 10 - completedJobs;
-    else if (fundiLevel == FundiLevel.L2_HUSTLER)
+    } else if (fundiLevel == FundiLevel.L2_HUSTLER)
       jobsToNext = 50 - completedJobs;
     else if (fundiLevel == FundiLevel.L3_PRO)
       jobsToNext = 100 - completedJobs;
 
     int ptsToNext = 0;
-    if (badge == BadgeLevel.none)
+    if (badge == BadgeLevel.none) {
       ptsToNext = bronzeMin - score;
-    else if (badge == BadgeLevel.bronze)
+    } else if (badge == BadgeLevel.bronze)
       ptsToNext = silverMin - score;
     else if (badge == BadgeLevel.silver)
       ptsToNext = goldMin - score;
@@ -330,8 +330,9 @@ class FundiBadgeService {
   static Future<BadgeResult> recalcAndUpdate(String fundiId) async {
     var db = FirebaseFirestore.instance;
     var fundiSnap = await db.collection('fundis').doc(fundiId).get();
-    if (!fundiSnap.exists)
+    if (!fundiSnap.exists) {
       fundiSnap = await db.collection('users').doc(fundiId).get();
+    }
     var statsSnap = await db.collection('fundiStats').doc(fundiId).get();
     var fundiData = fundiSnap.data() ?? {};
     var statsData = statsSnap.data() ?? {};

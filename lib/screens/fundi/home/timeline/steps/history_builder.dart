@@ -29,8 +29,9 @@ List<Widget> buildDoneHistory({
     bool isLast = i == coDocs.length - 1;
     if (isLast &&
         ((by != uid && waitingState?.type == FundiWaitingType.clientCounter) ||
-            (by == uid && waitingState?.type == FundiWaitingType.myCounter)))
+            (by == uid && waitingState?.type == FundiWaitingType.myCounter))) {
       continue;
+    }
     if (by != uid) {
       doneHistory.add(
         greenDoneCard(

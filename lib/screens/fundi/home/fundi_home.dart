@@ -26,20 +26,27 @@ class FundiHome extends StatefulWidget {
 }
 
 class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
+  @override
   Map<String, dynamic>? me;
+  @override
   int completedJobs = 0;
+  @override
   double totalEarned = 0;
+  @override
   int profilePct = 0;
+  @override
   String mySkill = 'General';
+  @override
   Position? currentPos;
   bool _loadingLoc = true;
+  @override
   String search = '';
 
   final List<Map<String, dynamic>> _bids = [];
   StreamSubscription? _bidsSub;
   List<DocumentSnapshot> _assignedJobs = [];
   StreamSubscription? _assignedSub;
-  Set<String> _excludedJobIds = {};
+  final Set<String> _excludedJobIds = {};
   final Map<String, DocumentSnapshot> _jobsMap = {};
 
   int _toInt(dynamic v, [int fb = 0]) {
@@ -155,8 +162,9 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
         return;
       }
       LocationPermission perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied)
+      if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
+      }
       if (perm == LocationPermission.deniedForever ||
           perm == LocationPermission.denied) {
         if (mounted) setState(() => _loadingLoc = false);
@@ -165,11 +173,12 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
       Position pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           currentPos = pos;
           _loadingLoc = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingLoc = false);
     }
@@ -257,8 +266,9 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
   Future<void> _markRead(String clientKey, String jobId) async {
     setState(() {
       for (var b in _bids) {
-        if (b['clientId'] == clientKey || b['jobId'] == jobId)
+        if (b['clientId'] == clientKey || b['jobId'] == jobId) {
           b['isRead'] = true;
+        }
       }
     });
     try {
@@ -279,18 +289,20 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
     } catch (_) {}
   }
 
+  @override
   int relevanceScore(Map<String, dynamic> job) {
     int s = 0;
     var cat = (job['category'] ?? '').toString().toLowerCase();
-    if (mySkill.toLowerCase() == 'general')
+    if (mySkill.toLowerCase() == 'general') {
       s += 1;
-    else if (cat.contains(mySkill.toLowerCase()))
+    } else if (cat.contains(mySkill.toLowerCase()))
       s += 10;
     var title = (job['title'] ?? '').toString().toLowerCase();
     if (title.contains(mySkill.toLowerCase())) s += 5;
     return s;
   }
 
+  @override
   Future<void> bidForJob(BuildContext context, Map<String, dynamic> job) async {
     if (!isOnline) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -348,9 +360,9 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
     }
     BadgeLevel level = badgeResult?.badgeLevel ?? BadgeLevel.none;
     String nextBadgeLabel = 'BRONZE';
-    if (level == BadgeLevel.none)
+    if (level == BadgeLevel.none) {
       nextBadgeLabel = 'BRONZE';
-    else if (level == BadgeLevel.bronze)
+    } else if (level == BadgeLevel.bronze)
       nextBadgeLabel = 'SILVER';
     else if (level == BadgeLevel.silver)
       nextBadgeLabel = 'GOLD';
@@ -382,16 +394,18 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
       if (!isInAssigned &&
           (bStatus == 'accepted' ||
               bStatus == 'withdrawn' ||
-              bStatus.contains('cancel')))
+              bStatus.contains('cancel'))) {
         continue;
+      }
 
       var jobStatusNotif = (jobDataForNotif['status'] ?? '')
           .toString()
           .toLowerCase();
       if (jobStatusNotif.contains('cancel') ||
           _toBool(jobDataForNotif['cancelled']) ||
-          _toBool(jobDataForNotif['autoCancelled']))
+          _toBool(jobDataForNotif['autoCancelled'])) {
         continue;
+      }
       FundiWaitingState? ws = getFundiWaitingState(
         job: jobDataForNotif,
         bid: bidDataForNotif,
@@ -419,8 +433,9 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
         if (assignedIds.contains(b['jobId']) &&
             escrowDone &&
             siteDone &&
-            !renegoPending)
+            !renegoPending) {
           continue;
+        }
         category = 'Bid sent - KES ${b['price']} • ${b['jobTitle']}';
         waitingType = FundiWaitingType.bidSent;
       }
@@ -682,7 +697,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                     ),
                     Switch(
                       value: isOnline,
-                      activeColor: Colors.green,
+                      activeThumbColor: Colors.green,
                       onChanged: (_) => toggleOnline(context),
                     ),
                   ],

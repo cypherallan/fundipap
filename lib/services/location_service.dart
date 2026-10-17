@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -38,11 +37,13 @@ class LocationService {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) return null;
       var p = await Geolocator.checkPermission();
-      if (p == LocationPermission.denied)
+      if (p == LocationPermission.denied) {
         p = await Geolocator.requestPermission();
+      }
       if (p == LocationPermission.denied ||
-          p == LocationPermission.deniedForever)
+          p == LocationPermission.deniedForever) {
         return null;
+      }
       return await Geolocator.getCurrentPosition(
         locationSettings: _currentSettings(),
       );
@@ -63,8 +64,9 @@ class LocationService {
         p = await Geolocator.requestPermission();
       }
       if (p == LocationPermission.denied ||
-          p == LocationPermission.deniedForever)
+          p == LocationPermission.deniedForever) {
         return false;
+      }
       return p == LocationPermission.always ||
           p == LocationPermission.whileInUse;
     } catch (_) {
@@ -126,8 +128,9 @@ class LocationService {
           print("FIRESTORE SKIP dist=$dist <50");
           return;
         }
-        if (dist < 500 && now.difference(_lastFirestoreWrite).inSeconds < 60)
+        if (dist < 500 && now.difference(_lastFirestoreWrite).inSeconds < 60) {
           return;
+        }
       } else {
         if (now.difference(_lastFirestoreWrite).inSeconds < 10) return;
       }

@@ -80,8 +80,9 @@ class _ChatScreenState extends State<ChatScreen> {
         .collection('chats')
         .doc(chatId)
         .get();
-    if (chatDoc.exists)
-      return true; 
+    if (chatDoc.exists) {
+      return true;
+    } 
     var userDoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(myId)

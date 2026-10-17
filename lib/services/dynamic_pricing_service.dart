@@ -6,7 +6,7 @@ class DynamicPricingService {
     String subcategoryId, {
     String? faultId,
   }) {
-    String docId = '${categoryId}__${subcategoryId}';
+    String docId = '${categoryId}__$subcategoryId';
     if (faultId != null && faultId.isNotEmpty) docId = '${docId}__$faultId';
     return FirebaseFirestore.instance
         .collection('pricingStats')
@@ -28,7 +28,7 @@ class DynamicPricingService {
     String subcategoryId, {
     String? faultId,
   }) async {
-    String docId = '${categoryId}__${subcategoryId}';
+    String docId = '${categoryId}__$subcategoryId';
     if (faultId != null && faultId.isNotEmpty) docId = '${docId}__$faultId';
     var doc = await FirebaseFirestore.instance
         .collection('pricingStats')
@@ -85,7 +85,7 @@ class DynamicPricingService {
     required String fundiId,
     required String jobId,
   }) async {
-    String docId = '${categoryId}__${subcategoryId}';
+    String docId = '${categoryId}__$subcategoryId';
     if (faultId != null && faultId.isNotEmpty) docId = '${docId}__$faultId';
     var ref = FirebaseFirestore.instance.collection('pricingStats').doc(docId);
 

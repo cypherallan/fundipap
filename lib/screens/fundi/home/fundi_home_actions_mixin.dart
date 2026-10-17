@@ -139,8 +139,9 @@ mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
         );
         if (jump > 300 &&
             _lastPosTime != null &&
-            DateTime.now().difference(_lastPosTime!).inSeconds < 30)
+            DateTime.now().difference(_lastPosTime!).inSeconds < 30) {
           return;
+        }
       }
       _stablePos = pos;
       _lastPosTime = DateTime.now();

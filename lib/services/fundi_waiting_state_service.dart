@@ -81,8 +81,9 @@ FundiWaitingState? getFundiWaitingState({
       _toBool(job['autoCancelled']) ||
       jobStatus == 'auto_cancelled' ||
       jobStatus == 'cancelled_after_arrival' ||
-      jobStatus == 'auto_cancelled_no_arrival')
+      jobStatus == 'auto_cancelled_no_arrival') {
     return null;
+  }
 
   var rEarly = job['renegotiation'] as Map<String, dynamic>?;
   int origExtraTop = _toInt(rEarly?['extraLabor'] ?? rEarly?['extra'] ?? 0);
@@ -476,11 +477,12 @@ FundiWaitingState? getFundiWaitingState({
               renego?['extraToLock'] ??
               0,
   );
-  if (toLockExtra == 0 && newTotalVal > 0)
+  if (toLockExtra == 0 && newTotalVal > 0) {
     toLockExtra = newTotalVal - lockedAmount;
-  if (pureExtra > 0)
+  }
+  if (pureExtra > 0) {
     needExtra = pureExtra;
-  else if (toLockExtra > 0)
+  } else if (toLockExtra > 0)
     needExtra = (toLockExtra / 1.05).round();
   else if (needExtra <= 0)
     needExtra = _toInt(job['extraLaborAmount'] ?? 0);
@@ -561,8 +563,9 @@ FundiWaitingState? getFundiWaitingState({
           job['escrowLockedAmount'] ??
           0,
     );
-    if (hasAgreed > 0 || hasEscrow > 0 || escrowDone || siteDone || travelling)
+    if (hasAgreed > 0 || hasEscrow > 0 || escrowDone || siteDone || travelling) {
       return null;
+    }
     int p = _toInt(bid['price'] ?? bid['amount'] ?? bid['bidPrice'] ?? labour);
     if (p == 0) p = _toInt(job['agreedPrice'] ?? 0);
     return FundiWaitingState(

@@ -237,7 +237,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
             if (isFundi) ...[
               DropdownButtonFormField<String>(
-                value: selectedProfession,
+                initialValue: selectedProfession,
                 decoration: InputDecoration(
                   labelText: 'Your Profession *',
                   border: OutlineInputBorder(

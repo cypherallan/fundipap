@@ -43,8 +43,9 @@ class PendingBidList extends StatelessWidget {
           var data = d.data() as Map<String, dynamic>;
           String st = (data['status'] ?? '').toString().toLowerCase();
           if (data['deletedForFundi'] == true) return false;
-          if (st.contains('cancel') || st == 'withdrawn' || st == 'deleted')
+          if (st.contains('cancel') || st == 'withdrawn' || st == 'deleted') {
             return false;
+          }
           return true;
         }).toList();
 

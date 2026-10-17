@@ -110,7 +110,7 @@ class FundiPendingTab extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'PENDING • KES ${lastAmt}',
+                              'PENDING • KES $lastAmt',
                               style: GoogleFonts.montserrat(
                                 fontWeight: FontWeight.w800,
                                 fontSize: 11,

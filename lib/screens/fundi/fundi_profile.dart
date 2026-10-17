@@ -242,10 +242,10 @@ class _FundiProfileState extends State<FundiProfile> {
         ? (cat['slug'] as String)
         : _keywordCtrl.text.trim().toLowerCase();
 
-    List<String> allCatIds = [
+    List<String> allCatIds = {
       selectedCategoryId,
       ...selectedCategoryIds,
-    ].toSet().toList();
+    }.toList();
 
     await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
       'primaryCategoryId': selectedCategoryId,
@@ -297,8 +297,9 @@ class _FundiProfileState extends State<FundiProfile> {
 
   @override
   Widget build(BuildContext context) {
-    if (loading)
+    if (loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     var combined = {...?userData, ...?data};
     var jobsDone = combined['jobsCompleted'] ?? 0;
     var rating = (combined['averageRating'] ?? combined['rating'] ?? 4.5)
@@ -387,7 +388,7 @@ class _FundiProfileState extends State<FundiProfile> {
                     ),
                   ),
                   Text(
-                    '${profilePct}% Complete ${profilePct == 100 ? '• VERIFIED' : ''}',
+                    '$profilePct% Complete ${profilePct == 100 ? '• VERIFIED' : ''}',
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       color: profilePct == 100
@@ -461,7 +462,7 @@ class _FundiProfileState extends State<FundiProfile> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: selectedCategoryId,
+              initialValue: selectedCategoryId,
               isExpanded: true,
               decoration: InputDecoration(
                 border: OutlineInputBorder(

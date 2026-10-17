@@ -42,8 +42,9 @@ BadgeLevel parseBadge(String? s) {
 
 double getFundiLat(Map<String, dynamic>? f) {
   if (f == null) return 0;
-  if (f['liveLocation'] is GeoPoint)
+  if (f['liveLocation'] is GeoPoint) {
     return (f['liveLocation'] as GeoPoint).latitude;
+  }
   if (f['location'] is GeoPoint) return (f['location'] as GeoPoint).latitude;
   if (f['lat'] != null) return (f['lat'] as num).toDouble();
   if (f['latitude'] != null) return (f['latitude'] as num).toDouble();
@@ -52,8 +53,9 @@ double getFundiLat(Map<String, dynamic>? f) {
 
 double getFundiLng(Map<String, dynamic>? f) {
   if (f == null) return 0;
-  if (f['liveLocation'] is GeoPoint)
+  if (f['liveLocation'] is GeoPoint) {
     return (f['liveLocation'] as GeoPoint).longitude;
+  }
   if (f['location'] is GeoPoint) return (f['location'] as GeoPoint).longitude;
   if (f['lng'] != null) return (f['lng'] as num).toDouble();
   if (f['longitude'] != null) return (f['longitude'] as num).toDouble();
@@ -65,8 +67,9 @@ int calcProfilePct(Map<String, dynamic>? data) {
   int total = 5, done = 0;
   if ((data['name'] ?? '').toString().isNotEmpty) done++;
   if ((data['phone'] ?? '').toString().isNotEmpty) done++;
-  if ((data['photoUrl'] ?? data['profileImage'] ?? '').toString().isNotEmpty)
+  if ((data['photoUrl'] ?? data['profileImage'] ?? '').toString().isNotEmpty) {
     done++;
+  }
   if ((data['location'] ?? data['address'] ?? '').toString().isNotEmpty) done++;
   if ((data['email'] ?? '').toString().isNotEmpty) done++;
   return ((done / total) * 100).round();

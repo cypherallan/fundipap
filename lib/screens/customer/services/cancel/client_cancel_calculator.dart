@@ -76,8 +76,9 @@ class ClientCancelCalculator {
     var requested = reneg['requested'] == true;
     var status = (reneg['status'] ?? '').toString().toLowerCase();
     var requestedBy = (reneg['requestedBy'] ?? '').toString().toLowerCase();
-    if (requested && status == 'pending' && requestedBy != 'client')
+    if (requested && status == 'pending' && requestedBy != 'client') {
       return true;
+    }
     if (status == 'pending' && requestedBy == 'fundi') return true;
     return requested && status == 'pending';
   }
@@ -114,8 +115,9 @@ class ClientCancelCalculator {
           job['agreedPrice'] ??
           0,
     );
-    if (totalLabour < oldLabour + extraLabour)
+    if (totalLabour < oldLabour + extraLabour) {
       totalLabour = oldLabour + extraLabour;
+    }
     if (totalLabour == 0) totalLabour = oldLabour;
 
     int transport = _toInt(
