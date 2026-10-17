@@ -218,16 +218,30 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
     );
     if (ok != true) return;
 
-    final int bidAmount =
+    // FIX 1: Use Y not X after counter
+    final int originalBid =
         ((bidData['amount'] ?? bidData['bidAmount'] ?? bidData['price'] ?? 0)
                 as num)
             .toInt();
+
+    final int effectiveAmount =
+        ((bidData['agreedPrice'] ??
+                    bidData['clientCounterAmount'] ??
+                    bidData['lastCounterAmount'] ??
+                    bidData['clientCounterPrice'] ??
+                    originalBid)
+                as num)
+            .toInt();
+
+    final bool wasCounter = (bidData['status'] ?? '').toString().contains(
+      'counter_accepted_by_fundi',
+    );
+
     final String jobTitle = (jobData['title'] ?? jobData['service'] ?? 'job')
         .toString();
     final String fundiId = (bidData['fundiId'] ?? '').toString();
     final String clientId = FirebaseAuth.instance.currentUser!.uid;
 
-    // 1. Update bid - keep amount so card doesn't show null
     await FirebaseFirestore.instance
         .collection('jobs')
         .doc(jobId)
@@ -235,8 +249,10 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
         .doc(bidId)
         .update({
           'status': 'rejected',
-          'amount': bidAmount,
-          'bidAmount': bidAmount,
+          'amount': effectiveAmount, // store Y so card shows Y
+          'bidAmount': effectiveAmount,
+          'originalBidAmount': originalBid,
+          'agreedPrice': effectiveAmount,
           'rejectionCategory': selectedReason,
           'rejectionReason': otherCtrl.text.trim().isEmpty
               ? selectedReason
@@ -244,20 +260,25 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
           'rejectedAt': FieldValue.serverTimestamp(),
           'rejectedBy': clientId,
           'isDismissed': false,
+          'deletedForFundi':
+              false, // FIX 2: ensure it shows for fundi to X-close
+          'wasCounterAccepted': wasCounter,
         });
 
-    // 2. Create Bid rejected notification for fundi
     await FirebaseFirestore.instance.collection('notifications').add({
       'toUserId': fundiId,
+      'userId': fundiId, // for compatibility
       'toRole': 'fundi',
       'fromUserId': clientId,
       'fromRole': 'client',
       'type': 'bid_rejected',
       'jobId': jobId,
       'bidId': bidId,
-      'amount': bidAmount,
-      'title': 'Bid rejected',
-      'body': 'Your bid of KES $bidAmount for $jobTitle was rejected',
+      'amount': effectiveAmount,
+      'title': wasCounter ? 'Counter rejected' : 'Bid rejected',
+      'body': wasCounter
+          ? 'Your accepted counter of KES $effectiveAmount for $jobTitle was rejected'
+          : 'Your bid of KES $effectiveAmount for $jobTitle was rejected',
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
