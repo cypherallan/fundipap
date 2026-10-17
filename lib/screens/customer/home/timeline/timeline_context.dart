@@ -85,8 +85,10 @@ class TimelineContext {
         .toString();
     bool siteDone = toBool(job['siteVisitDone']) || toBool(job['siteVisited']);
     bool isTravelling =
-        toBool(job['travelling']) &&
-        toBool(job['siteVisitStarted']) &&
+        (toBool(job['travelling']) ||
+            toBool(job['siteVisitStarted']) ||
+            status == 'travelling' ||
+            status == 'on_the_way') &&
         !siteDone;
     var reneg = job['renegotiation'] as Map<String, dynamic>?;
     String renegStatus = (reneg?['status'] ?? '').toString();
