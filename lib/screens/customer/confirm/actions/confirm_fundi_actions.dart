@@ -217,6 +217,17 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
       ),
     );
     if (ok != true) return;
+
+    final int bidAmount =
+        ((bidData['amount'] ?? bidData['bidAmount'] ?? bidData['price'] ?? 0)
+                as num)
+            .toInt();
+    final String jobTitle = (jobData['title'] ?? jobData['service'] ?? 'job')
+        .toString();
+    final String fundiId = (bidData['fundiId'] ?? '').toString();
+    final String clientId = FirebaseAuth.instance.currentUser!.uid;
+
+    // 1. Update bid - keep amount so card doesn't show null
     await FirebaseFirestore.instance
         .collection('jobs')
         .doc(jobId)
@@ -224,13 +235,33 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
         .doc(bidId)
         .update({
           'status': 'rejected',
+          'amount': bidAmount,
+          'bidAmount': bidAmount,
           'rejectionCategory': selectedReason,
           'rejectionReason': otherCtrl.text.trim().isEmpty
               ? selectedReason
               : otherCtrl.text.trim(),
           'rejectedAt': FieldValue.serverTimestamp(),
-          'rejectedBy': FirebaseAuth.instance.currentUser!.uid,
+          'rejectedBy': clientId,
+          'isDismissed': false,
         });
+
+    // 2. Create Bid rejected notification for fundi
+    await FirebaseFirestore.instance.collection('notifications').add({
+      'toUserId': fundiId,
+      'toRole': 'fundi',
+      'fromUserId': clientId,
+      'fromRole': 'client',
+      'type': 'bid_rejected',
+      'jobId': jobId,
+      'bidId': bidId,
+      'amount': bidAmount,
+      'title': 'Bid rejected',
+      'body': 'Your bid of KES $bidAmount for $jobTitle was rejected',
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
     if (!mounted) return;
     Navigator.pop(context, false);
   }

@@ -152,6 +152,12 @@ class FundiHomeJobList extends StatelessWidget {
                     bidData?['rejectionReason'] ??
                     bidData?['rejectionCategory'] ??
                     'No reason given';
+                int rejectedAmount =
+                    (bidData?['amount'] ??
+                            bidData?['bidAmount'] ??
+                            bidData?['price'] ??
+                            0)
+                        as int;
                 if (deletedForFundi) return const SizedBox.shrink();
                 final String? myBidStatus = bidData?['status']?.toString();
                 bool isCancelledByClient = myBidStatus == 'cancelled_by_client';
@@ -186,7 +192,7 @@ class FundiHomeJobList extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Your bid of KES ${bidData?['price']} for "${data['title']}" was rejected.',
+                                'Your bid of KES $rejectedAmount for "${data['title']}" was rejected.',
                                 style: GoogleFonts.inter(fontSize: 12),
                               ),
                               const SizedBox(height: 12),
@@ -254,47 +260,75 @@ class FundiHomeJobList extends StatelessWidget {
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: FundipapColors.redAlert),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Stack(
                         children: [
-                          Row(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(
-                                Icons.block,
-                                size: 16,
-                                color: FundipapColors.redAlert,
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.block,
+                                    size: 16,
+                                    color: FundipapColors.redAlert,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'OFFER REJECTED',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 11,
+                                      color: FundipapColors.redAlert,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    'KES $rejectedAmount',
+                                    style: GoogleFonts.montserrat(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 28),
+                                ],
                               ),
-                              const SizedBox(width: 6),
+                              const SizedBox(height: 6),
                               Text(
-                                'OFFER REJECTED',
+                                data['title'] ?? '',
                                 style: GoogleFonts.montserrat(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 11,
-                                  color: FundipapColors.redAlert,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              const Spacer(),
+                              const SizedBox(height: 4),
                               Text(
-                                'KES ${bidData?['price']}',
-                                style: GoogleFonts.montserrat(
-                                  fontWeight: FontWeight.w800,
+                                'Tap to read reason • You cannot bid again',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  color: FundipapColors.redAlert,
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            data['title'] ?? '',
-                            style: GoogleFonts.montserrat(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Tap to read reason • You cannot bid again',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              color: FundipapColors.redAlert,
+                          Positioned(
+                            top: -8,
+                            right: -8,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.close,
+                                size: 18,
+                                color: FundipapColors.redAlert,
+                              ),
+                              onPressed: () async {
+                                await FirebaseFirestore.instance
+                                    .collection('jobs')
+                                    .doc(data['id'])
+                                    .collection('bids')
+                                    .doc(uid)
+                                    .set({
+                                      'deletedForFundi': true,
+                                      'deletedForFundiAt':
+                                          FieldValue.serverTimestamp(),
+                                    }, SetOptions(merge: true));
+                              },
                             ),
                           ),
                         ],

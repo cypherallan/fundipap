@@ -279,16 +279,23 @@ export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId
     if (newS === "accepted" && oldS !== "accepted") {
         const tokens = await getFcmTokens(fundiId);
         const agreed = after.agreedPrice || after.amount || after.bidAmount || 0;
-        const escrowLock = Number(agreed) + Number(transport); // labor + transport
+        const escrowLock = Number(agreed) + Number(transport);
         await sendPush(tokens, "Bid accepted", `Bid accepted. Waiting for client to lock escrow KES ${escrowLock} • Tap to view`, { jobId, type: "accepted", escrow: escrowLock.toString() });
     }
+
+    if (newS === "rejected" && oldS !== "rejected") {
+        const tokens = await getFcmTokens(fundiId);
+        const rejectedAmount = after.amount || after.bidAmount || after.price || 0;
+        const jobTitle = after.jobTitle || (jobSnap.data() as any)?.title || 'job';
+        await sendPush(tokens, "Bid rejected", `Your bid of KES ${rejectedAmount} for ${jobTitle} was rejected`, { jobId, type: "rejected", amount: rejectedAmount.toString() });
+    }
+
     if (newS.includes("counter_accepted_by_fundi") && !oldS.includes("counter_accepted_by_fundi")) {
         const tokens = await getFcmTokens(clientId);
         await sendPush(tokens, `Your counter offer of KES ${after.agreedPrice || ''} has been accepted`, `${after.fundiName || 'Fundi'} accepted • Tap to proceed`, { jobId, type: "counter_accepted_by_fundi" });
     }
 });
 
-// JOB STATUS = covers HomeStatusWidget + getFundiWaitingState (all orange cards)
 export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "europe-west1" }, async (event) => {
     const before = event.data?.before?.data() as any;
     const after = event.data?.after?.data() as any;
@@ -299,17 +306,13 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const oldS = (before?.status || "").toLowerCase();
     const newS = (after?.status || "").toLowerCase();
     const title = after.title || 'Job';
-
     const newEscHeld = after.escrowHeld === true;
     const oldEscHeld = before?.escrowHeld === true;
     const newEscStatus = (after?.escrowStatus || "").toLowerCase();
     const oldEscStatus = (before?.escrowStatus || "").toLowerCase();
-
     const fundiTokens = await getFcmTokens(fundiId);
     const clientTokens = await getFcmTokens(clientId);
-
     const transport = Number(after.transportFee ?? after.transport ?? 0);
-
     const r = after.renegotiation || {};
     const originalExtra = Number(r.extraLabor ?? r.extra ?? after.extraLabor ?? 0);
     const counterExtra = r.counterExtraLabor ?? r.clientCounterExtraLabor ?? null;
