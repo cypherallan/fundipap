@@ -37,6 +37,11 @@ class FundiHomeJobList extends StatelessWidget {
             'status',
             whereIn: [
               'open',
+              'pending',
+              'countered',
+              'counter_accepted',
+              'counter_accepted_by_fundi',
+              'counter_accepted_by_fundi_pending',
               'accepted',
               'assigned',
               'confirmed',

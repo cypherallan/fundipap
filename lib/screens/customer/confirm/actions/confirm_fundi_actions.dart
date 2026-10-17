@@ -249,7 +249,7 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
         .doc(bidId)
         .update({
           'status': 'rejected',
-          'amount': effectiveAmount, // store Y so card shows Y
+          'amount': effectiveAmount,
           'bidAmount': effectiveAmount,
           'originalBidAmount': originalBid,
           'agreedPrice': effectiveAmount,
@@ -260,11 +260,20 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
           'rejectedAt': FieldValue.serverTimestamp(),
           'rejectedBy': clientId,
           'isDismissed': false,
-          'deletedForFundi':
-              false, // FIX 2: ensure it shows for fundi to X-close
+          'deletedForFundi': false,
           'wasCounterAccepted': wasCounter,
         });
 
+    // 1b. Re-open job so it shows in Near You
+    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'status': 'open',
+      'lastCounterAmount': FieldValue.delete(),
+      'lastCounterBy': FieldValue.delete(),
+      'counterBy': FieldValue.delete(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // 2. Create Bid rejected notification for fundi
     await FirebaseFirestore.instance.collection('notifications').add({
       'toUserId': fundiId,
       'userId': fundiId, // for compatibility
