@@ -118,6 +118,13 @@ class _PendingBidCardState extends State<PendingBidCard> {
         }
         final bidId = widget.bid.bidDoc.id;
         final fundiId = (widget.bid.bid['fundiId'] ?? bidId).toString();
+        final int acceptedAmt =
+            ((widget.bid.bid['agreedPrice'] ??
+                        widget.bid.bid['clientCounterAmount'] ??
+                        0)
+                    as num)
+                .toInt();
+
         await FirebaseFirestore.instance
             .collection('jobs')
             .doc(widget.jobId)
@@ -135,6 +142,21 @@ class _PendingBidCardState extends State<PendingBidCard> {
               'counterAcceptedBids': FieldValue.arrayRemove([bidId]),
               'lastCounterAcceptedBy': FieldValue.delete(),
             });
+
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'userId': fundiId,
+          'toUserId': fundiId,
+          'jobId': widget.jobId,
+          'type': 'counter_cancelled_by_client',
+          'title': 'Counter cancelled',
+          'body':
+              'Client cancelled your accepted counter of KES $acceptedAmt • ${widget.jobData['title'] ?? 'Job'}',
+          'message':
+              'Client cancelled your accepted counter of KES $acceptedAmt',
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
         if (navContext.mounted) Navigator.pop(navContext);
         if (navContext.mounted) {
           ScaffoldMessenger.of(navContext).showSnackBar(
