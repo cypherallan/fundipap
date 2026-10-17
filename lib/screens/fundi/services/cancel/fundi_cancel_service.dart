@@ -97,7 +97,7 @@ class FundiCancelService {
                 ),
                 SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: reason,
+                  initialValue: reason,
                   decoration: InputDecoration(
                     labelText: 'Reason',
                     border: OutlineInputBorder(),
@@ -154,6 +154,7 @@ class FundiCancelService {
         ),
       );
       if (ok != true) return;
+      if (!context.mounted) return;
       await _performFundiWithdraw(
         context: context,
         jobId: jobId,
@@ -243,7 +244,7 @@ class FundiCancelService {
               ),
               SizedBox(height: 6),
               DropdownButtonFormField<String>(
-                value: reason,
+                initialValue: reason,
                 decoration: InputDecoration(
                   labelText: 'Reason',
                   border: OutlineInputBorder(),
@@ -335,6 +336,20 @@ class FundiCancelService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
+      // inside _performFundiWithdraw, after var jobData = ...
+      String clientId = (jobData['customerId'] ?? jobData['clientId'] ?? '')
+          .toString();
+      if (clientId.isNotEmpty) {
+        await db.collection('notifications').add({
+          'toUserId': clientId,
+          'title': 'Fundi withdrew bid',
+          'body': '${jobData['title'] ?? 'Job'} • $reason',
+          'type': 'bid_withdrawn',
+          'jobId': jobId,
+          'createdAt': FieldValue.serverTimestamp(),
+          'isRead': false,
+        });
+      }
       await db
           .collection('fundis')
           .doc(uid)
@@ -367,13 +382,14 @@ class FundiCancelService {
         Navigator.of(context, rootNavigator: true).popUntil((r) => r.isFirst);
       }
     } catch (e) {
-      if (context.mounted)
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Cancel failed: $e'),
             backgroundColor: Colors.red,
           ),
         );
+      }
     }
   }
 

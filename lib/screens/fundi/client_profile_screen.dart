@@ -21,8 +21,9 @@ class ClientProfileScreen extends StatelessWidget {
             .doc(clientId)
             .get(),
         builder: (_, snap) {
-          if (!snap.hasData)
+          if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
           var data = (snap.data!.data() as Map<String, dynamic>?) ?? {};
 
           return StreamBuilder<QuerySnapshot>(

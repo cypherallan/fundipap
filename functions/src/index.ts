@@ -294,6 +294,15 @@ export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId
         const tokens = await getFcmTokens(clientId);
         await sendPush(tokens, `Your counter offer of KES ${after.agreedPrice || ''} has been accepted`, `${after.fundiName || 'Fundi'} accepted • Tap to proceed`, { jobId, type: "counter_accepted_by_fundi" });
     }
+    
+    if ((newS === 'withdrawn' || newS.includes('cancel')) && !oldS.includes('cancel') && oldS !== 'withdrawn') {
+        // this is your _performFundiWithdraw case
+        const jobSnap2 = await db().collection('jobs').doc(jobId).get();
+        const clientId2 = (jobSnap2.data() as any)?.customerId || (jobSnap2.data() as any)?.clientId;
+        const tokens = await getFcmTokens(clientId2);
+        await sendPush(tokens, `Fundi withdrew bid • ${after.jobTitle || 'Job'}`, `${after.cancelReason || 'Fundi withdrew'}`, { jobId, type: "bid_withdrawn" });
+        await db().collection('notifications').add({ toUserId: clientId2, title: `Fundi withdrew bid`, body: `${after.jobTitle || 'Job'} • ${after.cancelReason || ''}`, type: 'bid_withdrawn', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
+    }
 });
 
 export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "europe-west1" }, async (event) => {
@@ -312,6 +321,26 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const oldEscStatus = (before?.escrowStatus || "").toLowerCase();
     const fundiTokens = await getFcmTokens(fundiId);
     const clientTokens = await getFcmTokens(clientId);
+    if (newS.includes('cancel') && !oldS.includes('cancel')) {
+        const jobTitle = title;
+        const reason = (after.cancelReason || after.fundiCancelReason || '').toString();
+        const by = (after.cancelledBy || '').toString().toLowerCase(); // you store 'fundi' / 'client' / 'system'
+        const clientIdLocal = (after.customerId || after.clientId || '').toString();
+
+        if (by === 'fundi') {
+            await sendPush(clientTokens, `Fundi cancelled • ${jobTitle}`, reason || 'Fundi cancelled this job • Find another fundi', { jobId, type: "job_cancelled" });
+            await db().collection('notifications').add({ toUserId: clientIdLocal, title: `Fundi cancelled • ${jobTitle}`, body: reason, type: 'cancelled', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
+        } else if (by === 'client') {
+            if (fundiId) {
+                await sendPush(fundiTokens, `Client cancelled • ${jobTitle}`, reason || 'Client cancelled', { jobId, type: "job_cancelled" });
+                await db().collection('notifications').add({ toUserId: fundiId, title: `Client cancelled • ${jobTitle}`, body: reason, type: 'cancelled', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
+            }
+        } else if (by === 'system') {
+            await sendPush(clientTokens, `Job auto-cancelled • Refund KES ${after.clientRefund || 0}`, jobTitle, { jobId, type: "job_cancelled" });
+            if (fundiId) await sendPush(fundiTokens, `Job auto-cancelled`, jobTitle, { jobId, type: "job_cancelled" });
+        }
+        return;
+    }
     const transport = Number(after.transportFee ?? after.transport ?? 0);
     const r = after.renegotiation || {};
     const originalExtra = Number(r.extraLabor ?? r.extra ?? after.extraLabor ?? 0);

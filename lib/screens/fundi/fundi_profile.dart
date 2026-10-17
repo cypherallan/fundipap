@@ -44,57 +44,60 @@ class _FundiProfileState extends State<FundiProfile> {
   }
 
   String _mapOldProfessionToCategoryId(String oldProf) {
-    var lower = oldProf.toLowerCase();
-    if (lower.contains('plumb')) return 'plumbing_waterworks';
-    if (lower.contains('electrical') || lower.contains('electrics'))
-      return 'electrical';
-    if (lower.contains('washing') ||
-        lower.contains('fridge') ||
-        lower.contains('appliance') ||
-        lower.contains('cooker'))
-      return 'appliance_repair';
-    if (lower.contains('carpentry') || lower.contains('carpenter'))
-      return 'carpentry_joinery';
-    if (lower.contains('weld')) return 'welding_fabrication';
-    if (lower.contains('mechanic') ||
-        lower.contains('car') ||
-        lower.contains('automotive'))
-      return 'automotive';
-    if (lower.contains('tv') || lower.contains('electronics'))
-      return 'electronics_repair';
-    if (lower.contains('boda') ||
-        lower.contains('motorcycle') ||
-        lower.contains('tuk'))
-      return 'motorcycle_boda';
-    if (lower.contains('masonry') || lower.contains('building'))
-      return 'masonry_building';
-    if (lower.contains('paint')) return 'painting_decoration';
-    if (lower.contains('roof') || lower.contains('gutter'))
-      return 'roofing_guttering';
-    if (lower.contains('tile') || lower.contains('terrazzo'))
-      return 'tiling_flooring';
-    if (lower.contains('ac') || lower.contains('hvac')) return 'hvac';
-    if (lower.contains('solar') || lower.contains('inverter'))
-      return 'solar_renewable';
-    if (lower.contains('cctv') || lower.contains('security'))
-      return 'security_systems';
-    if (lower.contains('glass') ||
-        lower.contains('aluminium') ||
-        lower.contains('aluminum'))
-      return 'glass_aluminum';
-    if (lower.contains('gypsum') || lower.contains('ceiling'))
-      return 'gypsum_ceiling';
-    if (lower.contains('waterproof')) return 'waterproofing';
-    if (lower.contains('borehole') || lower.contains('pump'))
-      return 'borehole_pump';
-    if (lower.contains('generator')) return 'generator_power';
-    if (lower.contains('garden') || lower.contains('landscap'))
-      return 'landscaping_gardening';
-    if (lower.contains('clean')) return 'cleaning_laundry';
-    if (lower.contains('pest') || lower.contains('fumigation'))
-      return 'pest_control';
-    if (lower.contains('locksmith') || lower.contains('key'))
-      return 'locksmith';
+    final lower = oldProf.toLowerCase();
+    const Map<String, String> keywords = {
+      'plumb': 'plumbing_waterworks',
+      'electrical': 'electrical',
+      'electrics': 'electrical',
+      'washing': 'appliance_repair',
+      'fridge': 'appliance_repair',
+      'appliance': 'appliance_repair',
+      'cooker': 'appliance_repair',
+      'carpentry': 'carpentry_joinery',
+      'carpenter': 'carpentry_joinery',
+      'weld': 'welding_fabrication',
+      'mechanic': 'automotive',
+      'automotive': 'automotive',
+      'car': 'automotive',
+      'tv': 'electronics_repair',
+      'electronics': 'electronics_repair',
+      'boda': 'motorcycle_boda',
+      'motorcycle': 'motorcycle_boda',
+      'tuk': 'motorcycle_boda',
+      'masonry': 'masonry_building',
+      'building': 'masonry_building',
+      'paint': 'painting_decoration',
+      'roof': 'roofing_guttering',
+      'gutter': 'roofing_guttering',
+      'tile': 'tiling_flooring',
+      'terrazzo': 'tiling_flooring',
+      'hvac': 'hvac',
+      'ac': 'hvac',
+      'solar': 'solar_renewable',
+      'inverter': 'solar_renewable',
+      'cctv': 'security_systems',
+      'security': 'security_systems',
+      'glass': 'glass_aluminum',
+      'aluminium': 'glass_aluminum',
+      'aluminum': 'glass_aluminum',
+      'gypsum': 'gypsum_ceiling',
+      'ceiling': 'gypsum_ceiling',
+      'waterproof': 'waterproofing',
+      'borehole': 'borehole_pump',
+      'pump': 'borehole_pump',
+      'generator': 'generator_power',
+      'garden': 'landscaping_gardening',
+      'landscap': 'landscaping_gardening',
+      'clean': 'cleaning_laundry',
+      'pest': 'pest_control',
+      'fumigation': 'pest_control',
+      'locksmith': 'locksmith',
+      'key': 'locksmith',
+    };
+
+    for (final entry in keywords.entries) {
+      if (lower.contains(entry.key)) return entry.value;
+    }
     return 'plumbing_waterworks';
   }
 
@@ -154,8 +157,9 @@ class _FundiProfileState extends State<FundiProfile> {
     if ((combined['name'] ?? '').toString().length > 2) pct += 10;
     if ((combined['profession'] ?? combined['primaryCategoryId'] ?? '')
         .toString()
-        .isNotEmpty)
+        .isNotEmpty) {
       pct += 15;
+    }
     if ((combined['bio'] ?? '').toString().length > 20) pct += 20;
     if ((combined['bio'] ?? '').toString().length > 20) pct += 30;
     if (combined['photoUrl'] != null) pct += 15;
@@ -197,8 +201,9 @@ class _FundiProfileState extends State<FundiProfile> {
         context,
       ).showSnackBar(SnackBar(content: Text('Failed: $e')));
     } finally {
-      if (!mounted) return;
-      setState(() => uploadingPhoto = false);
+      if (mounted) {
+        setState(() => uploadingPhoto = false);
+      }
     }
   }
 

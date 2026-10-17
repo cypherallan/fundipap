@@ -299,6 +299,7 @@ class ClientCancelService {
                   '')
               .toString();
       String clientId = (job['customerId'] ?? job['clientId'] ?? '').toString();
+
       if (!escrowWasLocked) {
         await db.collection('jobs').doc(jobId).update({
           'status': 'open',
@@ -366,6 +367,19 @@ class ClientCancelService {
                 'cancelledAt': FieldValue.serverTimestamp(),
                 'createdAt': FieldValue.serverTimestamp(),
               }, SetOptions(merge: true));
+
+          // --- FIX 1: NOTIFY FUNDI EVEN WHEN NO ESCROW ---
+          await db.collection('notifications').add({
+            'userId': fundiId, // for your current listener
+            'toUserId': fundiId, // for the new listener (make it compatible)
+            'jobId': jobId,
+            'type': 'job_cancelled',
+            'title': 'Job cancelled',
+            'body': '${job['title'] ?? 'Job'} • $reason',
+            'message': 'Client removed you. Job is back to open. No fee.',
+            'isRead': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
         }
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -389,6 +403,7 @@ class ClientCancelService {
         }
         return;
       }
+
       await db.collection('jobs').doc(jobId).update({
         'status': arrived ? 'cancelled_after_arrival' : 'cancelled',
         'cancelled': true,
@@ -405,6 +420,7 @@ class ClientCancelService {
         'cancelledAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
       await db.collection('escrowTransactions').doc(jobId).set({
         'jobId': jobId,
         'labour': labour,
@@ -419,28 +435,41 @@ class ClientCancelService {
         'refundReason': 'Client cancel - 5% on labour only',
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-      if (fundiGets > 0 && fundiId.isNotEmpty) {
-        await db.collection('transportTransactions').doc(jobId).set({
-          'jobId': jobId,
-          'fundiId': fundiId,
-          'amount': fundiGets,
-          'status': 'released',
-          'message':
-              'You have received KES $fundiGets as your transport due to client cancelling after you started site visit. Confirm you received',
-          'releasedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
 
+      if (fundiId.isNotEmpty) {
+        if (fundiGets > 0) {
+          await db.collection('transportTransactions').doc(jobId).set({
+            'jobId': jobId,
+            'fundiId': fundiId,
+            'amount': fundiGets,
+            'status': 'released',
+            'message':
+                'You have received KES $fundiGets as your transport due to client cancelling after you started site visit. Confirm you received',
+            'releasedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
+
+        // --- FIX 2: ALWAYS NOTIFY, not only when fundiGets > 0 ---
         await db.collection('notifications').add({
           'userId': fundiId,
+          'toUserId': fundiId,
           'jobId': jobId,
-          'type': 'transport_released',
-          'title': 'Transport released',
-          'message':
-              'You have received KES $fundiGets as your transport due to client cancelling after you started site visit. Confirm you received',
-          'requiresConfirmation': true,
+          'type': fundiGets > 0 ? 'transport_released' : 'job_cancelled',
+          'title': fundiGets > 0
+              ? 'Transport released'
+              : 'Job cancelled by client',
+          'body': fundiGets > 0
+              ? 'You have received KES $fundiGets transport - ${job['title'] ?? 'Job'}'
+              : '${job['title'] ?? 'Job'} • $reason',
+          'message': fundiGets > 0
+              ? 'You have received KES $fundiGets as your transport due to client cancelling after you started site visit. Confirm you received'
+              : 'Client cancelled: $reason',
+          'isRead': false,
+          'requiresConfirmation': fundiGets > 0,
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
+
       await db.collection('cancellationLogs').add({
         'jobId': jobId,
         'fundiId': fundiId,
