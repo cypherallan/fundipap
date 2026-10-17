@@ -281,7 +281,10 @@ class ClientCancelCalculator {
       logs.add('CANCEL 6: AFTER ESCROW BEFORE TRAVEL');
     }
 
-    int fundiGets = transport;
+    int fundiGets = 0;
+    if (stage == ClientCancelStage.afterArrival || arrived) {
+      fundiGets = transport;
+    }
     if (stage == ClientCancelStage.beforeEscrow) fundiGets = 0;
 
     int clientRefund = totalLockedDisplay - feeForCalc - fundiGets;
