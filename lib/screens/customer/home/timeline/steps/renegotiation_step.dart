@@ -62,16 +62,13 @@ class RenegotiationSteps {
             0,
       );
       if (extraToLock == 0) {
-        int newTotalClient = toInt(c.reneg?['newTotalClientPays'] ?? 0);
-        if (newTotalClient > 0) extraToLock = newTotalClient - c.alreadyLocked;
-      }
-      if (extraToLock == 0) {
         extraToLock = extraLaborToShow + (extraLaborToShow * 0.05).round();
       }
 
-      int newTotalClient = toInt(
-        c.reneg?['newTotalClientPays'] ?? c.alreadyLocked + extraToLock,
-      );
+      // FIXED: Always compute fresh, ignore buggy newTotalClientPays in DB
+      int newTotalClient =
+          c.alreadyLocked + extraToLock; // 5400 + 1050 = 6450 correct
+
       bool isCounterAccepted = counterExtraLabor > 0;
       String whoBuys = (c.reneg?['whoBuysParts'] ?? 'client').toString();
 

@@ -204,15 +204,18 @@ class HomeStatusWidget extends StatelessWidget {
       int counterExtra = toInt(
         reneg?['acceptedCounterExtraLabor'] ?? reneg?['counterExtraLabor'] ?? 0,
       );
+      int extraLaborShow = counterExtra > 0
+          ? counterExtra
+          : toInt(reneg?['extraLabor'] ?? 0);
       int extraToLock = toInt(
         reneg?['acceptedCounterExtraToLock'] ??
             reneg?['counterExtraToLock'] ??
             reneg?['extraToLock'] ??
             0,
       );
+      // FIXED: never use buggy newTotalClientPays
       if (extraToLock == 0) {
-        int newTotal = toInt(reneg?['newTotalClientPays'] ?? 0);
-        if (newTotal > 0) extraToLock = newTotal - alreadyLocked;
+        extraToLock = extraLaborShow + (extraLaborShow * 0.05).round();
       }
       bool isCounterAccepted = counterExtra > 0;
       return OrangeAnimatedWaitingCard(
@@ -295,12 +298,10 @@ class HomeStatusWidget extends StatelessWidget {
       );
     }
     if (status == 'job_completed' || status == 'pending_completion') {
-      int newLabour = toInt(
-        reneg?['newLaborTotal'] ?? labour + toInt(reneg?['extraLabor'] ?? 0),
-      );
+      // FIXED: labour is already final 6000, don't add extra again
+      int newLabour = toInt(job['laborCost'] ?? job['agreedPrice'] ?? labour);
       int newClientFee = (newLabour * 0.05).round();
-      int newTotal = newLabour + transport + newClientFee;
-      int totalToRelease = toInt(reneg?['newTotalClientPays'] ?? newTotal);
+      int totalToRelease = newLabour + transport + newClientFee; // 6450
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

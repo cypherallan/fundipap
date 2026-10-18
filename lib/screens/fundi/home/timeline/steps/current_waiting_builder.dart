@@ -376,10 +376,10 @@ Widget? buildCurrentWaiting({
                     onPressed: () async {
                       if (isRenegoCounter) {
                         int currentAgreed = toInt(
-                          job['agreedPrice'] ??
-                              job['laborCost'] ??
-                              renego['oldLabor'] ??
+                          renego['oldLabor'] ??
                               job['originalLaborCost'] ??
+                              job['agreedPrice'] ??
+                              job['laborCost'] ??
                               0,
                         );
                         int approvedExtra = toInt(
@@ -389,14 +389,9 @@ Widget? buildCurrentWaiting({
                           renego['counterExtraToLock'] ??
                               (approvedExtra * 1.05).round(),
                         );
-                        int oldTrans = toInt(
-                          job['transportFee'] ?? renego['transportFee'] ?? 0,
-                        );
-                        int newLabourTotal = currentAgreed + approvedExtra;
-                        int newTotalPay =
-                            newLabourTotal +
-                            oldTrans +
-                            (newLabourTotal * 0.05).round();
+
+                        // DO NOT update laborCost/agreedPrice/totalClientPays on accept
+                        // Keep old 5000 until client locks extra
                         await FirebaseFirestore.instance
                             .collection('jobs')
                             .doc(jobId)
@@ -415,12 +410,11 @@ Widget? buildCurrentWaiting({
                               'renegotiation.acceptedCounterExtraAppFee':
                                   (approvedExtra * 0.05).round(),
                               'renegotiation.requested': false,
-                              'renegotiation.oldLabor': currentAgreed,
-                              'renegotiation.newLaborTotal': newLabourTotal,
-                              'renegotiation.newTotalClientPays': newTotalPay,
-                              'laborCost': newLabourTotal,
-                              'agreedPrice': newLabourTotal,
-                              'totalClientPays': newTotalPay,
+                              'renegotiation.oldLabor':
+                                  currentAgreed, // 5000 original
+                              'renegotiation.newLaborTotal':
+                                  currentAgreed +
+                                  approvedExtra, // 6000 for display only
                               'extraTopupAmount': approvedExtra,
                               'extraTopupToLock': approvedExtraToLock,
                               'status': 'awaiting_extra_escrow',
@@ -430,6 +424,7 @@ Widget? buildCurrentWaiting({
                               'fundiHasUnread': false,
                               'updatedAt': FieldValue.serverTimestamp(),
                             });
+
                         String clientId =
                             (job['clientId'] ??
                                     job['customerId'] ??
