@@ -109,16 +109,15 @@ class ClientCancelCalculator {
       if (tl > 0) extraLabour = (tl / 1.05).round();
     }
     int totalLabour = _toInt(
-      reneg?['newLaborTotal'] ??
-          reneg?['counterLabor'] ??
-          job['laborCost'] ??
-          job['agreedPrice'] ??
-          0,
+      reneg?['newLaborTotal'] ?? reneg?['counterLabor'] ?? 0,
     );
-    if (totalLabour < oldLabour + extraLabour) {
-      totalLabour = oldLabour + extraLabour;
+    // ALWAYS recalc from old + counter when extra locked, don't trust laborCost
+    if (extraLabour > 0) {
+      totalLabour = oldLabour + extraLabour; // 5000+1000=6000
     }
-    if (totalLabour == 0) totalLabour = oldLabour;
+    if (totalLabour == 0) {
+      totalLabour = _toInt(job['laborCost'] ?? job['agreedPrice'] ?? oldLabour);
+    }
 
     int transport = _toInt(
       job['transportFee'] ??
@@ -270,10 +269,13 @@ class ClientCancelCalculator {
       );
     } else if (extraLocked) {
       stage = ClientCancelStage.extraLocked;
-      labourForCalc = totalLabour;
-      feeForCalc = totalFee;
-      totalLockedDisplay = totalShouldBe;
-      logs.add('CANCEL 4: EXTRA LOCKED -> use NEW totals 6400/6000');
+      labourForCalc = oldLabour + extraLabour; // 6000 not 7000
+      feeForCalc = (labourForCalc * feeRate).round(); // 300
+      totalLockedDisplay =
+          labourForCalc + feeForCalc + transport; // 6300+transport
+      logs.add(
+        'CANCEL 4: EXTRA LOCKED -> use NEW totals $totalLockedDisplay/$labourForCalc',
+      );
     } else if (arrived) {
       stage = ClientCancelStage.afterArrival;
       labourForCalc = oldLabour;
