@@ -18,6 +18,7 @@ import 'fundi_home_actions_mixin.dart';
 import '../../../services/fundi_penalty_service.dart';
 import '../../../widgets/fundi_badge_chip.dart';
 import '../../../widgets/fundi_level_progress_widget.dart';
+import '../../../widgets/todo_photo_mandatory_reminder.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});
@@ -552,6 +553,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          TodoPhotoMandatoryReminder(),
                           Text(
                             'Habari, ${me?['name'] ?? 'Fundi'}',
                             style: GoogleFonts.montserrat(
