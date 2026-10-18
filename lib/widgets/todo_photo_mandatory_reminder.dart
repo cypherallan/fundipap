@@ -119,12 +119,16 @@ class TodoPhotoMandatoryReminder extends StatelessWidget {
           children: [
             Icon(Icons.list_alt, size: 14, color: Colors.orange.shade800),
             SizedBox(width: 4),
-            Text(
-              'TODO: Photos mandatory',
-              style: GoogleFonts.montserrat(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: Colors.orange.shade800,
+            Flexible(
+              child: Text(
+                'TODO: Photos mandatory',
+                style: GoogleFonts.montserrat(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.orange.shade800,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
             ),
             SizedBox(width: 2),

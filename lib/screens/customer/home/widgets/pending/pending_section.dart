@@ -61,12 +61,14 @@ class CustomerPendingSection extends StatelessWidget {
               );
             }
             final Map<String, QueryDocumentSnapshot> map = {};
-            if (snap1.hasData) for (var d in snap1.data!.docs) {
-              map[d.id] = d;
-            }
-            if (snap2.hasData) for (var d in snap2.data!.docs) {
-              map[d.id] = d;
-            }
+            if (snap1.hasData)
+              for (var d in snap1.data!.docs) {
+                map[d.id] = d;
+              }
+            if (snap2.hasData)
+              for (var d in snap2.data!.docs) {
+                map[d.id] = d;
+              }
             var jobs = map.values.toList();
 
             jobs = jobs.where((d) {
@@ -112,7 +114,6 @@ class CustomerPendingSection extends StatelessWidget {
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
-                    height: 48,
                     child: ElevatedButton.icon(
                       onPressed: () => Navigator.push(
                         context,
@@ -120,16 +121,29 @@ class CustomerPendingSection extends StatelessWidget {
                           builder: (_) => const PostNewJobScreen(),
                         ),
                       ),
-                      icon: const Icon(Icons.add, color: Colors.black),
+                      icon: const Icon(
+                        Icons.add,
+                        color: Colors.black,
+                        size: 20,
+                      ),
                       label: Text(
                         'Post New Job',
                         style: GoogleFonts.montserrat(
                           fontWeight: FontWeight.w800,
                           color: Colors.black,
+                          fontSize: 14,
                         ),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: FundipapColors.primaryYellow,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 14,
+                          horizontal: 16,
+                        ),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
