@@ -250,32 +250,62 @@ export const onNotificationPush = onDocumentCreated({ document: "notifications/{
 });
 
 // BIDS = covers your FundiNotificationsPage + CustomerNotificationsSection
+// FUNDI PUSHES BELOW ARE LOCKED AS YOU COMMITTED - DO NOT TOUCH
 export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId}", region: "europe-west1" }, async (event) => {
     const before = event.data?.before?.data() as any;
     const after = event.data?.after?.data() as any;
     if (!after) return;
     const jobId = event.params.jobId;
     const fundiId = after.fundiId;
-    const clientId = after.customerId || after.clientId;
     const oldS = (before?.status || "").toString();
     const newS = (after?.status || "").toString();
     const lastBy = (after.lastCounterBy || after.counterBy || "").toString();
 
+    // CLIENT FIX: fallback to job doc for clientId
     const jobSnap = await db().collection("jobs").doc(jobId).get();
-    const transport = Number((jobSnap.data() as any)?.transportFee ?? (jobSnap.data() as any)?.transport ?? 0);
+    const jobData = jobSnap.data() as any;
+    const clientId = after.customerId || after.clientId || jobData?.customerId || jobData?.clientId;
+    const transport = Number(jobData?.transportFee ?? jobData?.transport ?? 0);
+    const jobTitle = after.jobTitle || jobData?.title || 'Job';
+
+    // CLIENT: New bid
     if (!before) {
         const tokens = await getFcmTokens(clientId);
-        await sendPush(tokens, "New bid received", `${after.fundiName || 'Fundi'} bid KES ${after.amount || ''} • ${after.jobTitle || ''}`, { jobId, type: "bid" });
+        await sendPush(tokens, "New bid received", `${after.fundiName || 'Fundi'} bid KES ${after.amount || ''} • ${jobTitle}`, { jobId, type: "bid" });
+        await db().collection('notifications').add({
+            toUserId: clientId,
+            title: `New bid KES ${after.amount}`,
+            body: `${after.fundiName || 'Fundi'} placed a bid for ${jobTitle}`,
+            type: 'bid',
+            jobId,
+            createdAt: FieldValue.serverTimestamp(),
+            isRead: false
+        });
         return;
     }
+
+    // FUNDI FLOW - LOCKED
     if ((newS === "countered" || newS === "client_counter") && lastBy !== fundiId && oldS !== newS) {
         const tokens = await getFcmTokens(fundiId);
         await sendPush(tokens, `Client countered KES ${after.clientCounterAmount || after.lastCounterAmount || 0}`, `Tap to Accept/Counter`, { jobId, type: "client_counter" });
     }
+
+    // CLIENT: Fundi countered
     if (newS === "countered" && lastBy === fundiId && oldS !== newS) {
         const tokens = await getFcmTokens(clientId);
-        await sendPush(tokens, `Fundi countered KES ${after.lastCounterAmount || 0}`, `${after.jobTitle || 'Job'} • Tap to view`, { jobId, type: "fundi_counter" });
+        await sendPush(tokens, `Fundi countered KES ${after.lastCounterAmount || 0}`, `${jobTitle} • Tap to view`, { jobId, type: "fundi_counter" });
+        await db().collection('notifications').add({
+            toUserId: clientId,
+            title: `Counter offer received`,
+            body: `Fundi countered KES ${after.lastCounterAmount} for ${jobTitle}`,
+            type: 'fundi_counter',
+            jobId,
+            createdAt: FieldValue.serverTimestamp(),
+            isRead: false
+        });
     }
+
+    // FUNDI FLOW - LOCKED
     if (newS === "accepted" && oldS !== "accepted") {
         const tokens = await getFcmTokens(fundiId);
         const agreed = after.agreedPrice || after.amount || after.bidAmount || 0;
@@ -283,25 +313,41 @@ export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId
         await sendPush(tokens, "Bid accepted", `Bid accepted. Waiting for client to lock escrow KES ${escrowLock} • Tap to view`, { jobId, type: "accepted", escrow: escrowLock.toString() });
     }
 
+    // FUNDI FLOW - LOCKED
     if (newS === "rejected" && oldS !== "rejected") {
         const tokens = await getFcmTokens(fundiId);
         const rejectedAmount = after.amount || after.bidAmount || after.price || 0;
-        const jobTitle = after.jobTitle || (jobSnap.data() as any)?.title || 'job';
         await sendPush(tokens, "Bid rejected", `Your bid of KES ${rejectedAmount} for ${jobTitle} was rejected`, { jobId, type: "rejected", amount: rejectedAmount.toString() });
     }
 
+    // CLIENT: Fundi accepted client counter
     if (newS.includes("counter_accepted_by_fundi") && !oldS.includes("counter_accepted_by_fundi")) {
         const tokens = await getFcmTokens(clientId);
         await sendPush(tokens, `Your counter offer of KES ${after.agreedPrice || ''} has been accepted`, `${after.fundiName || 'Fundi'} accepted • Tap to proceed`, { jobId, type: "counter_accepted_by_fundi" });
+        await db().collection('notifications').add({
+            toUserId: clientId,
+            title: `Counter accepted`,
+            body: `${after.fundiName || 'Fundi'} accepted your counter KES ${after.agreedPrice} for ${jobTitle}`,
+            type: 'counter_accepted_by_fundi',
+            jobId,
+            createdAt: FieldValue.serverTimestamp(),
+            isRead: false
+        });
     }
 
+    // CLIENT: Fundi withdrew
     if ((newS === 'withdrawn' || newS.includes('cancel')) && !oldS.includes('cancel') && oldS !== 'withdrawn') {
-        // this is your _performFundiWithdraw case
-        const jobSnap2 = await db().collection('jobs').doc(jobId).get();
-        const clientId2 = (jobSnap2.data() as any)?.customerId || (jobSnap2.data() as any)?.clientId;
-        const tokens = await getFcmTokens(clientId2);
-        await sendPush(tokens, `Fundi withdrew bid • ${after.jobTitle || 'Job'}`, `${after.cancelReason || 'Fundi withdrew'}`, { jobId, type: "bid_withdrawn" });
-        await db().collection('notifications').add({ toUserId: clientId2, title: `Fundi withdrew bid`, body: `${after.jobTitle || 'Job'} • ${after.cancelReason || ''}`, type: 'bid_withdrawn', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
+        const tokens = await getFcmTokens(clientId);
+        await sendPush(tokens, `Fundi withdrew bid • ${jobTitle}`, `${after.cancelReason || 'Fundi withdrew'}`, { jobId, type: "bid_withdrawn" });
+        await db().collection('notifications').add({
+            toUserId: clientId,
+            title: `Fundi withdrew bid`,
+            body: `${jobTitle} • ${after.cancelReason || ''}`,
+            type: 'bid_withdrawn',
+            jobId,
+            createdAt: FieldValue.serverTimestamp(),
+            isRead: false
+        });
     }
 });
 
@@ -321,6 +367,8 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const oldEscStatus = (before?.escrowStatus || "").toLowerCase();
     const fundiTokens = await getFcmTokens(fundiId);
     const clientTokens = await getFcmTokens(clientId);
+
+    // CANCEL - FUNDI FLOW LOCKED
     if (newS.includes('cancel') && !oldS.includes('cancel')) {
         const jobTitle = title;
         const reason = (after.cancelReason || after.fundiCancelReason || '').toString();
@@ -331,28 +379,23 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
 
         if (by === 'fundi') {
             await sendPush(clientTokens, `Fundi cancelled • ${jobTitle}`, reason || 'Fundi cancelled this job • Find another fundi', { jobId, type: "job_cancelled" });
+            // CLIENT HOME MIRROR
+            await db().collection('notifications').add({ toUserId: clientId, title: `Fundi cancelled • ${jobTitle}`, body: reason || 'Fundi cancelled', type: 'job_cancelled', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
         } else if (by === 'client') {
             if (fundiId) {
-                // 1st push - client cancelled
                 await sendPush(fundiTokens, `Client cancelled • ${jobTitle}`, reason || 'Client cancelled', { jobId, type: "job_cancelled" });
-
-                // 2nd push - THIS WAS MISSING - transport released (no fee leaked)
                 if (isAfterArrival && transportReleased && payout > 0) {
-                    await sendPush(
-                        fundiTokens,
-                        `Transport KES ${payout} released`,
-                        `Transport (KES ${payout}) has been released to you - client cancelled after you started travelling for ${jobTitle}`,
-                        { jobId, type: "transport_released", amount: payout.toString() }
-                    );
-                    console.log(`TRANSPORT RELEASE PUSH SENT to ${fundiId}: KES ${payout} for job ${jobId}`);
+                    await sendPush(fundiTokens, `Transport KES ${payout} released`, `Transport (KES ${payout}) has been released to you - client cancelled after you started travelling for ${jobTitle}`, { jobId, type: "transport_released", amount: payout.toString() });
                 }
             }
         } else if (by === 'system') {
             await sendPush(clientTokens, `Job auto-cancelled • Refund KES ${after.clientRefund || 0}`, jobTitle, { jobId, type: "job_cancelled" });
+            await db().collection('notifications').add({ toUserId: clientId, title: `Job auto-cancelled`, body: `Refund KES ${after.clientRefund || 0} • ${jobTitle}`, type: 'job_cancelled', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
             if (fundiId) await sendPush(fundiTokens, `Job auto-cancelled`, jobTitle, { jobId, type: "job_cancelled" });
         }
         return;
     }
+
     const transport = Number(after.transportFee ?? after.transport ?? 0);
     const r = after.renegotiation || {};
     const originalExtra = Number(r.extraLabor ?? r.extra ?? after.extraLabor ?? 0);
@@ -365,25 +408,15 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
 
     const oldLaborFromRenego = Number((r as any).oldLabor ?? (r as any).oldLabour ?? 0);
     let baseLabor = 0;
-    if (oldLaborFromRenego > 0) {
-        baseLabor = oldLaborFromRenego;
-    } else {
-        baseLabor = Number(after.laborCost ?? after.originalLaborCost ?? 0) || (Number(after.agreedPrice || 0) - originalExtra) || Number(after.agreedPrice || after.clientCounterAmount || after.lastCounterAmount || 0);
-    }
+    if (oldLaborFromRenego > 0) baseLabor = oldLaborFromRenego;
+    else baseLabor = Number(after.laborCost ?? after.originalLaborCost ?? 0) || (Number(after.agreedPrice || 0) - originalExtra) || Number(after.agreedPrice || after.clientCounterAmount || after.lastCounterAmount || 0);
     const totalLabor = oldLaborFromRenego > 0 ? baseLabor + finalExtra : (baseLabor >= 6000 + finalExtra && finalExtra > 0 ? baseLabor : baseLabor + finalExtra);
-    const agreed = totalLabor;
     const fundiSees = baseLabor + transport;
 
     const fundiSnap = await db().collection("users").doc(fundiId).get();
     const u = fundiSnap.data() as any || {};
     let fundiPct = Number(u.fundiCommissionPct ?? 5);
-    if (u.isTrialGold) fundiPct = 5;
-    else if (u.badgeLevel === "gold") fundiPct = 5;
-    else if (u.badgeLevel === "silver") fundiPct = 8;
-    else if (u.badgeLevel === "bronze") fundiPct = 10;
-    else if (u.badgeLevel === "none") fundiPct = 15;
-    else fundiPct = 5;
-
+    if (u.isTrialGold) fundiPct = 5; else if (u.badgeLevel === "gold") fundiPct = 5; else if (u.badgeLevel === "silver") fundiPct = 8; else if (u.badgeLevel === "bronze") fundiPct = 10; else if (u.badgeLevel === "none") fundiPct = 15; else fundiPct = 5;
     const fundiFee = Math.round(totalLabor * fundiPct / 100);
     const clientFee = Math.round(totalLabor * 0.05);
     const fundiReceives = totalLabor - fundiFee + transport;
@@ -394,78 +427,74 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
         const originalLabor = Number(renego.extraLabor ?? renego.extra ?? jobData.extraLabor ?? 0);
         const counterLabor = renego.counterExtraLabor ?? renego.clientCounterExtraLabor ?? null;
         const agreedLabor = renego.agreedExtraLabor ?? renego.finalExtraLabor ?? null;
-
         let extraLabor = 0;
-        if (agreedLabor != null) extraLabor = Number(agreedLabor);
-        else if (counterLabor != null) extraLabor = Number(counterLabor);
-        else extraLabor = originalLabor;
-
+        if (agreedLabor != null) extraLabor = Number(agreedLabor); else if (counterLabor != null) extraLabor = Number(counterLabor); else extraLabor = originalLabor;
         const originalToLock = Number(renego.extraToLock ?? jobData.extraToLock ?? jobData.extraTopupToLock ?? 0);
         const counterToLock = renego.counterExtraToLock ?? renego.clientCounterExtraToLock ?? null;
         const agreedToLock = renego.agreedExtraToLock ?? null;
-
         let extraToLock = 0;
-        if (agreedToLock != null) extraToLock = Number(agreedToLock);
-        else if (counterToLock != null) extraToLock = Number(counterToLock);
-        else if (originalToLock) extraToLock = Number(originalToLock);
-        else extraToLock = extraLabor + Math.round(extraLabor * 0.05);
-
+        if (agreedToLock != null) extraToLock = Number(agreedToLock); else if (counterToLock != null) extraToLock = Number(counterToLock); else if (originalToLock) extraToLock = Number(originalToLock); else extraToLock = extraLabor + Math.round(extraLabor * 0.05);
         if (extraLabor === 0 && extraToLock > 0) extraLabor = Math.round(extraToLock / 1.05);
         if (extraToLock === 0 && extraLabor > 0) extraToLock = extraLabor + Math.round(extraLabor * 0.05);
-
         return { extraLabor, extraToLock, originalLabor };
     }
-
     const { extraLabor, extraToLock } = getExtraNumbers(after);
-
-    console.log(`RELEASE FIX ${jobId} badge=${u.badgeLevel} trial=${u.isTrialGold} pct=${fundiPct}% totalLabor ${totalLabor} base ${baseLabor} extra ${extraLabor} fundiReceives ${fundiReceives} clientPays ${clientPays}`);
 
     if ((newEscHeld && !oldEscHeld) || (newEscStatus === "held" && oldEscStatus !== "held")) {
         const beforeStatus = (before?.status || "").toLowerCase();
         const isExtraLock = extraLabor > 0 || extraToLock > 0 || beforeStatus.includes("awaiting_extra") || beforeStatus.includes("in_progress") || beforeStatus.includes("site_visit");
-
         if (isExtraLock) {
             await sendPush(fundiTokens, `Extra KES ${extraLabor} locked - Continue job`, `${title} • Resume work`, { jobId, type: "extra_escrow_locked" });
             await sendPush(clientTokens, `Extra KES ${extraToLock} locked • Fundi resuming`, `${title} • Continue job`, { jobId, type: "extra_escrow_locked" });
+            await db().collection('notifications').add({ toUserId: clientId, title: `Extra KES ${extraToLock} locked`, body: `${title} • Fundi resuming`, type: 'extra_escrow_locked', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
         } else {
             await sendPush(fundiTokens, `Escrow locked KES ${fundiSees} - Start site visit now`, `${title} • Tap to travel`, { jobId, type: "escrow_locked" });
             await sendPush(clientTokens, `Escrow locked KES ${clientPays} • Waiting for fundi`, `${title} • ${after.assignedFundiName || 'Fundi'} has NOT started travelling`, { jobId, type: "escrow_locked" });
+            await db().collection('notifications').add({ toUserId: clientId, title: `Escrow locked KES ${clientPays}`, body: `${title} • Waiting for fundi`, type: 'escrow_locked', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
         }
         return;
     }
 
     if ((newS === "assigned" || newS === "confirmed") && oldS !== newS && !newEscHeld && newEscStatus !== "held") {
         await sendPush(clientTokens, `Fundi accepted • Lock KES ${clientPays} to start`, `${title} • Tap to pay escrow`, { jobId, type: "lock_escrow" });
+        await db().collection('notifications').add({ toUserId: clientId, title: `Fundi accepted • Lock KES ${clientPays}`, body: `${title} • Tap to pay escrow`, type: 'lock_escrow', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
     }
     if ((newS === "travelling" || newS === "on_the_way") && oldS !== newS) {
         await sendPush(clientTokens, "Fundi is on the way", `${after.assignedFundiName || 'Fundi'} is travelling • Tracking live`, { jobId, type: "travelling" });
+        await db().collection('notifications').add({ toUserId: clientId, title: `Fundi is on the way`, body: `${after.assignedFundiName || 'Fundi'} is travelling`, type: 'travelling', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
     }
     if ((newS.includes("site_visit") || newS === "site_visited") && !oldS.includes("site_visit")) {
         await sendPush(fundiTokens, `Waiting for you to start work KES ${fundiSees}`, `${title} • Tap START JOB`, { jobId, type: "site_visited" });
         await sendPush(clientTokens, "Fundi arrived on site", `${after.assignedFundiName || 'Fundi'} • Waiting to start work`, { jobId, type: "site_visited" });
+        await db().collection('notifications').add({ toUserId: clientId, title: `Fundi arrived on site`, body: `${after.assignedFundiName || 'Fundi'} arrived`, type: 'site_visited', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
     }
     if ((newS === "in_progress" || newS === "fundi_working") && oldS !== newS) {
         await sendPush(clientTokens, "Fundi is working", `${title} in progress`, { jobId, type: "working" });
+        await db().collection('notifications').add({ toUserId: clientId, title: `Fundi is working`, body: `${title} in progress`, type: 'working', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
     }
     if ((newS === "pending_completion" || newS === "job_completed") && oldS !== newS) {
         await sendPush(clientTokens, `Job Completed - Confirm & release KES ${clientPays}`, `${title} • Tap to confirm`, { jobId, type: "job_completed" });
+        await db().collection('notifications').add({ toUserId: clientId, title: `Job Completed - Confirm & release KES ${clientPays}`, body: `${title} • Tap to confirm`, type: 'job_completed', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
         await sendPush(fundiTokens, "Job Completed - Waiting for client", `${title} • Waiting for client to confirm`, { jobId, type: "job_completed" });
     }
     if (newS.includes("awaiting_extra") && !oldS.includes("awaiting_extra")) {
         await sendPush(clientTokens, `Lock extra KES ${extraToLock} in escrow`, `${title} • Fundi accepted`, { jobId, type: "awaiting_extra_escrow" });
+        await db().collection('notifications').add({ toUserId: clientId, title: `Lock extra KES ${extraToLock}`, body: `${title} • Extra work needed`, type: 'awaiting_extra_escrow', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
         await sendPush(fundiTokens, `Waiting for client to lock extra KES ${extraLabor}`, `${title}`, { jobId, type: "awaiting_extra_escrow" });
     }
     if (newS.includes("waiting_for_client_to_buy_parts") && !oldS.includes("waiting_for_client_to_buy_parts")) {
         await sendPush(clientTokens, "You will buy parts - Confirm when bought", `${title}`, { jobId, type: "waiting_for_client_to_buy_parts" });
+        await db().collection('notifications').add({ toUserId: clientId, title: `You will buy parts`, body: `${title} • Confirm when bought`, type: 'waiting_for_client_to_buy_parts', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
     }
     if (after.renegotiation?.status === "pending" && before?.renegotiation?.status !== "pending") {
         await sendPush(clientTokens, "Fundi requests price review", `${after.renegotiation.reasonDetails || 'New breakdown'} • Tap to REVIEW`, { jobId, type: "price_review" });
+        await db().collection('notifications').add({ toUserId: clientId, title: `Fundi requests price review`, body: `${after.renegotiation.reasonDetails || 'New breakdown'}`, type: 'price_review', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
     }
-
     const wasReleased = oldEscStatus === "released" || before?.escrowReleased === true || before?.escrowStatus === "released";
     const nowReleased = newEscStatus === "released" || after?.escrowReleased === true || after?.escrowStatus === "released";
     if (!wasReleased && nowReleased) {
         await sendPush(fundiTokens, `Client released KES ${fundiReceives}`, `${title} • Tap to view receipt`, { jobId, type: "released" });
         await sendPush(clientTokens, `You released KES ${clientPays} • Completed`, `${title}`, { jobId, type: "released" });
+        await db().collection('notifications').add({ toUserId: clientId, title: `You released KES ${clientPays} • Completed`, body: `${title} • Completed`, type: 'released', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
     }
 });
