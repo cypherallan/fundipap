@@ -107,8 +107,8 @@ class ClientCancelService {
         builder: (ctx, setSt) => AlertDialog(
           title: Text(
             effectiveArrived
-                ? 'Cancel after site visit?'
-                : 'Cancel before fundi travels?',
+                ? 'Fundi already started travelling, cancel now?'
+                : 'Cancel before fundi starts travelling?',
             style: GoogleFonts.montserrat(
               fontWeight: FontWeight.w800,
               fontSize: 14,
@@ -301,7 +301,11 @@ class ClientCancelService {
       String clientId = (job['customerId'] ?? job['clientId'] ?? '').toString();
 
       if (!escrowWasLocked) {
-        await db.collection('jobs').doc(jobId).update({
+        var batch = db.batch();
+        var jobRef = db.collection('jobs').doc(jobId);
+        var now = FieldValue.serverTimestamp();
+
+        batch.update(jobRef, {
           'status': 'open',
           'cancelled': false,
           'autoCancelled': false,
@@ -315,24 +319,58 @@ class ClientCancelService {
           'fundiId': FieldValue.delete(),
           'escrowStatus': 'pending',
           'lastClientCancelForFundi': fundiId,
-          'lastCancelledAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
+          'lastCancelledAt': now,
+          'updatedAt': now,
         });
+
         if (fundiId.isNotEmpty) {
-          await db
+          var bidRef = db
               .collection('jobs')
               .doc(jobId)
               .collection('bids')
+              .doc(fundiId);
+          batch.set(bidRef, {
+            'status': 'cancelled_by_client',
+            'cancelled': true,
+            'cancelledBy': 'client',
+            'cancelledAt': now,
+            'updatedAt': now,
+          }, SetOptions(merge: true));
+
+          // notification for fundi - removed before escrow, no transport
+          var notifRef = db.collection('notifications').doc();
+          batch.set(notifRef, {
+            'userId': fundiId,
+            'title': 'Client removed you',
+            'body':
+                'Client cancelled job ${job['title'] ?? ''} before escrow lock. Job back to open.',
+            'type': 'job_cancelled_before_escrow',
+            'jobId': jobId,
+            'isRead': false,
+            'createdAt': now,
+          });
+
+          var cancelledRef = db
+              .collection('fundis')
               .doc(fundiId)
-              .set({
-                'status': 'cancelled_by_client',
-                'cancelled': true,
-                'cancelledBy': 'client',
-                'cancelledAt': FieldValue.serverTimestamp(),
-                'updatedAt': FieldValue.serverTimestamp(),
-              }, SetOptions(merge: true));
+              .collection('cancelledJobs')
+              .doc(jobId);
+          batch.set(cancelledRef, {
+            'jobId': jobId,
+            'title': job['title'] ?? 'Job',
+            'clientName': job['customerName'] ?? job['clientName'] ?? 'Client',
+            'cancelReason': reason,
+            'type': 'assigned_cancelled',
+            'cancelledBy': 'client',
+            'transportPayout': 0,
+            'reopened': true,
+            'cancelledAt': now,
+            'createdAt': now,
+          }, SetOptions(merge: true));
         }
-        await db.collection('cancellationLogs').add({
+
+        var logRef = db.collection('cancellationLogs').doc();
+        batch.set(logRef, {
           'jobId': jobId,
           'fundiId': fundiId,
           'clientId': clientId,
@@ -346,31 +384,14 @@ class ClientCancelService {
           'details': details,
           'escrowWasLocked': false,
           'reopened': true,
-          'createdAt': FieldValue.serverTimestamp(),
+          'createdAt': now,
         });
-        if (fundiId.isNotEmpty) {
-          await db
-              .collection('fundis')
-              .doc(fundiId)
-              .collection('cancelledJobs')
-              .doc(jobId)
-              .set({
-                'jobId': jobId,
-                'title': job['title'] ?? 'Job',
-                'clientName':
-                    job['customerName'] ?? job['clientName'] ?? 'Client',
-                'cancelReason': reason,
-                'type': 'assigned_cancelled',
-                'cancelledBy': 'client',
-                'transportPayout': 0,
-                'reopened': true,
-                'cancelledAt': FieldValue.serverTimestamp(),
-                'createdAt': FieldValue.serverTimestamp(),
-              }, SetOptions(merge: true));
-        }
+
+        await batch.commit();
+
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+            const SnackBar(
               content: Text(
                 'Cancelled for this fundi. Job moved back to open for others.',
               ),

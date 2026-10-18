@@ -101,6 +101,19 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
             !autoCancelled &&
             status.contains('cancel'));
 
+    // --- ADDED: transport release check (no platformFee here, so no leak) ---
+    int payout = 0;
+    try {
+      var raw = data['fundiPayout'] ?? data['transportReleasedAmount'] ?? 0;
+      if (raw is int)
+        payout = raw;
+      else
+        payout = int.tryParse('$raw') ?? 0;
+    } catch (_) {}
+    bool isAfterArrival = status.contains('cancelled_after_arrival');
+    bool transportReleased = data['transportReleased'] == true || payout > 0;
+    // --- END ADDED ---
+
     String title;
     String msg;
 
@@ -120,14 +133,26 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
     } else if (isClientCancel || cancelledBy == 'client') {
       if (viewerIsClient) {
         title = 'You cancelled this job';
-        msg = reason.isNotEmpty && reason != 'Cancelled before escrow'
-            ? 'You cancelled: $reason'
-            : 'You cancelled this job.';
+        if (isAfterArrival && transportReleased) {
+          msg = reason.isNotEmpty && reason != 'Cancelled before escrow'
+              ? 'You cancelled: $reason\n\nTransport (KES $payout) has been released to fundi.'
+              : 'You cancelled this job.\n\nTransport (KES $payout) has been released to fundi.';
+        } else {
+          msg = reason.isNotEmpty && reason != 'Cancelled before escrow'
+              ? 'You cancelled: $reason'
+              : 'You cancelled this job.';
+        }
       } else {
         title = 'Client cancelled this job';
-        msg = reason.isNotEmpty && reason != 'Cancelled before escrow'
-            ? 'Client cancelled: $reason'
-            : 'Client cancelled this job. It is now in your cancelled tab.';
+        if (isAfterArrival && transportReleased) {
+          msg = reason.isNotEmpty && reason != 'Cancelled before escrow'
+              ? 'Client cancelled: $reason\n\nTransport (KES $payout) has been released to you.'
+              : 'Client cancelled this job.\n\nTransport (KES $payout) has been released to you.';
+        } else {
+          msg = reason.isNotEmpty && reason != 'Cancelled before escrow'
+              ? 'Client cancelled: $reason'
+              : 'Client cancelled this job. It is now in your cancelled tab.';
+        }
       }
     } else {
       if (viewerIsClient) {
@@ -182,3 +207,4 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
     super.dispose();
   }
 }
+/////////////////////////////////////////////%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

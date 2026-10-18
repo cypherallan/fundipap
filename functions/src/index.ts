@@ -324,14 +324,28 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     if (newS.includes('cancel') && !oldS.includes('cancel')) {
         const jobTitle = title;
         const reason = (after.cancelReason || after.fundiCancelReason || '').toString();
-        const by = (after.cancelledBy || '').toString().toLowerCase(); // you store 'fundi' / 'client' / 'system'
-        const clientIdLocal = (after.customerId || after.clientId || '').toString();
+        const by = (after.cancelledBy || '').toString().toLowerCase();
+        const payout = Number(after.fundiPayout || after.transportReleasedAmount || 0);
+        const transportReleased = after.transportReleased === true || payout > 0;
+        const isAfterArrival = newS.includes('cancelled_after_arrival');
 
         if (by === 'fundi') {
             await sendPush(clientTokens, `Fundi cancelled • ${jobTitle}`, reason || 'Fundi cancelled this job • Find another fundi', { jobId, type: "job_cancelled" });
         } else if (by === 'client') {
             if (fundiId) {
+                // 1st push - client cancelled
                 await sendPush(fundiTokens, `Client cancelled • ${jobTitle}`, reason || 'Client cancelled', { jobId, type: "job_cancelled" });
+
+                // 2nd push - THIS WAS MISSING - transport released (no fee leaked)
+                if (isAfterArrival && transportReleased && payout > 0) {
+                    await sendPush(
+                        fundiTokens,
+                        `Transport KES ${payout} released`,
+                        `Transport (KES ${payout}) has been released to you - client cancelled after you started travelling for ${jobTitle}`,
+                        { jobId, type: "transport_released", amount: payout.toString() }
+                    );
+                    console.log(`TRANSPORT RELEASE PUSH SENT to ${fundiId}: KES ${payout} for job ${jobId}`);
+                }
             }
         } else if (by === 'system') {
             await sendPush(clientTokens, `Job auto-cancelled • Refund KES ${after.clientRefund || 0}`, jobTitle, { jobId, type: "job_cancelled" });

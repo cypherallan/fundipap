@@ -7,10 +7,13 @@ class CancelledSteps {
     if (!c.status.toLowerCase().contains('cancel')) return false;
     String title;
     String body;
-    final by = c.job['cancelledBy'] ?? '';
+    final by = c.job['cancelledBy'] ?? 'client';
     final refund = c.job['clientRefund'] ?? 0;
     final fee = c.job['platformFee'] ?? 0;
-    final payout = c.job['fundiPayout'] ?? 0;
+    final payout =
+        c.job['fundiPayout'] ?? c.job['transportReleasedAmount'] ?? 0;
+    final transportReleased = c.job['transportReleased'] == true || payout > 0;
+
     switch (c.status) {
       case 'cancelled_before_payment':
         title = 'Job cancelled';
@@ -34,6 +37,20 @@ class CancelledSteps {
     timeline.add(
       TimelineCard(title: title, body: body, icon: Icons.cancel, isDone: false),
     );
+
+    // --- NEW: second card + matches your second push notification ---
+    if (c.status == 'cancelled_after_arrival' && transportReleased) {
+      timeline.add(
+        TimelineCard(
+          title: 'Transport KES $payout released - Done',
+          body:
+              'Transport (KES $payout) has been released to ${c.fundiName} because client cancelled after fundi started travelling.',
+          icon: Icons.local_shipping,
+          isDone: true,
+        ),
+      );
+    }
+
     return true;
   }
 }
