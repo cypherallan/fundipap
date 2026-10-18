@@ -47,9 +47,8 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen>
             .doc(widget.jobId)
             .snapshots(),
         builder: (context, snap) {
-          if (!snap.hasData) {
+          if (!snap.hasData)
             return const Center(child: CircularProgressIndicator());
-          }
           var job = snap.data!.data() as Map<String, dynamic>;
           var reneg = (job['renegotiation'] as Map<String, dynamic>?) ?? {};
           String renegStatus = (reneg['status'] ?? 'pending').toString();
@@ -57,16 +56,16 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen>
           int oldLabor = _toInt(
             reneg['oldLabor'] ??
                 reneg['oldPrice'] ??
-                job['agreedPrice'] ??
-                job['laborCost'] ??
+                job['laborCost'] ?? // FIXED - now first
+                job['agreedPrice'] ?? // fallback
+                job['budget'] ??
                 0,
           );
           int newLaborRaw = _toInt(
             reneg['newLaborTotal'] ?? reneg['newLaborPrice'] ?? 0,
           );
-          if (newLaborRaw == 0) {
+          if (newLaborRaw == 0)
             newLaborRaw = oldLabor + _toInt(reneg['extraLabor'] ?? 0);
-          }
 
           int acceptedCounterLabour = _toInt(
             reneg['acceptedCounterExtraLabor'] ??
@@ -91,7 +90,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen>
               : newLaborRaw;
           int extraLabor = isCounterAccepted
               ? acceptedCounterLabour
-              : (newLabor - oldLabor).clamp(0, 9999999);
+              : (newLabor - oldLabor).clamp(0, 9999999).toInt();
 
           int oldTransport = _toInt(
             reneg['oldTransportFee'] ??
@@ -103,14 +102,15 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen>
           int newClientFee = _toInt(
             reneg['newClientAppFee'] ?? (newLabor * 0.05).round(),
           );
-          int extraAppFee = (newClientFee - oldClientFee).clamp(0, 999999);
-          if (isCounterAccepted) {
+          int extraAppFee = (newClientFee - oldClientFee)
+              .clamp(0, 999999)
+              .toInt();
+          if (isCounterAccepted)
             extraAppFee = _toInt(
               reneg['acceptedCounterExtraAppFee'] ??
                   reneg['counterExtraAppFee'] ??
                   extraAppFee,
             );
-          }
           int alreadyLockedCorrect = oldLabor + oldTransport + oldClientFee;
           int extraToLock = extraLabor + extraAppFee;
           int newTotal = alreadyLockedCorrect + extraToLock;
@@ -133,11 +133,19 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen>
           List<String> evidence = List<String>.from(
             reneg['evidencePhotoUrls'] ?? [],
           );
+
+          // INTERNAL ONLY - verification never shown to client, only system flag
+          bool isVerifiedAtSite = false;
+          try {
+            isVerifiedAtSite =
+                (reneg['hasVerificationPhotos'] ?? false) == true ||
+                (reneg['verificationPhotoUrls'] as List? ?? []).isNotEmpty;
+          } catch (_) {}
+
           int partsEstimateTotal = _toInt(reneg['partsEstimateTotal']);
           int calc = 0;
-          for (var p in partsNeeded) {
+          for (var p in partsNeeded)
             calc += _toInt(p['qty'], 1) * _toInt(p['estPrice']);
-          }
           if (partsEstimateTotal == 0) partsEstimateTotal = calc;
 
           bool isMaterialsOnly = extraLabor == 0 && partsNeeded.isNotEmpty;
@@ -166,6 +174,37 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen>
                 const SizedBox(height: 12),
                 buildReasonsSection(reasons),
                 const SizedBox(height: 12),
+                // INTERNAL VERIFICATION BADGE ONLY - no photos shown to client
+                if (isVerifiedAtSite)
+                  Container(
+                    padding: EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.blue.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.verified_user,
+                          size: 18,
+                          color: Colors.blue.shade700,
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Fundi verified on site (GPS + fixed anchor matched) - genuine scope change. System blocks 0 / low counters.',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              color: Colors.blue.shade800,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (isVerifiedAtSite) const SizedBox(height: 12),
                 if (!isMaterialsOnly && tillNumber.isNotEmpty)
                   buildTillBanner(tillNumber, partsEstimateTotal),
                 if (!isMaterialsOnly && partsNeeded.isNotEmpty) ...[

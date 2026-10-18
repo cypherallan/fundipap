@@ -187,17 +187,84 @@ mixin ActionsMixin
     }
   }
 
+  // FIXED: Counter only, 0 allowed but tracked, generic for 140 jobs
   Future<void> _counter(
     int oldLabor,
     int alreadyLockedCorrect,
     int oldTransport,
     int extraRequested,
   ) async {
-    if (counterPriceCtrl.text.isEmpty) return;
+    if (counterPriceCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter counter amount (0 allowed)')),
+      );
+      return;
+    }
+    if (counterReasonCtrl.text.trim().isEmpty &&
+        (int.tryParse(counterPriceCtrl.text.trim()) ?? 0) == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Reason required when countering 0 - why old price covers it?',
+          ),
+        ),
+      );
+      return;
+    }
     setState(() => loading = true);
     try {
       int counterExtraLabor = int.tryParse(counterPriceCtrl.text.trim()) ?? 0;
-      if (counterExtraLabor <= 0) return;
+      // Allow 0 now - as agreed, no Reject
+      bool hasEvidence = false;
+      int currentRound = 0;
+      int previousLowCounters = 0;
+      try {
+        var jobSnap = await FirebaseFirestore.instance
+            .collection('jobs')
+            .doc(widget.jobId)
+            .get();
+        var reneg =
+            (jobSnap.data()?['renegotiation'] as Map<String, dynamic>?) ?? {};
+        var ev = (reneg['evidencePhotoUrls'] ?? []) as List;
+        var ver = (reneg['verificationPhotoUrls'] ?? []) as List;
+        hasEvidence = ev.isNotEmpty || ver.isNotEmpty;
+        currentRound = (reneg['counterRound'] ?? 0) as int;
+        previousLowCounters = (reneg['clientLowCounterCount'] ?? 0) as int;
+      } catch (_) {}
+
+      int minAllowed = (extraRequested * 0.3).round();
+      if (hasEvidence &&
+          counterExtraLabor > 0 &&
+          counterExtraLabor < minAllowed) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Counter too low for verified scope. Minimum when photos verified: KES $minAllowed (30% of KES $extraRequested).',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        setState(() => loading = false);
+        return;
+      }
+      if (hasEvidence && counterExtraLabor == 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Cannot counter 0 when fundi provided verified site photos showing bigger scope. Minimum is KES $minAllowed.',
+              ),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+        setState(() => loading = false);
+        return;
+      }
+
       int counterExtraFee = (counterExtraLabor * 0.05).round();
       int counterExtraToLock = counterExtraLabor + counterExtraFee;
       int counterNewLaborTotal = oldLabor + counterExtraLabor;
@@ -212,42 +279,90 @@ mixin ActionsMixin
                   '')
               .toString();
       final uid = FirebaseAuth.instance.currentUser?.uid;
-      await FirebaseFirestore.instance
-          .collection('jobs')
-          .doc(widget.jobId)
-          .update({
-            'status': 'renegotiation_countered_by_client',
-            'renegotiation.status': 'countered_by_client',
-            'renegotiation.counterExtraLabor': counterExtraLabor,
-            'renegotiation.counterLabor': counterNewLaborTotal,
-            'renegotiation.counterPrice': counterNewLaborTotal,
-            'renegotiation.counterClientAppFee': counterExtraFee,
-            'renegotiation.counterExtraToLock': counterExtraToLock,
-            'renegotiation.counterFundiAppFee': counterExtraFee,
-            'renegotiation.counterTotalClientPays': counterNewTotalClientPays,
-            'renegotiation.counterTotalCost': counterNewTotalClientPays,
-            'renegotiation.counterFundiReceives': counterFundiReceives,
-            'renegotiation.counterTransportFee': oldTransport,
-            'renegotiation.counterReason': counterReasonCtrl.text,
-            'renegotiation.counteredAt': FieldValue.serverTimestamp(),
-            'renegotiation.counteredExtraRequested': extraRequested,
-            'fundiHasUnread': true,
-            'customerUnreadType': 'renegotiation_countered',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+
+      bool isLowCounter =
+          counterExtraLabor == 0 || counterExtraLabor < minAllowed;
+      int newRound = currentRound + 1;
+      int newLowCount = isLowCounter
+          ? previousLowCounters + 1
+          : previousLowCounters;
+      bool shouldDeadlock = newRound >= 3 && newLowCount >= 2;
+
+      String nextStatus = shouldDeadlock
+          ? 'price_review_deadlock'
+          : 'renegotiation_countered_by_client';
+      String nextRenegStatus = shouldDeadlock
+          ? 'deadlock_client_low_counters'
+          : 'countered_by_client';
+
+      await FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).update({
+        'status': nextStatus,
+        'renegotiation.status': nextRenegStatus,
+        'renegotiation.counterExtraLabor': counterExtraLabor,
+        'renegotiation.counterLabor': counterNewLaborTotal,
+        'renegotiation.counterPrice': counterNewLaborTotal,
+        'renegotiation.counterClientAppFee': counterExtraFee,
+        'renegotiation.counterExtraToLock': counterExtraToLock,
+        'renegotiation.counterFundiAppFee': counterExtraFee,
+        'renegotiation.counterTotalClientPays': counterNewTotalClientPays,
+        'renegotiation.counterTotalCost': counterNewTotalClientPays,
+        'renegotiation.counterFundiReceives': counterFundiReceives,
+        'renegotiation.counterTransportFee': oldTransport,
+        'renegotiation.counterReason': counterReasonCtrl.text,
+        'renegotiation.counteredAt': FieldValue.serverTimestamp(),
+        'renegotiation.counteredExtraRequested': extraRequested,
+        'renegotiation.counterRound': newRound,
+        'renegotiation.clientLowCounterCount': newLowCount,
+        'renegotiation.isLowCounter': isLowCounter,
+        'renegotiation.hasEvidence': hasEvidence,
+        'renegotiation.minAllowedWhenVerified': minAllowed,
+        'fundiHasUnread': true,
+        'customerUnreadType': 'renegotiation_countered',
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (shouldDeadlock)
+          'renegotiation.deadlockedAt': FieldValue.serverTimestamp(),
+        if (shouldDeadlock)
+          'renegotiation.deadlockReason':
+              'Client countered 0 or <30% for $newRound rounds. Fundi to choose continue old price or withdraw with diagnostic fee.',
+      });
+
+      try {
+        var clientId =
+            (widget.job['customerId'] ?? widget.job['clientId'] ?? '')
+                .toString();
+        if (clientId.isNotEmpty && isLowCounter) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(clientId)
+              .set({
+                'clientFlags': {
+                  'zeroCounterCount': FieldValue.increment(1),
+                  'lowCounterCount': FieldValue.increment(1),
+                  'lastLowCounterAt': FieldValue.serverTimestamp(),
+                  'lastJobId': widget.jobId,
+                },
+              }, SetOptions(merge: true));
+        }
+      } catch (_) {}
+
       if (fundiId.isNotEmpty) {
         await FirebaseFirestore.instance.collection('notifications').add({
           'toUserId': fundiId,
           'toRole': 'fundi',
           'fromUserId': uid,
           'fromRole': 'client',
-          'type': 'renegotiation_counter',
+          'type': shouldDeadlock
+              ? 'renegotiation_deadlock'
+              : 'renegotiation_counter',
           'jobId': widget.jobId,
           'amount': counterExtraToLock,
           'extraLabor': counterExtraLabor,
-          'title': 'Client countered extra work',
-          'body':
-              'Client countered your extra KES $extraRequested with KES $counterExtraLabor',
+          'title': shouldDeadlock
+              ? 'Price review deadlocked - Your choice now'
+              : 'Client countered extra work',
+          'body': shouldDeadlock
+              ? 'Client countered low $newRound times. You can continue with old price KES $oldLabor or withdraw with transport + diagnostic fee.'
+              : 'Client countered your extra KES $extraRequested with KES $counterExtraLabor',
           'isRead': false,
           'createdAt': FieldValue.serverTimestamp(),
         });
@@ -257,7 +372,9 @@ mixin ActionsMixin
             .collection('notifications')
             .add({
               'jobId': widget.jobId,
-              'type': 'renegotiation_counter',
+              'type': shouldDeadlock
+                  ? 'renegotiation_deadlock'
+                  : 'renegotiation_counter',
               'amount': counterExtraToLock,
               'extraLabor': counterExtraLabor,
               'createdAt': FieldValue.serverTimestamp(),
@@ -265,15 +382,33 @@ mixin ActionsMixin
             });
       }
       if (!mounted) return;
-      Navigator.pop(context);
-      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Counter sent: KES $counterExtraLabor (you will lock KES $counterExtraToLock)',
+            'Counter sent: KES $counterExtraLabor - waiting for fundi',
           ),
         ),
       );
+      Navigator.pop(context); // ONLY ONE POP - back to timeline
+      if (shouldDeadlock) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Deadlock after $newRound low counters. Fundi will choose to continue or withdraw with compensation.',
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Counter sent: KES $counterExtraLabor (you will lock KES $counterExtraToLock) - Round $newRound/3',
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }

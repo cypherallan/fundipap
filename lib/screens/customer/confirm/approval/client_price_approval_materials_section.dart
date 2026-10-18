@@ -371,23 +371,40 @@ mixin MaterialsSectionMixin
     );
   }
 
+  // FIXED: Generic evidence + verification for all 140 jobs
   Widget buildEvidenceSection(List<String> evidence) {
-    return SizedBox(
-      height: 80,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: evidence.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (_, i) => ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            evidence[i],
-            width: 80,
-            height: 80,
-            fit: BoxFit.cover,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (evidence.isNotEmpty) ...[
+          Text(
+            'SET 2 - Evidence: Why extra needed (generic)',
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+              color: Colors.orange.shade800,
+            ),
           ),
-        ),
-      ),
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 80,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: evidence.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (_, i) => ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  evidence[i],
+                  width: 80,
+                  height: 80,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

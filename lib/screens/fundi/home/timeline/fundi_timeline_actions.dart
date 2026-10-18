@@ -54,9 +54,7 @@ class FundiTimelineActions {
       String fundiId =
           FirebaseAuth.instance.currentUser?.uid ??
           (fullJob['fundiId'] ?? '').toString();
-
       await _autoWriteBadge(jobId, fundiId);
-
       await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
         'travelling': true,
         'siteVisitStarted': true,
@@ -66,7 +64,6 @@ class FundiTimelineActions {
         'customerHasUnread': true,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-
       if (!context.mounted) return;
       Navigator.push(
         context,
@@ -214,5 +211,101 @@ class FundiTimelineActions {
       'customerHasUnread': true,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  static Future<void> continueOldPrice(
+    String jobId,
+    Map<String, dynamic>? reneg,
+    int oldLab,
+    int transport,
+  ) async {
+    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'status': 'site_visit',
+      'renegotiation.status': 'fundi_chose_continue_old_price',
+      'renegotiation.fundiChoice': 'continue_old',
+      'renegotiation.fundiChoseAt': FieldValue.serverTimestamp(),
+      'renegotiation.deadlockResolved': true,
+      'fundiHasUnread': false,
+      'customerHasUnread': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  static Future<void> withdrawWithCompensation(
+    String jobId,
+    Map<String, dynamic>? reneg,
+    int oldLab,
+    int transport,
+    bool hasEvidence,
+  ) async {
+    final jobSnap = await FirebaseFirestore.instance
+        .collection('jobs')
+        .doc(jobId)
+        .get();
+    var jobData = jobSnap.data() ?? {};
+    String clientId = (jobData['customerId'] ?? jobData['clientId'] ?? '')
+        .toString();
+    String fundiId = (jobData['assignedFundiId'] ?? jobData['fundiId'] ?? '')
+        .toString();
+    int diagnosticFee = 0;
+    if (hasEvidence) {
+      diagnosticFee = (oldLab * 0.15).round().clamp(800, 1500);
+    }
+    int totalCompensation = transport + diagnosticFee;
+    int clientRefundLabour = hasEvidence
+        ? (oldLab - diagnosticFee).clamp(0, oldLab)
+        : oldLab;
+    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      'status': hasEvidence
+          ? 'fundi_withdrawn_after_genuine_extra_deadlock'
+          : 'fundi_withdrawn_after_deadlock_no_evidence',
+      'renegotiation.status': hasEvidence
+          ? 'fundi_withdrawn_genuine_compensated'
+          : 'fundi_withdrawn_no_evidence_transport_only',
+      'renegotiation.fundiChoice': 'withdraw',
+      'renegotiation.withdrawReason': hasEvidence
+          ? 'genuine_extra_client_stubborn_zero_counters'
+          : 'deadlock_no_evidence',
+      'renegotiation.hasEvidence': hasEvidence,
+      'renegotiation.diagnosticFee': diagnosticFee,
+      'renegotiation.transportCompensation': transport,
+      'renegotiation.totalCompensationToFundi': totalCompensation,
+      'renegotiation.clientRefundLabour': clientRefundLabour,
+      'renegotiation.clientLostTransport': transport,
+      'renegotiation.clientLostFee': hasEvidence ? (oldLab * 0.05).round() : 0,
+      'renegotiation.fundiChoseAt': FieldValue.serverTimestamp(),
+      'renegotiation.deadlockResolved': true,
+      'fundiHasUnread': false,
+      'customerHasUnread': true,
+      'customerRefundAmount': clientRefundLabour,
+      'fundiCompensation': totalCompensation,
+      'updatedAt': FieldValue.serverTimestamp(),
+      'payout.fundiCompensation': totalCompensation,
+      'payout.clientRefund': clientRefundLabour,
+      'payout.reason': hasEvidence
+          ? 'client_stubborn_after_genuine_extra_verified'
+          : 'deadlock_no_evidence',
+    });
+    if (!hasEvidence && fundiId.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(fundiId).set({
+          'fundiFlags': {
+            'withdrawAfterDeadlockCount': FieldValue.increment(1),
+            'lastWithdrawAt': FieldValue.serverTimestamp(),
+          },
+        }, SetOptions(merge: true));
+      } catch (_) {}
+    }
+    if (hasEvidence && clientId.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(clientId).set({
+          'clientFlags': {
+            'stubbornZeroCounterAfterGenuineCount': FieldValue.increment(1),
+            'totalDiagnosticFeesLost': FieldValue.increment(diagnosticFee),
+            'lastStubbornAt': FieldValue.serverTimestamp(),
+          },
+        }, SetOptions(merge: true));
+      } catch (_) {}
+    }
   }
 }

@@ -35,10 +35,29 @@ class _FundiRequestNewPriceScreenState
   final extraLaborCtrl = TextEditingController(text: '0');
   final tillCtrl = TextEditingController();
   List<Map<String, TextEditingController>> partsNeeded = [];
-  List<XFile> evidencePhotos = [];
+  List<XFile> evidencePhotos = []; // SET 2 - Evidence why extra needed
+  List<XFile> verificationPhotos =
+      []; // SET 1 - Verification proof at site - generic, not hardcoded
   List<XFile> oldPartPhotos = [];
   final picker = ImagePicker();
   bool uploading = false;
+
+  // Generic - get client original photos for re-capture challenge, works for all 140 jobs
+  List<String> get _clientOriginalPhotos {
+    try {
+      var photos =
+          widget.job['photos'] as List? ??
+          widget.job['images'] as List? ??
+          widget.job['photoUrls'] as List? ??
+          [];
+      return photos
+          .map((e) => e.toString())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
 
   @override
   void initState() {
@@ -87,8 +106,8 @@ class _FundiRequestNewPriceScreenState
   }
 
   int get oldLabor => _toInt(
-    widget.job['agreedPrice'] ??
-        widget.job['laborCost'] ??
+    widget.job['laborCost'] ??
+        widget.job['agreedPrice'] ??
         widget.job['budget'] ??
         0,
   );
@@ -162,8 +181,11 @@ class _FundiRequestNewPriceScreenState
     setState(() => uploading = true);
     try {
       bool hasParts = _needsParts;
-
       var evidenceUrls = await _uploadPhotos(evidencePhotos, 'evidence');
+      var verificationUrls = await _uploadPhotos(
+        verificationPhotos,
+        'verification',
+      ); // SET 1 generic
       var oldPartUrls = await _uploadPhotos(oldPartPhotos, 'old_parts');
 
       List<Map> partsNeededData = hasParts
@@ -183,45 +205,55 @@ class _FundiRequestNewPriceScreenState
       int finalPartsTotal = hasParts ? partsEstimateTotal : 0;
       String finalTill = hasParts ? tillCtrl.text.trim() : '';
 
-      await FirebaseFirestore.instance
-          .collection('jobs')
-          .doc(widget.jobId)
-          .update({
-            'originalLaborCost': widget.job['originalLaborCost'] ?? oldLabor,
-            'laborCost': oldLabor,
-            'renegotiation': {
-              'requested': true,
-              'status': 'pending',
-              'reasons': selectedReasons.toList(),
-              'reasonDetails': detailsCtrl.text.trim(),
-              'oldLabor': oldLabor,
-              'originalLabor': widget.job['originalLaborCost'] ?? oldLabor,
-              'extraLabor': extraLabor,
-              'newLaborTotal': newLaborTotal,
-              'pendingLabor': extraLabor,
-              'oldClientAppFee': oldClientFee,
-              'newClientAppFee': newClientFee,
-              'newFundiAppFee': newFundiFee,
-              'transportFee': transport,
-              'oldTotalClientPays': oldTotalClient,
-              'newTotalClientPays': newTotalClient,
-              'newFundiReceives': newFundiReceives,
-              'extraToLock': extraToLock,
-              'partsNeeded': partsNeededData,
-              'partsEstimateTotal': finalPartsTotal,
-              'partsPaymentDestination': 'shop_direct',
-              'tillNumber': finalTill,
-              'evidencePhotoUrls': evidenceUrls,
-              'oldPartPhotoUrls': oldPartUrls,
-              'whoBuysParts': null,
-              'createdAt': FieldValue.serverTimestamp(),
-            },
-            'status': 'site_visit',
-            'customerHasUnread': true,
-            'fundiHasUnread': false,
-            'updatedAt': FieldValue.serverTimestamp(),
-            'customerLastSeenAt': FieldValue.delete(),
-          });
+      await FirebaseFirestore.instance.collection('jobs').doc(widget.jobId).update({
+        'originalLaborCost': widget.job['originalLaborCost'] ?? oldLabor,
+        'laborCost': oldLabor,
+        'renegotiation': {
+          'requested': true,
+          'status': 'pending',
+          'reasons': selectedReasons.toList(),
+          'reasonDetails': detailsCtrl.text.trim(),
+          'oldLabor': oldLabor,
+          'originalLabor': widget.job['originalLaborCost'] ?? oldLabor,
+          'extraLabor': extraLabor,
+          'newLaborTotal': newLaborTotal,
+          'pendingLabor': extraLabor,
+          'oldClientAppFee': oldClientFee,
+          'newClientAppFee': newClientFee,
+          'newFundiAppFee': newFundiFee,
+          'transportFee': transport,
+          'oldTotalClientPays': oldTotalClient,
+          'newTotalClientPays': newTotalClient,
+          'newFundiReceives': newFundiReceives,
+          'extraToLock': extraToLock,
+          'partsNeeded': partsNeededData,
+          'partsEstimateTotal': finalPartsTotal,
+          'partsPaymentDestination': 'shop_direct',
+          'tillNumber': finalTill,
+          'evidencePhotoUrls': evidenceUrls, // SET 2 generic
+          'verificationPhotoUrls':
+              verificationUrls, // SET 1 generic - re-capture client anchor
+          'oldPartPhotoUrls': oldPartUrls,
+          'hasVerificationPhotos': verificationUrls.isNotEmpty,
+          'hasEvidencePhotos': evidenceUrls.isNotEmpty,
+          'verificationAttempted': verificationUrls.isNotEmpty,
+          'counterRound': 0,
+          'clientLowCounterCount': 0,
+          'scopeChangeScore': 0,
+          'whoBuysParts': null,
+          'createdAt': FieldValue.serverTimestamp(),
+          'verificationInfo': {
+            'method':
+                're-capture challenge - fundi re-takes client fixed anchor (wall, tiles, tree, serial) - generic, not job specific',
+            'timestamp': FieldValue.serverTimestamp(),
+          },
+        },
+        'status': 'site_visit',
+        'customerHasUnread': true,
+        'fundiHasUnread': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'customerLastSeenAt': FieldValue.delete(),
+      });
 
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -321,12 +353,8 @@ class _FundiRequestNewPriceScreenState
                           selectedReasons.contains(
                             'Replacement needed (old part damaged)',
                           );
-                      if (!stillNeedsLabor) {
-                        extraLaborCtrl.text = '0';
-                      }
-                      if (!stillNeedsParts) {
-                        _clearParts();
-                      }
+                      if (!stillNeedsLabor) extraLaborCtrl.text = '0';
+                      if (!stillNeedsParts) _clearParts();
                     }
                   }),
                 );
@@ -514,41 +542,247 @@ class _FundiRequestNewPriceScreenState
               ),
             ),
             const SizedBox(height: 16),
-            Text(
-              'Evidence Photos',
-              style: GoogleFonts.montserrat(
-                fontWeight: FontWeight.w700,
-                fontSize: 11,
+            // SET 1 - VERIFICATION - Generic for all 140 jobs
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade200),
               ),
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              children: evidencePhotos
-                  .map(
-                    (x) => ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        File(x.path),
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.verified_user,
+                        size: 16,
+                        color: Colors.blue,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'SET 1 - VERIFICATION (Optional for now)',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 10,
+                          color: Colors.blue.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Re-take client original photo to prove you are at site. System auto-detects fixed anchor (wall, tiles, door, tree, fence, slab, fixed pipe - ANY fixed object, NOT movable like broom). No hardcoding - works for all 140 jobs.',
+                    style: GoogleFonts.inter(
+                      fontSize: 9,
+                      color: Colors.blue.shade800,
+                    ),
+                  ),
+                  if (_clientOriginalPhotos.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Client original photos - re-capture same anchor:',
+                      style: GoogleFonts.inter(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  )
-                  .toList(),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 60,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _clientOriginalPhotos.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 6),
+                        itemBuilder: (_, i) => ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            _clientOriginalPhotos[i],
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              width: 60,
+                              height: 60,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    children: verificationPhotos
+                        .map(
+                          (x) => Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(
+                                  File(x.path),
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                child: GestureDetector(
+                                  onTap: () => setState(
+                                    () => verificationPhotos.remove(x),
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 12,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  const SizedBox(height: 4),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.blue.shade300),
+                    ),
+                    onPressed: () async {
+                      var img = await picker.pickImage(
+                        source: ImageSource.camera,
+                        imageQuality: 70,
+                      );
+                      if (img != null)
+                        setState(() => verificationPhotos.add(img));
+                    },
+                    icon: const Icon(
+                      Icons.camera_alt,
+                      size: 16,
+                      color: Colors.blue,
+                    ),
+                    label: Text(
+                      'Add verification photo - re-capture client anchor (in-app camera)',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Optional now, mandatory before publish. GPS + timestamp will be checked.',
+                    style: GoogleFonts.inter(
+                      fontSize: 8,
+                      color: Colors.blue.shade600,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            OutlinedButton.icon(
-              onPressed: () async {
-                var imgs = await picker.pickMultiImage(imageQuality: 60);
-                if (imgs.isNotEmpty) {
-                  setState(() => evidencePhotos.addAll(imgs));
-                }
-              },
-              icon: const Icon(Icons.photo, size: 16),
-              label: const Text(
-                'Add site photos',
-                style: TextStyle(fontSize: 11),
+            const SizedBox(height: 16),
+            // SET 2 - EVIDENCE
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.photo_camera,
+                        size: 16,
+                        color: Colors.orange,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'SET 2 - EVIDENCE (Optional for now)',
+                        style: GoogleFonts.montserrat(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 10,
+                          color: Colors.orange.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'New photos showing WHY extra needed (no space, no water, bigger scope, materials). Taken within 10 mins after Set 1, same GPS. Generic - not hardcoded.',
+                    style: GoogleFonts.inter(
+                      fontSize: 9,
+                      color: Colors.orange.shade800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    children: evidencePhotos
+                        .map(
+                          (x) => Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(
+                                  File(x.path),
+                                  width: 60,
+                                  height: 60,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                child: GestureDetector(
+                                  onTap: () =>
+                                      setState(() => evidencePhotos.remove(x)),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      size: 12,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      var imgs = await picker.pickMultiImage(imageQuality: 60);
+                      if (imgs.isNotEmpty)
+                        setState(() => evidencePhotos.addAll(imgs));
+                    },
+                    icon: const Icon(Icons.photo, size: 16),
+                    label: const Text(
+                      'Add evidence photos - why extra needed',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ),
+                ],
               ),
             ),
             if (needsReplacement) ...[

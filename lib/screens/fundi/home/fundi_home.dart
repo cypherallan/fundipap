@@ -554,6 +554,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           TodoPhotoMandatoryReminder(),
+                          const SizedBox(height: 4),
                           Text(
                             'Habari, ${me?['name'] ?? 'Fundi'}',
                             style: GoogleFonts.montserrat(
