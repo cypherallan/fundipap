@@ -298,10 +298,9 @@ class HomeStatusWidget extends StatelessWidget {
       );
     }
     if (status == 'job_completed' || status == 'pending_completion') {
-      // FIXED: labour is already final 6000, don't add extra again
       int newLabour = toInt(job['laborCost'] ?? job['agreedPrice'] ?? labour);
       int newClientFee = (newLabour * 0.05).round();
-      int totalToRelease = newLabour + transport + newClientFee; // 6450
+      int totalToRelease = newLabour + transport + newClientFee;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
