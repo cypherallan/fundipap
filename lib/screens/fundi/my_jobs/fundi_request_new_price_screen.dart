@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../theme/app_theme.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../../services/fundi_badge_service.dart';
 
 class FundiRequestNewPriceScreen extends StatefulWidget {
   final String jobId;
@@ -41,6 +43,9 @@ class _FundiRequestNewPriceScreenState
   List<XFile> oldPartPhotos = [];
   final picker = ImagePicker();
   bool uploading = false;
+  BadgeResult? badge;
+  int fundiFeePct = 10;
+  int clientFeePct = 5;
 
   // Generic - get client original photos for re-capture challenge, works for all 140 jobs
   List<String> get _clientOriginalPhotos {
@@ -63,6 +68,17 @@ class _FundiRequestNewPriceScreenState
   void initState() {
     super.initState();
     _addPartNeeded();
+    _loadBadge();
+  }
+
+  Future<void> _loadBadge() async {
+    var uid = FirebaseAuth.instance.currentUser!.uid;
+    var r = await FundiBadgeService.getBadge(uid);
+    setState(() {
+      badge = r;
+      fundiFeePct = r.fundiCommissionPct;
+      clientFeePct = r.clientCommissionPct;
+    });
   }
 
   void _addPartNeeded() {
@@ -115,9 +131,9 @@ class _FundiRequestNewPriceScreenState
       _toInt(widget.job['transportFee'] ?? widget.job['escrowTransport'] ?? 0);
   int get extraLabor => _needsLabor ? _toInt(extraLaborCtrl.text) : 0;
   int get newLaborTotal => oldLabor + extraLabor;
-  int get oldClientFee => (oldLabor * 0.05).round();
-  int get newClientFee => (newLaborTotal * 0.05).round();
-  int get newFundiFee => (newLaborTotal * 0.05).round();
+  int get oldClientFee => (oldLabor * clientFeePct / 100).round();
+  int get newClientFee => (newLaborTotal * clientFeePct / 100).round();
+  int get newFundiFee => (newLaborTotal * fundiFeePct / 100).round();
   int get oldTotalClient => _toInt(
     widget.job['totalClientPays'] ??
         widget.job['totalCost'] ??
@@ -306,7 +322,7 @@ class _FundiRequestNewPriceScreenState
                     ),
                   ),
                   Text(
-                    'Transport does not change. App Maintenance Cost = 5% of labour.',
+                    'Transport does not change. App Maintenance Cost = $clientFeePct% client, $fundiFeePct% you (${badge?.badgeLevel.name ?? 'bronze'}).',
                     style: GoogleFonts.inter(
                       fontSize: 10,
                       color: Colors.black54,

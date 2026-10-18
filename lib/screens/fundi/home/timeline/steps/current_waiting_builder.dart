@@ -57,31 +57,27 @@ Widget? buildCurrentWaiting({
   int extraLabourToShow = finalExtra;
 
   int oldLaborRenego = toInt(renego?['oldLabor'] ?? renego?['oldLabour'] ?? 0);
-  int origBase = toInt(
-    job['originalLaborCost'] ?? job['initialLaborCost'] ?? 0,
-  );
-  int currentLaborCost = toInt(job['laborCost'] ?? 0);
+  int currentLaborCost = toInt(job['laborCost'] ?? job['agreedPrice'] ?? 0);
   int agreed = toInt(job['agreedPrice'] ?? 0);
 
-  int baseLabour = 0;
-  if (oldLaborRenego > 0) {
-    baseLabour = oldLaborRenego;
-  } else if (origBase > 0) {
-    baseLabour = origBase;
-  } else if (currentLaborCost > 0 && currentLaborCost > finalExtra) {
-    baseLabour = currentLaborCost;
-  } else if (agreed > finalExtra) {
-    baseLabour = agreed - finalExtra;
+  // labour = final 8000, no double add
+  int labour;
+  if (currentLaborCost > 0) {
+    labour = currentLaborCost;
+  } else if (oldLaborRenego > 0) {
+    labour = oldLaborRenego + finalExtra;
   } else {
-    baseLabour = currentLaborCost > 0 ? currentLaborCost : agreed;
+    labour = agreed > 0
+        ? agreed
+        : toInt(job['originalLaborCost'] ?? job['price'] ?? 0);
   }
-  int totalLabour = baseLabour + finalExtra;
-  int labour = totalLabour > 0
-      ? totalLabour
-      : toInt(job['laborCost'] ?? job['agreedPrice'] ?? job['price'] ?? 0);
+
   int transport = toInt(job['transportFee'] ?? 0);
-  int fundiFee = (labour * 0.05).round();
-  int fundiReceives = labour - fundiFee + transport;
+  int fundiCommissionPct = toInt(
+    job['fundiCommissionPct'] ?? job['fundiFeePercent'] ?? 10,
+  );
+  int fundiAppFee = (labour * fundiCommissionPct / 100).round();
+  int fundiReceives = labour + transport - fundiAppFee;
 
   if ((status == 'waiting_for_client_to_buy_parts' ||
           lowPhase == 'waiting_for_client_to_buy_parts' ||
@@ -385,9 +381,11 @@ Widget? buildCurrentWaiting({
                         int approvedExtra = toInt(
                           renego['counterExtraLabor'] ?? 0,
                         );
+                        int clientPct = toInt(job['clientCommissionPct'] ?? 5);
                         int approvedExtraToLock = toInt(
                           renego['counterExtraToLock'] ??
-                              (approvedExtra * 1.05).round(),
+                              (approvedExtra +
+                                  (approvedExtra * clientPct / 100).round()),
                         );
 
                         // DO NOT update laborCost/agreedPrice/totalClientPays on accept
@@ -408,7 +406,7 @@ Widget? buildCurrentWaiting({
                               'renegotiation.acceptedCounterExtraToLock':
                                   approvedExtraToLock,
                               'renegotiation.acceptedCounterExtraAppFee':
-                                  (approvedExtra * 0.05).round(),
+                                  (approvedExtra * clientPct / 100).round(),
                               'renegotiation.requested': false,
                               'renegotiation.oldLabor':
                                   currentAgreed, // 5000 original

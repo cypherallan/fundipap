@@ -131,8 +131,9 @@ FundiWaitingState? getFundiWaitingState({
               0,
         );
   int transport = _toInt(job['transportFee'] ?? 0);
-  int fundiFee = (labour * 0.05).round();
-  int fundiReceives = labour - fundiFee + transport;
+  int feePct = _toInt(job['fundiCommissionPct'] ?? 10);
+  int fundiFee = (labour * feePct / 100).round();
+  int fundiReceives = labour + transport - fundiFee;
   int fundiSees = labour + transport;
 
   Map<String, dynamic>? renegoEarly;
@@ -563,7 +564,11 @@ FundiWaitingState? getFundiWaitingState({
           job['escrowLockedAmount'] ??
           0,
     );
-    if (hasAgreed > 0 || hasEscrow > 0 || escrowDone || siteDone || travelling) {
+    if (hasAgreed > 0 ||
+        hasEscrow > 0 ||
+        escrowDone ||
+        siteDone ||
+        travelling) {
       return null;
     }
     int p = _toInt(bid['price'] ?? bid['amount'] ?? bid['bidPrice'] ?? labour);
