@@ -10,6 +10,7 @@ import '../../../../../widgets/animated_waiting_card.dart';
 import '../../models/customer_home_models.dart';
 import '../../../confirm/page/confirm_fundi_page.dart';
 import '../../timeline/customer_fundi_timeline_page.dart';
+import '../../../../../services/fundi_badge_service.dart';
 
 class PendingBidCard extends StatefulWidget {
   final BidWithFundi bid;
@@ -182,27 +183,26 @@ class _PendingBidCardState extends State<PendingBidCard> {
       return const SizedBox.shrink();
     }
     final counterBy =
-        (widget.bid.bid['counterBy'] ?? widget.bid.bid['lastCounterBy'] ?? '')
+        (widget.bid.bid['counterBy'] ??
+                widget.bid.bid['lastCounterBy'] ??
+                widget.bid.bid['lastCounterByRole'] ??
+                '')
             .toString();
-    final isCountered = status == 'countered';
+    final isCountered = status.contains('countered');
     final isMyCounter = isCountered && counterBy == 'client';
     final isFundiCounter = isCountered && counterBy == 'fundi';
+    final myCounterAmt = ((widget.bid.bid['clientCounterAmount'] ?? 0) as num)
+        .toInt();
+    final fundiCounterAmt =
+        ((widget.bid.bid['lastCounterAmount'] ??
+                    widget.bid.bid['fundiCounterAmount'] ??
+                    0)
+                as num)
+            .toInt();
     final isAcceptedCounter =
         status == 'counter_accepted_by_fundi' ||
         status == 'counter_accepted' ||
         status == 'counter_accepted_by_fundi_pending';
-    final myCounterAmt =
-        ((widget.bid.bid['clientCounterAmount'] ??
-                    widget.bid.bid['lastCounterAmount'] ??
-                    0)
-                as num)
-            .toInt();
-    final fundiCounterAmt =
-        ((widget.bid.bid['fundiCounterAmount'] ??
-                    widget.bid.bid['lastCounterAmount'] ??
-                    0)
-                as num)
-            .toInt();
     final acceptedAmt =
         ((widget.bid.bid['agreedPrice'] ??
                     widget.bid.bid['clientCounterAmount'] ??
@@ -385,11 +385,17 @@ class _PendingBidCardState extends State<PendingBidCard> {
                     ],
                   ),
                 ),
-                FundiBadgeChip(
-                  level: widget.bid.level,
+                                FundiBadgeChip(
+                  level: widget.bid.isTrialGold ? BadgeLevel.gold : widget.bid.level,
+                  fundiLevel: widget.bid.fundiLevel,
                   isVerified: widget.bid.verified,
+                  isTrialGold: widget.bid.isTrialGold,
+                  trialExpiresAt: widget.bid.trialExpiresAt,
                   referralCount: widget.bid.referrals,
                   jobsDone: widget.bid.jobsDone,
+                  commissionPct: widget.bid.fundiCommissionPct,
+                  compact: true,
+                  hideCommission: false,
                 ),
               ],
             ),

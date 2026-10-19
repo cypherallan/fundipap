@@ -80,7 +80,22 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
 
   int _getEffectiveLabor() {
     final b = widget.bidData;
+    final lastRole =
+        (b['lastCounterByRole'] ?? b['counterBy'] ?? b['lastCounterBy'] ?? '')
+            .toString()
+            .toLowerCase();
+    final lastAmt =
+        (b['lastCounterAmount'] ?? b['fundiCounterAmount'] ?? 0) as num;
+    final clientAmt = (b['clientCounterAmount'] ?? 0) as num;
+    if (lastAmt.toInt() > 0 && lastRole == 'fundi') {
+      return lastAmt.toInt();
+    }
+    if (lastAmt.toInt() > 0 &&
+        (b['status'] ?? '').toString().contains('countered')) {
+      if (lastAmt.toInt() != clientAmt.toInt()) return lastAmt.toInt();
+    }
     return ((b['agreedPrice'] ??
+                (lastAmt.toInt() > 0 ? lastAmt : null) ??
                 b['clientCounterAmount'] ??
                 b['lastCounterAmount'] ??
                 b['clientCounterPrice'] ??
@@ -233,6 +248,14 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
             'status': 'countered',
             'clientCounterSeenByFundi': false,
             'fundiHasUnread': true,
+            'counterHistory': FieldValue.arrayUnion([
+              {
+                'amount': amount,
+                'by': 'client',
+                'byId': uid,
+                'at': DateTime.now().toIso8601String(),
+              },
+            ]),
           });
       await FirebaseFirestore.instance
           .collection('jobs')

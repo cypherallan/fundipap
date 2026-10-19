@@ -60,6 +60,8 @@ class _CustomerHomeState extends State<CustomerHome> {
             'bidding',
             'assigned',
             'confirmed',
+            'countered',
+            'countered_by_fundi',
             'counter_accepted',
             'counter_accepted_by_fundi',
           ],
@@ -413,6 +415,14 @@ class _CustomerHomeState extends State<CustomerHome> {
       bool isAccepted = (latest['status'] ?? '').toString().contains(
         'counter_accepted_by_fundi',
       );
+      bool isFundiCounter =
+          (latest['status'] ?? '').toString().toLowerCase() == 'countered' &&
+          ((jobDataSafe['lastCounterByRole'] ??
+                      bidDataSafe['lastCounterByRole'] ??
+                      '')
+                  .toString()
+                  .toLowerCase() ==
+              'fundi');
 
       grouped[entry.key] = {
         'jobId': entry.key,
@@ -437,11 +447,27 @@ class _CustomerHomeState extends State<CustomerHome> {
             bidDataSafe['agreedPrice'] ??
             bidDataSafe['clientCounterAmount'] ??
             0,
-        'clientCounterAmount': bidDataSafe['clientCounterAmount'] ?? 0,
+        'clientCounterAmount':
+            jobDataSafe['clientCounterAmount'] ??
+            bidDataSafe['clientCounterAmount'] ??
+            0,
+        'lastCounterAmount':
+            jobDataSafe['lastCounterAmount'] ??
+            bidDataSafe['lastCounterAmount'] ??
+            bidDataSafe['lastCounterPrice'] ??
+            0,
+        'lastCounterByRole':
+            jobDataSafe['lastCounterByRole'] ??
+            bidDataSafe['lastCounterByRole'] ??
+            '',
         'latestAt': (latest['createdAt'] is Timestamp)
             ? (latest['createdAt'] as Timestamp).toDate()
             : DateTime.now(),
-        'type': isAccepted ? 'counter_accepted_by_fundi' : 'bid',
+        'type': isAccepted
+            ? 'counter_accepted_by_fundi'
+            : isFundiCounter
+            ? 'fundi_counter'
+            : 'bid',
         'isPendingBid': true,
         'isRead': isAccepted ? false : unread == 0,
       };

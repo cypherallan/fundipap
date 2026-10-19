@@ -118,7 +118,7 @@ class _FundiLevelProgressWidgetState extends State<FundiLevelProgressWidget> {
                   ),
                 ),
                 FundiBadgeChip(
-                  level: badge.badgeLevel,
+                  level: badge.isTrialGold ? BadgeLevel.gold : badge.badgeLevel,
                   fundiLevel: badge.fundiLevel,
                   isVerified: badge.isVerified,
                   isTrialGold: badge.isTrialGold,

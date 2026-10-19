@@ -587,7 +587,9 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                       children: [
                         if (badgeResult != null)
                           FundiBadgeChip(
-                            level: badgeResult.badgeLevel,
+                            level: badgeResult.isTrialGold
+                                ? BadgeLevel.gold
+                                : badgeResult.badgeLevel,
                             fundiLevel: badgeResult.fundiLevel,
                             isVerified: badgeResult.isVerified,
                             isTrialGold: badgeResult.isTrialGold,
@@ -614,7 +616,9 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                                     minHeight: 4,
                                     backgroundColor: Colors.white12,
                                     valueColor: AlwaysStoppedAnimation(
-                                      badgeResult.badgeLevel == BadgeLevel.gold
+                                      badgeResult.isTrialGold ||
+                                              badgeResult.badgeLevel ==
+                                                  BadgeLevel.gold
                                           ? const Color(0xFFFFD700)
                                           : Colors.white,
                                     ),

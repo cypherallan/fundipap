@@ -102,24 +102,31 @@ function calcBadge(user: any) {
     let fundiLevel: FundiLevel = completedJobs >= 100 ? "L4_ELITE" : completedJobs >= 50 ? "L3_PRO" : completedJobs >= 10 ? "L2_HUSTLER" : "L1_NEW";
 
     const createdAt = user.createdAt?.toDate?.() ?? (user.createdAt ? new Date(user.createdAt) : new Date());
-    const trialExpDate = new Date(createdAt.getTime() + 7 * 86400000);
-    let isTrialGold = false; let trialExpiresAt: any = null;
+    const trialExpDate = new Date(createdAt.getTime() + 14 * 86400000);
+    let isTrialGold = false;
+    let trialExpiresAt: any = null;
     const isNew = completedJobs < 10;
     const withinTrial = Date.now() < trialExpDate.getTime();
-
-    // NEW RULE: every new fundi gets trial gold for 7 days
     if (isNew && withinTrial) {
-        isTrialGold = true; trialExpiresAt = trialExpDate; badgeLevel = "gold";
+        isTrialGold = true;
+        trialExpiresAt = trialExpDate;
     }
 
-    let fundiCommissionPct = badgeLevel === "gold" ? 5 : badgeLevel === "silver" ? 7 : 10;
-    if (isTrialGold) fundiCommissionPct = 5; // trial gold pays 5% too
+    let fundiCommissionPct = isTrialGold ? 5 : badgeLevel === "gold" ? 5 : badgeLevel === "silver" ? 8 : badgeLevel === "bronze" ? 10 : 15;
+    let clientCommissionPct = 5;
 
     return {
-        score, badgeLevel, fundiLevel, fundiCommissionPct, clientCommissionPct: 5,
-        referralRate: 0, isTrialGold, trialExpiresAt,
+        score,
+        badgeLevel,
+        fundiLevel,
+        fundiCommissionPct,
+        clientCommissionPct,
+        referralRate: 0,
+        isTrialGold,
+        trialExpiresAt,
         isVerified: badgeLevel === "gold" && !isTrialGold && hasKyc,
-        pointsToNextBadge: 0, jobsToNextLevel: Math.max(0, 10 - completedJobs),
+        pointsToNextBadge: 0,
+        jobsToNextLevel: Math.max(0, 10 - completedJobs),
         breakdown: b
     };
 }
@@ -291,7 +298,7 @@ export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId
     }
 
     // CLIENT: Fundi countered
-    if (newS === "countered" && lastBy === fundiId && oldS !== newS) {
+    if (newS === "countered" && lastBy === fundiId && (oldS !== newS || before?.lastCounterAmount !== after?.lastCounterAmount)) {
         const tokens = await getFcmTokens(clientId);
         await sendPush(tokens, `Fundi countered KES ${after.lastCounterAmount || 0}`, `${jobTitle} • Tap to view`, { jobId, type: "fundi_counter" });
         await db().collection('notifications').add({

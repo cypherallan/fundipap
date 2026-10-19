@@ -63,26 +63,34 @@ class FundiBadgeService {
 
     if (completedJobs < 10) {
       DateTime? trialExpiresAt;
+      DateTime createdAt = DateTime.now();
+      if (fundi['createdAt'] is Timestamp) {
+        createdAt = (fundi['createdAt'] as Timestamp).toDate();
+      }
       if (fundi['trialExpiresAt'] is Timestamp) {
         trialExpiresAt = (fundi['trialExpiresAt'] as Timestamp).toDate();
       } else {
-        trialExpiresAt = DateTime.now().add(const Duration(days: 14));
+        trialExpiresAt = createdAt.add(const Duration(days: 14));
       }
 
-      return BadgeResult(
-        fundiLevel: FundiLevel.L1_NEW,
-        badgeLevel: BadgeLevel.gold,
-        score: 0,
-        isVerified: false,
-        isTrialGold: true,
-        trialExpiresAt: trialExpiresAt,
-        breakdown: {},
-        referralRate: 0,
-        fundiCommissionPct: 5,
-        clientCommissionPct: 5,
-        jobsToNextLevel: 10 - completedJobs,
-        pointsToNextBadge: 0,
-      );
+      bool withinTrial = DateTime.now().isBefore(trialExpiresAt);
+
+      if (withinTrial) {
+        return BadgeResult(
+          fundiLevel: FundiLevel.L1_NEW,
+          badgeLevel: BadgeLevel.none,
+          score: 0,
+          isVerified: false,
+          isTrialGold: true,
+          trialExpiresAt: trialExpiresAt,
+          breakdown: {},
+          referralRate: 0,
+          fundiCommissionPct: 5,
+          clientCommissionPct: 5,
+          jobsToNextLevel: 10 - completedJobs,
+          pointsToNextBadge: 0,
+        );
+      }
     }
 
     int score = 0;
@@ -305,14 +313,14 @@ class FundiBadgeService {
     return double.tryParse(v.toString()) ?? 999;
   }
 
-    static Future<BadgeResult> getBadge(String fundiId) async {
+  static Future<BadgeResult> getBadge(String fundiId) async {
     try {
       var result = await recalcAndUpdate(fundiId);
       return result;
     } catch (_) {
       return BadgeResult(
         fundiLevel: FundiLevel.L1_NEW,
-        badgeLevel: BadgeLevel.gold,
+        badgeLevel: BadgeLevel.none,
         score: 0,
         isVerified: false,
         isTrialGold: true,
@@ -365,7 +373,9 @@ class FundiBadgeService {
       'badgeScore': result.score,
       'isVerifiedFundi': result.isVerified,
       'isTrialGold': result.isTrialGold,
+      'trialExpiresAt': result.trialExpiresAt,
       'fundiCommissionPct': result.fundiCommissionPct,
+      'clientCommissionPct': result.clientCommissionPct, // ADD THIS
     }, SetOptions(merge: true));
     return result;
   }

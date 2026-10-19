@@ -30,16 +30,29 @@ class ConfirmFundiBidCard extends StatelessWidget {
         status == 'countered' &&
         (bidData['counterBy'] ?? bidData['lastCounterBy'] ?? '') == 'client';
 
-    int effectiveLabor = _toInt(
-      bidData['agreedPrice'] ??
-          bidData['effectiveLabor'] ??
-          bidData['clientCounterAmount'] ??
-          bidData['lastCounterAmount'] ??
-          bidData['amount'] ??
-          bidData['bidAmount'] ??
-          bidData['price'] ??
-          0,
-    );
+    final lastRole =
+        (bidData['lastCounterByRole'] ?? bidData['counterBy'] ?? '').toString();
+    int effectiveLabor;
+    if (lastRole == 'fundi') {
+      effectiveLabor = _toInt(
+        bidData['lastCounterAmount'] ??
+            bidData['fundiCounterAmount'] ??
+            bidData['agreedPrice'] ??
+            bidData['effectiveLabor'] ??
+            0,
+      );
+    } else {
+      effectiveLabor = _toInt(
+        bidData['agreedPrice'] ??
+            bidData['effectiveLabor'] ??
+            bidData['clientCounterAmount'] ??
+            bidData['lastCounterAmount'] ??
+            bidData['amount'] ??
+            bidData['bidAmount'] ??
+            bidData['price'] ??
+            0,
+      );
+    }
     int originalFundiAsk = _toInt(
       bidData['price'] ?? bidData['bidAmount'] ?? bidData['amount'] ?? 0,
     );

@@ -13,6 +13,10 @@ class BidWithFundi {
   final double rating;
   final int penalty;
   final double distanceKm;
+  final bool isTrialGold;
+  final FundiLevel fundiLevel;
+  final DateTime? trialExpiresAt;
+  final int fundiCommissionPct;
 
   BidWithFundi({
     required this.bidDoc,
@@ -24,5 +28,9 @@ class BidWithFundi {
     required this.rating,
     required this.penalty,
     required this.distanceKm,
+    required this.isTrialGold,
+    required this.fundiLevel,
+    this.trialExpiresAt,
+    required this.fundiCommissionPct,
   });
 }

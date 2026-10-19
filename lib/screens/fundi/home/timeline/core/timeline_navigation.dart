@@ -67,6 +67,7 @@ Future<void> counterAsFundi(
       .collection('users')
       .doc(uid)
       .get();
+
   await bidRef.collection('counterOffers').add({
     'price': newPrice,
     'by': uid,
@@ -74,17 +75,39 @@ Future<void> counterAsFundi(
     'message': msgCtrl.text.trim(),
     'at': FieldValue.serverTimestamp(),
   });
+
+  // FIXED: keep status = countered, add lastCounterByRole
   await bidRef.update({
     'status': 'countered',
     'lastCounterPrice': newPrice,
     'lastCounterAmount': newPrice,
     'lastCounterBy': uid,
-    'counterBy': uid,
+    'lastCounterByRole': 'fundi', // <-- FIX
+    'counterBy': 'fundi',
+    'counterById': uid,
     'lastCounterAt': FieldValue.serverTimestamp(),
     'updatedAt': FieldValue.serverTimestamp(),
+    'isReadByCustomer': false,
+    'customerHasUnread': true,
+    'clientHasUnread': true,
+    'fundiHasUnread': false,
+    'isReadByFundi': true,
+    'counterHistory': FieldValue.arrayUnion([
+      {
+        'amount': newPrice.toInt(),
+        'by': 'fundi',
+        'byId': uid,
+        'at': DateTime.now().toIso8601String(),
+      },
+    ]),
   });
+
   await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
-    'status': 'negotiating',
+    'status': 'countered', // <-- FIX was 'negotiating'
+    'lastCounterAmount': newPrice,
+    'lastCounterBy': uid,
+    'lastCounterByRole': 'fundi', // <-- FIX
+    'counterBy': 'fundi',
     'priceHistory': FieldValue.arrayUnion([
       {
         'price': newPrice,
@@ -95,5 +118,34 @@ Future<void> counterAsFundi(
     ]),
     'updatedAt': FieldValue.serverTimestamp(),
     'customerHasUnread': true,
+    'clientHasUnread': true,
   });
+
+  // notify client
+  var jobSnap = await FirebaseFirestore.instance
+      .collection('jobs')
+      .doc(jobId)
+      .get();
+  String clientId =
+      (jobSnap.data()?['customerId'] ?? jobSnap.data()?['clientId'] ?? '')
+          .toString();
+  if (clientId.isNotEmpty) {
+    int clientOffer = currentPrice.toInt(); // your 4000
+    await FirebaseFirestore.instance.collection('notifications').add({
+      'toUserId': clientId,
+      'type': 'fundi_counter',
+      'title': 'Fundi countered your labour offer',
+      'body':
+          'Fundi countered your latest labour price KES $clientOffer with KES ${newPrice.toInt()}',
+      'message':
+          'Fundi countered your latest labour price KES $clientOffer with KES ${newPrice.toInt()}',
+      'jobId': jobId,
+      'bidId': bidRef.id,
+      'lastCounterAmount': newPrice.toInt(),
+      'clientCounterAmount': clientOffer,
+      'lastCounterByRole': 'fundi',
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
 }

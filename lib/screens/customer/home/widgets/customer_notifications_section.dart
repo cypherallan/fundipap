@@ -387,6 +387,120 @@ class CustomerNotificationsSection extends StatelessWidget {
               );
             }
 
+            // FUNDI COUNTERED CLIENT OFFER - 4000 -> 5500
+            final String lastRole =
+                (job['lastCounterByRole'] ?? g['lastCounterByRole'] ?? '')
+                    .toString();
+            final int lastAmt = _toInt(
+              job['lastCounterAmount'] ?? g['lastCounterAmount'] ?? 0,
+            );
+            final int prevAmt = _toInt(
+              job['clientCounterAmount'] ??
+                  g['clientCounterAmount'] ??
+                  (job['priceHistory'] is List &&
+                          (job['priceHistory'] as List).length >= 2
+                      ? (job['priceHistory']
+                            as List)[(job['priceHistory'] as List).length -
+                            2]['price']
+                      : 0),
+            );
+
+            final bool isFundiCounter =
+                lastRole == 'fundi' &&
+                (bidStatus.toLowerCase().contains('counter') ||
+                    jobStatus.toLowerCase().contains('counter'));
+
+            if (isFundiCounter) {
+              return Container(
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade400, width: 1.5),
+                ),
+                child: ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade700,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.compare_arrows,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    prevAmt > 0
+                        ? 'Fundi countered your labour price KES $prevAmt with KES $lastAmt'
+                        : 'Fundi countered your latest labour price - KES $lastAmt',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      color: Colors.orange.shade900,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${g['fundiName']} • Tap to Accept or Counter',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade700,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'KES $lastAmt',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  onTap: () async {
+                    await onMarkRead(fundiKey);
+                    if (!context.mounted) return;
+                    final parentContext = context;
+                    showModalBottomSheet(
+                      context: parentContext,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.white,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(16),
+                        ),
+                      ),
+                      builder: (sheetContext) => _BidsSheetWithFilter(
+                        jobId: g['jobId'].toString(),
+                        job: job,
+                        category: g['category'].toString(),
+                        bidCount: 1,
+                        parentContext: parentContext,
+                        sheetContext: sheetContext,
+                        userPos: userPos,
+                        initialTitle:
+                            'Fundi countered KES $prevAmt → KES $lastAmt',
+                        initialBadge: 'KES $lastAmt',
+                      ),
+                    );
+                  },
+                ),
+              );
+            }
+
             if (isBid) {
               final bidCount = (g['bidCount'] ?? 1) as int;
               return Container(

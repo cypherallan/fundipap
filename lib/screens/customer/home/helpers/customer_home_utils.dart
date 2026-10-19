@@ -168,6 +168,19 @@ Future<List<BidWithFundi>> enrichBids(
         rating: rating,
         penalty: penalty,
         distanceKm: dist,
+        isTrialGold: (src?['isTrialGold'] ?? f?['isTrialGold']) == true,
+        fundiLevel: FundiLevel.values.firstWhere(
+          (e) => e.name == (src?['fundiLevel'] ?? f?['fundiLevel']),
+          orElse: () => FundiLevel.L1_NEW,
+        ),
+        trialExpiresAt:
+            (src?['trialExpiresAt'] ?? f?['trialExpiresAt']) is Timestamp
+            ? ((src?['trialExpiresAt'] ?? f?['trialExpiresAt']) as Timestamp)
+                  .toDate()
+            : null,
+        fundiCommissionPct: toInt(
+          src?['fundiCommissionPct'] ?? f?['fundiCommissionPct'] ?? 15,
+        ),
       );
     }),
   );
