@@ -16,10 +16,15 @@ bool handleCounterStep(List<Widget> timeline, FundiTimelineContext c) {
     try {
       var ev = (c.reneg?['evidencePhotoUrls'] ?? []) as List;
       var ver = (c.reneg?['verificationPhotoUrls'] ?? []) as List;
-      hasEvidence = ev.isNotEmpty || ver.isNotEmpty || (c.reneg?['hasEvidence'] ?? false) == true;
+      hasEvidence =
+          ev.isNotEmpty ||
+          ver.isNotEmpty ||
+          (c.reneg?['hasEvidence'] ?? false) == true;
     } catch (_) {}
 
-    int diagnosticFee = hasEvidence ? (oldLab * 0.15).round().clamp(800, 1500) : 0;
+    int diagnosticFee = hasEvidence
+        ? (oldLab * 0.15).round().clamp(800, 1500)
+        : 0;
     int totalCompensation = transport + diagnosticFee;
 
     timeline.add(
@@ -39,8 +44,17 @@ bool handleCounterStep(List<Widget> timeline, FundiTimelineContext c) {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 52)),
-                onPressed: () => FundiTimelineActions.continueOldPrice(c.jobId, c.reneg, oldLab, transport),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 52),
+                ),
+                onPressed: () => FundiTimelineActions.continueOldPrice(
+                  c.jobId,
+                  c.reneg,
+                  oldLab,
+                  transport,
+                ),
                 child: Text('CONTINUE WITH OLD KES $oldLab'),
               ),
             ),
@@ -48,9 +62,23 @@ bool handleCounterStep(List<Widget> timeline, FundiTimelineContext c) {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 52)),
-                onPressed: () => FundiTimelineActions.withdrawWithCompensation(c.jobId, c.reneg, oldLab, transport, hasEvidence),
-                child: Text(hasEvidence ? 'WITHDRAW - GET KES $totalCompensation (transport + diagnostic)' : 'WITHDRAW - GET KES $transport (transport only)'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 52),
+                ),
+                onPressed: () => FundiTimelineActions.withdrawWithCompensation(
+                  c.jobId,
+                  c.reneg,
+                  oldLab,
+                  transport,
+                  hasEvidence,
+                ),
+                child: Text(
+                  hasEvidence
+                      ? 'WITHDRAW - GET KES $totalCompensation (transport + diagnostic)'
+                      : 'WITHDRAW - GET KES $transport (transport only)',
+                ),
               ),
             ),
           ],
@@ -66,7 +94,9 @@ bool handleCounterStep(List<Widget> timeline, FundiTimelineContext c) {
     int counterRound = toInt(c.reneg?['counterRound'] ?? 1);
     bool isLow = false;
     try {
-      isLow = (c.reneg?['isLowCounter'] ?? false) == true || counterExtraClient == 0;
+      isLow =
+          (c.reneg?['isLowCounter'] ?? false) == true ||
+          counterExtraClient == 0;
     } catch (_) {
       isLow = counterExtraClient == 0;
     }
@@ -90,8 +120,17 @@ bool handleCounterStep(List<Widget> timeline, FundiTimelineContext c) {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 48)),
-                onPressed: () => FundiTimelineActions.acceptCounter(c.jobId, c.reneg, c.labour, c.transport),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 48),
+                ),
+                onPressed: () => FundiTimelineActions.acceptCounter(
+                  c.jobId,
+                  c.reneg,
+                  c.labour,
+                  c.transport,
+                ),
                 child: Text('ACCEPT KES $counterExtraClient'),
               ),
             ),
@@ -99,7 +138,13 @@ bool handleCounterStep(List<Widget> timeline, FundiTimelineContext c) {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
-                onPressed: () => Navigator.push(c.context, MaterialPageRoute(builder: (_) => FundiRequestNewPriceScreen(jobId: c.jobId, job: c.job))),
+                onPressed: () => Navigator.push(
+                  c.context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        FundiRequestNewPriceScreen(jobId: c.jobId, job: c.job),
+                  ),
+                ),
                 child: const Text('COUNTER AGAIN WITH BETTER EVIDENCE'),
               ),
             ),
