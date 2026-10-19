@@ -385,8 +385,10 @@ class _PendingBidCardState extends State<PendingBidCard> {
                     ],
                   ),
                 ),
-                                FundiBadgeChip(
-                  level: widget.bid.isTrialGold ? BadgeLevel.gold : widget.bid.level,
+                FundiBadgeChip(
+                  level: widget.bid.isTrialGold
+                      ? BadgeLevel.gold
+                      : widget.bid.level,
                   fundiLevel: widget.bid.fundiLevel,
                   isVerified: widget.bid.verified,
                   isTrialGold: widget.bid.isTrialGold,

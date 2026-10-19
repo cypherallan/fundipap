@@ -4,7 +4,6 @@ import '../timeline_context.dart';
 import '../steps/completed_step.dart';
 import '../steps/cancelled_step.dart';
 import '../steps/counter_accepted_step.dart';
-import '../steps/fundi_countered_step.dart'; // ADD THIS
 import '../steps/escrow_step.dart';
 import '../steps/travelling_step.dart';
 import '../steps/renegotiation_step.dart';
@@ -38,8 +37,6 @@ class TimelineStepsBuilder {
     if (CompletedSteps.handle(timeline, c)) return timeline;
     if (CancelledSteps.handle(timeline, c)) return timeline;
     if (CounterAcceptedSteps.handle(timeline, c)) return timeline;
-    if (FundiCounteredSteps.handle(timeline, c))
-      return timeline; // ADD THIS - before Escrow
     if (EscrowSteps.handle(timeline, c)) return timeline;
     if (TravellingSteps.handle(timeline, c)) return timeline;
     if (RenegotiationSteps.handle(timeline, c)) return timeline;

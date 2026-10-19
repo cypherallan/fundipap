@@ -387,12 +387,20 @@ class CustomerNotificationsSection extends StatelessWidget {
               );
             }
 
-            // FUNDI COUNTERED CLIENT OFFER - 4000 -> 5500
+            // COUNTERS - both directions
             final String lastRole =
-                (job['lastCounterByRole'] ?? g['lastCounterByRole'] ?? '')
+                (job['lastCounterByRole'] ??
+                        g['lastCounterByRole'] ??
+                        job['counterBy'] ??
+                        g['counterBy'] ??
+                        '')
                     .toString();
             final int lastAmt = _toInt(
-              job['lastCounterAmount'] ?? g['lastCounterAmount'] ?? 0,
+              job['lastCounterAmount'] ??
+                  g['lastCounterAmount'] ??
+                  job['clientCounterAmount'] ??
+                  g['clientCounterAmount'] ??
+                  0,
             );
             final int prevAmt = _toInt(
               job['clientCounterAmount'] ??
@@ -405,10 +413,92 @@ class CustomerNotificationsSection extends StatelessWidget {
                       : 0),
             );
 
+            final bool isClientCounter =
+                lastRole == 'client' &&
+                (bidStatus.toLowerCase().contains('counter') ||
+                    jobStatus.toLowerCase().contains('counter'));
+
             final bool isFundiCounter =
                 lastRole == 'fundi' &&
                 (bidStatus.toLowerCase().contains('counter') ||
                     jobStatus.toLowerCase().contains('counter'));
+
+            if (isClientCounter) {
+              return Container(
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue.shade400, width: 1.5),
+                ),
+                child: ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade700,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.outgoing_mail,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    'You countered labour price KES $lastAmt - waiting for fundi',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      color: Colors.blue.shade900,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${g['fundiName']} • Tap to view',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade700,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'KES $lastAmt',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  onTap: () async {
+                    await onMarkRead(fundiKey);
+                    if (!context.mounted) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CustomerFundiTimelinePage(
+                          jobId: g['jobId'].toString(),
+                          fundiName: g['fundiName'].toString(),
+                          trade: g['category'].toString(),
+                          jobData: job,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            }
 
             if (isFundiCounter) {
               return Container(
