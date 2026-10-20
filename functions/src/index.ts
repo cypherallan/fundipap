@@ -315,9 +315,16 @@ export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId
     // FUNDI FLOW - LOCKED
     if (newS === "accepted" && oldS !== "accepted") {
         const tokens = await getFcmTokens(fundiId);
-        const agreed = after.agreedPrice || after.amount || after.bidAmount || 0;
+        const agreed = after.agreedPrice || after.lastCounterAmount || after.clientCounterAmount || after.amount || after.bidAmount || 0;
         const escrowLock = Number(agreed) + Number(transport);
         await sendPush(tokens, "Bid accepted", `Bid accepted. Waiting for client to lock escrow KES ${escrowLock} • Tap to view`, { jobId, type: "accepted", escrow: escrowLock.toString() });
+    }
+
+    if ((newS.includes("counter_accepted_by_client") || newS === "counter_accepted") && !oldS.includes("counter_accepted")) {
+        const tokens = await getFcmTokens(fundiId);
+        const agreed = after.agreedPrice || after.lastCounterAmount || after.fundiCounterAmount || after.amount || 0;
+        const escrowLock = Number(agreed) + Number(transport);
+        await sendPush(tokens, "Counter accepted", `Client accepted KES ${agreed} • Waiting to lock escrow KES ${escrowLock}`, { jobId, type: "counter_accepted_by_client", escrow: escrowLock.toString() });
     }
 
     // FUNDI FLOW - LOCKED
