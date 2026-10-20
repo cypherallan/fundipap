@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../screens/admin_dispute_detail_screen.dart';
 
 class DisputesTab extends StatelessWidget {
   const DisputesTab({super.key});
@@ -32,9 +33,15 @@ class DisputesTab extends StatelessWidget {
     return '${diff.inDays}d ago';
   }
 
+  Color _statusColor(String status) {
+    if (status == 'open') return Colors.orange;
+    if (status == 'accepted_redo') return Colors.green;
+    if ((status).contains('evidence')) return Colors.blue;
+    return Colors.grey;
+  }
+
   @override
   Widget build(BuildContext context) {
-    // 1. Get fundi badges map first
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('fundis').snapshots(),
       builder: (context, fundiSnap) {
@@ -47,11 +54,18 @@ class DisputesTab extends StatelessWidget {
           }
         }
 
-        // 2. Then get open disputes - NO orderBy, we sort in memory
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('disputes')
-              .where('status', isEqualTo: 'open')
+              .where(
+                'status',
+                whereIn: [
+                  'open',
+                  'accepted_redo',
+                  'evidence_complete',
+                  'awaiting_both',
+                ],
+              )
               .snapshots(),
           builder: (_, snap) {
             if (!snap.hasData)
@@ -61,17 +75,12 @@ class DisputesTab extends StatelessWidget {
 
             var raw = snap.data!.docs.map((doc) {
               var d = doc.data() as Map<String, dynamic>;
-              // badge can be stored at creation, or we lookup fundi who reported
               String badge =
                   (d['reporterBadge'] ??
-                          d['fundiBadge'] ??
-                          d['clientBadge'] ??
                           badgeMap[d['reportedBy']] ??
                           badgeMap[d['fundiId']] ??
-                          badgeMap[d['clientId']] ??
                           'none')
                       .toString();
-
               return {
                 'doc': doc,
                 'data': d,
@@ -81,7 +90,6 @@ class DisputesTab extends StatelessWidget {
               };
             }).toList();
 
-            // SORT: gold -> silver -> bronze -> none -> gold_trial, then OLDEST FIRST
             raw.sort((a, b) {
               int r = (a['rank'] as int).compareTo(b['rank'] as int);
               if (r != 0) return r;
@@ -91,7 +99,7 @@ class DisputesTab extends StatelessWidget {
               Timestamp tb =
                   b['createdAt'] as Timestamp? ??
                   Timestamp.fromDate(DateTime.now());
-              return ta.compareTo(tb); // oldest first
+              return ta.compareTo(tb);
             });
 
             return ListView(
@@ -102,13 +110,31 @@ class DisputesTab extends StatelessWidget {
                 String badge = item['badge'] as String;
                 int rank = item['rank'] as int;
                 Timestamp? ts = item['createdAt'] as Timestamp?;
-
-                String role = d['reporterRole'] ?? 'unknown';
+                String type = d['type'] ?? '';
+                String status = d['status'] ?? 'open';
+                bool hasEvidence =
+                    (d['reporterEvidenceSubmitted'] == true) ||
+                    (d['reportedEvidenceSubmitted'] == true);
+                bool bothEvidence =
+                    (d['reporterEvidenceSubmitted'] == true) &&
+                    (d['reportedEvidenceSubmitted'] == true);
+                bool acceptedRedo = d['fundiAcceptedRedo'] == true;
 
                 return Card(
                   elevation: rank == 0 ? 3 : 1,
-                  color: rank == 0 ? Colors.amber.shade50 : Colors.white,
+                  color: rank == 0
+                      ? Colors.amber.shade50
+                      : acceptedRedo
+                      ? Colors.green.shade50
+                      : Colors.white,
                   child: ListTile(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            AdminDisputeDetailScreen(disputeId: doc.id),
+                      ),
+                    ),
                     leading: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -140,55 +166,101 @@ class DisputesTab extends StatelessWidget {
                       ],
                     ),
                     title: Text(
-                      '${d['jobTitle'] ?? ''} • ${d['type'] ?? ''} • by ${role.toUpperCase()} • ${badge.toUpperCase()}',
+                      '${d['jobTitle'] ?? ''} • ${type.toUpperCase()} ${acceptedRedo ? "[ACCEPTED REDO]" : ""}',
                       style: GoogleFonts.montserrat(
                         fontWeight: FontWeight.w700,
                         fontSize: 11,
                       ),
                     ),
-                    subtitle: Text(
-                      'Reason: ${d['reason'] ?? ''}\nJob ${d['jobId']?.toString().substring(0, 6) ?? ''} • Client: ${d['clientName'] ?? ''} • Fundi: ${d['fundiName'] ?? ''} • KES ${d['escrowAmount'] ?? ''}',
-                      style: GoogleFonts.inter(fontSize: 10),
-                    ),
-                    isThreeLine: true,
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        IconButton(
-                          icon: Icon(Icons.check, color: Colors.green),
-                          onPressed: () async {
-                            await doc.reference.update({
-                              'status': 'resolved_client_win',
-                              'resolvedAt': FieldValue.serverTimestamp(),
-                            });
-                            if (d['jobId'] != null) {
-                              await FirebaseFirestore.instance
-                                  .collection('jobs')
-                                  .doc(d['jobId'])
-                                  .update({
-                                    'status': 'cancelled',
-                                    'escrowStatus': 'refunded',
-                                  });
-                            }
-                          },
+                        Text(
+                          'Reason: ${d['reason'] ?? ''}',
+                          style: GoogleFonts.inter(fontSize: 10),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        IconButton(
-                          icon: Icon(Icons.close, color: Colors.red),
-                          onPressed: () async {
-                            await doc.reference.update({
-                              'status': 'resolved_fundi_win',
-                              'resolvedAt': FieldValue.serverTimestamp(),
-                            });
-                            if (d['jobId'] != null) {
-                              await FirebaseFirestore.instance
-                                  .collection('jobs')
-                                  .doc(d['jobId'])
-                                  .update({'status': 'completed'});
-                            }
-                          },
+                        SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _statusColor(status).withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                status.toUpperCase(),
+                                style: GoogleFonts.inter(
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w700,
+                                  color: _statusColor(status),
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 6),
+                            if (bothEvidence)
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'BOTH EVIDENCE ✓',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            if (!bothEvidence && hasEvidence)
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '1 SIDE EVIDENCE',
+                                  style: GoogleFonts.inter(fontSize: 8),
+                                ),
+                              ),
+                            if (!hasEvidence)
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'NO EVIDENCE YET',
+                                  style: GoogleFonts.inter(fontSize: 8),
+                                ),
+                              ),
+                          ],
+                        ),
+                        Text(
+                          'Job ${d['jobId']?.toString().substring(0, 6) ?? ''} • Client: ${d['clientName'] ?? ''} • Fundi: ${d['fundiName'] ?? ''} • KES ${d['escrowAmount'] ?? ''}',
+                          style: GoogleFonts.inter(fontSize: 9),
                         ),
                       ],
                     ),
+                    isThreeLine: true,
+                    trailing: Icon(Icons.arrow_forward_ios, size: 14),
                   ),
                 );
               }).toList(),

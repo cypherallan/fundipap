@@ -1,12 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../theme/app_theme.dart';
-import '../auth/role_select_screen.dart';
-import 'tabs/categories_tab.dart';
-import 'tabs/fraud_review_tab.dart';
-import 'tabs/disputes_tab.dart';
-import 'tabs/revenue_analytics_tab.dart';
+import '../../../theme/app_theme.dart';
+import '../../auth/role_select_screen.dart';
+import '../tabs/categories_tab.dart';
+import '../tabs/fraud_review_tab.dart';
+import '../tabs/disputes_tab.dart';
+import '../tabs/revenue_analytics_tab.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
