@@ -51,7 +51,15 @@ class FundiBadgeService {
             as int;
     int cancels =
         (stats['cancellationCount'] ?? fundi['cancellationCount'] ?? 0) as int;
-    int fraud = (stats['fraudReports'] ?? fundi['fraudReports'] ?? 0) as int;
+    int fraud =
+        (stats['fraudReports'] ??
+                stats['fraudCount'] ??
+                stats['fraudCases'] ??
+                fundi['fraudReports'] ??
+                fundi['fraudCount'] ??
+                fundi['fraudCases'] ??
+                0)
+            as int;
     int disputes = (stats['disputeCount'] ?? fundi['disputeCount'] ?? 0) as int;
     bool profileComplete = _isProfileComplete(fundi);
     bool kyc = fundi['kycVerified'] == true || fundi['idVerified'] == true;

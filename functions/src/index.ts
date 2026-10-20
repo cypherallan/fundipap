@@ -70,7 +70,7 @@ function calcBadge(user: any) {
     const rating = Number(user.rating ?? user.avgRating ?? 0);
     const reviewCount = Number(user.reviewCount ?? user.ratingsCount ?? 0);
     const cancelledJobs = Number(user.cancelledJobs ?? 0);
-    const fraudReports = Number(user.fraudReports ?? 0);
+    const fraudReports = Number(user.fraudReports ?? user.fraudCount ?? user.fraudCases ?? 0);
     const hasKyc = !!(user.kycVerified || user.isKycVerified);
     const hasId = !!(user.idUploaded || user.nationalIdUrl);
     const hasGoodConduct = !!(user.goodConductUploaded || user.goodConductUrl);
@@ -150,6 +150,24 @@ export const recalcBadgesNightly = onSchedule({ schedule: "0 23 * * *", timeZone
 export const recalcBadgeOnUserWrite = onDocumentWritten({ document: "users/{uid}", region: "europe-west1" }, async (event) => {
     const after = event.data?.after?.data() as any; if (!after || after.role !== "fundi") return;
     await updateFundiBadge(event.params.uid, after);
+});
+
+export const onFraudReportApproved = onDocumentWritten({ document: "fraudReports/{reportId}", region: "europe-west1" }, async (event) => {
+    const after = event.data?.after?.data() as any;
+    const before = event.data?.before?.data() as any;
+    if (!after || after.status !== 'approved' || before?.status === 'approved') return;
+    const fundiId = after.fundiId;
+    await db().collection('fundis').doc(fundiId).set({
+        fraudReports: FieldValue.increment(1),
+        fraudCount: FieldValue.increment(1),
+        fraudCases: FieldValue.increment(1),
+        badgeLevel: 'none', // forces 15%
+        fraudLastApprovedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    const userSnap = await db().collection('users').doc(fundiId).get();
+    if (userSnap.exists) await updateFundiBadge(fundiId, userSnap.data());
+    const tokens = await getFcmTokens(fundiId);
+    await sendPush(tokens, "Account flagged - commission 15%", "Fraud report approved by admin. Badge reset to None.", { type: "fraud_approved" });
 });
 
 export const recalcBadgeOnJobComplete = onDocumentWritten({ document: "jobs/{jobId}", region: "europe-west1" }, async (event) => {

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../confirm/approval/client_price_approval_screen.dart';
 import '../../customer/services/cancel/client_cancel_service.dart';
+import '../../../services/dispute_service.dart';
 
 class ClientConfirmedTab extends StatelessWidget {
   final List<QueryDocumentSnapshot> docs;
@@ -400,6 +401,57 @@ class ClientConfirmedTab extends StatelessWidget {
                           color: Colors.green.shade800,
                           fontWeight: FontWeight.w600,
                         ),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                if (job['status'] != 'disputed')
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      icon: Icon(
+                        Icons.report_problem_outlined,
+                        size: 16,
+                        color: Colors.red.shade700,
+                      ),
+                      label: Text(
+                        'Raise Dispute for this job',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.red.shade700,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        side: BorderSide(color: Colors.red.shade300),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                      ),
+                      onPressed: () async {
+                        await DisputeService.showClientDisputeDialog(
+                          context,
+                          jobId: jobId,
+                          jobData: job,
+                        );
+                      },
+                    ),
+                  )
+                else
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Text(
+                      'Disputed • Awaiting admin',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        color: Colors.red.shade700,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),

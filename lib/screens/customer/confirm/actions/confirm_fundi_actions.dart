@@ -298,58 +298,91 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
 
   Future<void> reportFraud() async {
     final reasonCtrl = TextEditingController();
+    String selectedType = 'escrow_bypass';
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(
-          'Report ${bidData['fundiName']}',
-          style: GoogleFonts.montserrat(
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: Text('Report ${bidData['fundiName']}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: selectedType,
+                items: const [
+                  DropdownMenuItem(
+                    value: 'escrow_bypass',
+                    child: Text('Asked for money outside escrow'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'fake_docs',
+                    child: Text('Fake certificates'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'no_show',
+                    child: Text('Did not show up'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'threat',
+                    child: Text('Threat / abuse'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'outside_payment',
+                    child: Text('Demanded cash'),
+                  ),
+                ],
+                onChanged: (v) => setSt(() => selectedType = v!),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonCtrl,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Explain',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
           ),
-        ),
-        content: TextField(
-          controller: reasonCtrl,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            labelText: 'Reason',
-            hintText: 'e.g. Asked for money upfront and disappeared',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: FundipapColors.redAlert,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
             ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Report', style: TextStyle(color: Colors.white)),
-          ),
-        ],
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: FundipapColors.redAlert,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text(
+                'Report',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
       ),
     );
     if (ok != true) return;
-    var fundiId = bidData['fundiId'];
-    var uid = FirebaseAuth.instance.currentUser!.uid;
-    await FirebaseFirestore.instance.collection('fraud_reports').add({
+    final fundiId = bidData['fundiId'];
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    await FirebaseFirestore.instance.collection('fraudReports').add({
       'fundiId': fundiId,
       'clientId': uid,
       'jobId': jobId,
+      'bidId': bidId,
+      'type': selectedType,
       'reason': reasonCtrl.text.trim(),
+      'status': 'pending', // <-- admin must approve
       'createdAt': FieldValue.serverTimestamp(),
-    });
-    await FirebaseFirestore.instance.collection('fundis').doc(fundiId).update({
-      'fraudCount': FieldValue.increment(1),
-      'fraudCases': FieldValue.increment(1),
+      'reporterRole': 'client',
+      'fundiName': bidData['fundiName'],
+      'jobTitle': jobData['title'] ?? jobData['service'],
     });
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Report submitted. Admin will review.'),
+        content: Text('Report submitted. Admin review in 2 hours for Gold.'),
         backgroundColor: FundipapColors.redAlert,
       ),
     );
