@@ -85,4 +85,27 @@ class TaxonomyService {
     var pricing = await db.collection('pricingRules').get();
     for (var p in pricing.docs) await p.reference.delete();
   }
+
+  static Future<String> seedCategoriesOnly() async {
+    var batch = FirebaseFirestore.instance.batch();
+    int count = 0;
+    for (var cat in FundiTaxonomy.categories) {
+      var ref = FirebaseFirestore.instance
+          .collection('categories')
+          .doc(cat['id']);
+      batch.set(ref, {
+        'id': cat['id'],
+        'name': cat['name'],
+        'slug': cat['slug'],
+        'icon': cat['icon'],
+        'subcategories': cat['subcategories'], // just names/ids, no prices
+        'isActive': true,
+        'pricingMode': 'market', // important - market not system
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      count++;
+    }
+    await batch.commit();
+    return '✅ Seeded $count categories in market mode - No prices enforced';
+  }
 }

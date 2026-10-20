@@ -1,12 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../data/job_taxonomy.dart';
 import '../widgets/taxonomy_seed_card.dart';
 import '../widgets/fundi_monitor_table.dart';
 
 class CategoriesTab extends StatelessWidget {
   const CategoriesTab({super.key});
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -16,35 +16,17 @@ class CategoriesTab extends StatelessWidget {
         children: [
           TaxonomySeedCard(),
           SizedBox(height: 20),
-          Text(
-            'Top 6 Money Makers',
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
-          ),
-          Wrap(
-            spacing: 8,
-            children: FundiTaxonomy.categories
-                .where((c) => c['isTop6'] == true)
-                .map(
-                  (c) => Chip(
-                    label: Text(
-                      c['name'],
-                      style: GoogleFonts.inter(fontSize: 10),
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-          SizedBox(height: 20),
           FundiMonitorTable(),
           SizedBox(height: 24),
           Text(
             'Live Categories',
             style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
           ),
+          SizedBox(height: 8),
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
-                .collection('jobCategories')
-                .orderBy('order')
+                .collection('categories')
+                .orderBy('name')
                 .snapshots(),
             builder: (_, snap) {
               if (!snap.hasData) return CircularProgressIndicator();
@@ -61,7 +43,7 @@ class CategoriesTab extends StatelessWidget {
                         ),
                       ),
                       subtitle: Text(
-                        '${d['subCount'] ?? 0} subs • ${d['slug'] ?? ''}',
+                        '${(d['subcategories'] as List?)?.length ?? 0} subs • ${d['slug'] ?? ''} • ${d['pricingMode'] ?? 'market'}',
                       ),
                     ),
                   );

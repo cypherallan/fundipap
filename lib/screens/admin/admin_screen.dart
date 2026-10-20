@@ -6,6 +6,7 @@ import '../auth/role_select_screen.dart';
 import 'tabs/categories_tab.dart';
 import 'tabs/fraud_review_tab.dart';
 import 'tabs/disputes_tab.dart';
+import 'tabs/revenue_analytics_tab.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -15,7 +16,12 @@ class AdminScreen extends StatefulWidget {
 
 class _AdminScreenState extends State<AdminScreen> {
   int _current = 0;
-  final _pages = const [CategoriesTab(), FraudReviewTab(), DisputesTab()];
+  final _pages = const [
+    CategoriesTab(),
+    RevenueAnalyticsTab(), // <-- NOW 2ND
+    FraudReviewTab(),
+    DisputesTab(),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -96,6 +102,12 @@ class _AdminScreenState extends State<AdminScreen> {
                 icon: Icon(Icons.category_outlined),
                 activeIcon: Icon(Icons.category),
                 label: 'Categories (24)',
+              ),
+              BottomNavigationBarItem(
+                // <-- 2ND NOW
+                icon: Icon(Icons.payments_outlined),
+                activeIcon: Icon(Icons.payments),
+                label: 'Revenue',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.shield_outlined),
