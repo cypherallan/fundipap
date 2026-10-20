@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../theme/app_theme.dart';
+import '../auth/role_select_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String email;
@@ -360,6 +361,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               onTap: () async {
                 await FirebaseAuth.instance.signOut();
+                await Future.delayed(const Duration(milliseconds: 300));
+                if (!context.mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const RoleSelectScreen()),
+                  (route) => false,
+                );
               },
             ),
             const SizedBox(height: 80),

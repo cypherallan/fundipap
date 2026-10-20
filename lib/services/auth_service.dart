@@ -189,21 +189,25 @@ class AuthService {
     final uid = _auth.currentUser?.uid;
     if (uid != null) {
       try {
-        String? token = await FirebaseMessaging.instance.getToken();
-        await _db.collection('fundis').doc(uid).update({
-          'isOnline': false,
-          'lastSeen': FieldValue.serverTimestamp(),
-          'fcmToken': FieldValue.delete(),
-          'fcmTokens': token != null
-              ? FieldValue.arrayRemove([token])
-              : FieldValue.delete(),
-        });
-      } catch (_) {
-        await _db.collection('fundis').doc(uid).set({
-          'isOnline': false,
-        }, SetOptions(merge: true));
-      }
-      try {
+        String? token;
+        try {
+          token = await FirebaseMessaging.instance.getToken();
+        } catch (_) {}
+        // Only update fundis if role is fundi
+        var userDoc = await _db.collection('users').doc(uid).get();
+        var role = userDoc.data()?['role'];
+        if (role == 'fundi') {
+          await _db.collection('fundis').doc(uid).set({
+            'isOnline': false,
+            'lastSeen': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+          if (token != null) {
+            await _db.collection('fundis').doc(uid).update({
+              'fcmToken': FieldValue.delete(),
+              'fcmTokens': FieldValue.arrayRemove([token]),
+            });
+          }
+        }
         await _db.collection('users').doc(uid).update({
           'fcmToken': FieldValue.delete(),
         });
