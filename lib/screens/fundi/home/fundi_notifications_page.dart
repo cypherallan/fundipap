@@ -87,17 +87,21 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
             var status = (bid['status'] ?? '').toString();
             var counterBy = (bid['counterBy'] ?? bid['lastCounterBy'] ?? '')
                 .toString();
-            var lastCounterBy = (bid['lastCounterBy'] ?? counterBy).toString();
+            (bid['lastCounterBy'] ?? counterBy).toString();
             var jId = (bid['jobId'] ?? b.reference.parent.parent?.id ?? '')
                 .toString();
             if (jId.isEmpty) continue;
 
+            var lastRole =
+                (bid['lastCounterByRole'] ??
+                        bid['lastCounterBy'] ??
+                        bid['counterBy'] ??
+                        '')
+                    .toString()
+                    .toLowerCase();
             bool isClientCounter =
-                (status == 'countered' &&
-                    lastCounterBy != uid &&
-                    lastCounterBy != '') ||
-                status == 'client_counter' ||
-                (status == 'countered' && bid['clientCounterAmount'] != null);
+                status.toLowerCase().contains('counter') &&
+                lastRole == 'client';
 
             if (status == 'accepted') {
               _acceptedBids.add({
@@ -115,9 +119,19 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                 'type': 'accepted',
               });
             } else if (isClientCounter) {
-              int amt = _toInt(
-                bid['clientCounterAmount'] ?? bid['lastCounterAmount'] ?? 0,
-              );
+              int amt = 0;
+              int prev = 0;
+              if (bid['priceHistory'] is List &&
+                  (bid['priceHistory'] as List).length >= 1) {
+                var h = bid['priceHistory'] as List;
+                amt = _toInt(h.last['price']);
+                if (h.length >= 2) prev = _toInt(h[h.length - 2]['price']);
+              } else {
+                amt = _toInt(
+                  bid['clientCounterAmount'] ?? bid['lastCounterAmount'] ?? 0,
+                );
+                prev = _toInt(bid['fundiCounterAmount'] ?? bid['price'] ?? 0);
+              }
               _clientCounters.add({
                 'jobId': jId,
                 'bidId': b.id,
@@ -128,6 +142,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                         .toString(),
                 'clientId': (bid['customerId'] ?? '').toString(),
                 'price': amt,
+                'prevPrice': prev,
                 'createdAt':
                     bid['counterAt'] ?? bid['updatedAt'] ?? bid['createdAt'],
                 'isRead':
@@ -363,7 +378,15 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     }
 
     for (var b in _clientCounters) {
-      if (jobsWithProgress.contains(b['jobId'])) continue;
+      if (jobsWithProgress.contains(b['jobId'])) {
+        if (grouped.containsKey(b['jobId'])) {
+          int p = b['prevPrice'] ?? 0;
+          grouped[b['jobId']]!['category'] = p > 0
+              ? "${b['jobTitle']} • Client countered KES $p with KES ${b['price']}"
+              : "${b['jobTitle']} • Client countered KES ${b['price']}";
+        }
+        continue;
+      }
       if (_excludedJobIds.contains(b['jobId'])) continue;
       String key = "${b['jobId']}_${b['clientId']}_counter";
       grouped[key] = {
@@ -371,7 +394,9 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         'bidId': b['bidId'],
         'clientName': b['clientName'],
         'clientId': b['clientId'],
-        'category': '${b['jobTitle']} • Client countered KES ${b['price']}',
+        'category': (b['prevPrice'] ?? 0) > 0
+            ? "${b['jobTitle']} • Client countered KES ${b['prevPrice']} with KES ${b['price']}"
+            : "${b['jobTitle']} • Client countered KES ${b['price']}",
         'jobData': {
           'title': b['jobTitle'],
           'status': 'countered',

@@ -292,7 +292,7 @@ export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId
     }
 
     // FUNDI FLOW - LOCKED
-    if ((newS === "countered" || newS === "client_counter") && lastBy !== fundiId && oldS !== newS) {
+    if ((newS === "countered" || newS === "client_counter") && lastBy !== fundiId && (oldS !== newS || before?.lastCounterAmount !== after?.lastCounterAmount)) {
         const tokens = await getFcmTokens(fundiId);
         await sendPush(tokens, `Client countered KES ${after.clientCounterAmount || after.lastCounterAmount || 0}`, `Tap to Accept/Counter`, { jobId, type: "client_counter" });
     }
