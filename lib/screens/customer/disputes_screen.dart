@@ -19,6 +19,19 @@ class _DisputesScreenState extends State<DisputesScreen>
     _tab = TabController(length: 2, vsync: this);
   }
 
+  @override
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
+  }
+
+  Color _statusColor(String s) {
+    if (s.contains('client_win')) return Colors.green;
+    if (s.contains('fundi_win')) return Colors.red;
+    if (s == 'open') return Colors.orange;
+    return Colors.black54;
+  }
+
   Widget _buildList(String filter) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
     var stream = FirebaseFirestore.instance
@@ -33,20 +46,20 @@ class _DisputesScreenState extends State<DisputesScreen>
           return const Center(child: CircularProgressIndicator());
         var allDocs = snap.data!.docs.toList();
 
-        // Filter by who raised
         var docs = allDocs.where((doc) {
           var data = doc.data() as Map<String, dynamic>;
           String role = (data['reporterRole'] ?? 'client').toString();
-          if (filter == 'my')
-            return role == 'client'; // client raised against fundi
-          return role == 'fundi'; // fundi raised against client
+          if (filter == 'my') return role == 'client';
+          return role == 'fundi';
         }).toList();
 
         docs.sort((a, b) {
           var ad = (a.data() as Map)['createdAt'];
           var bd = (b.data() as Map)['createdAt'];
           if (ad == null || bd == null) return 0;
-          return (bd as Timestamp).compareTo(ad as Timestamp);
+          return (bd as Timestamp).compareTo(
+            ad as Timestamp,
+          ); // newest first for client
         });
 
         if (docs.isEmpty) {
@@ -82,6 +95,7 @@ class _DisputesScreenState extends State<DisputesScreen>
           itemCount: docs.length,
           itemBuilder: (_, i) {
             var d = docs[i].data() as Map<String, dynamic>;
+            String status = (d['status'] ?? 'open').toString();
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
@@ -96,7 +110,7 @@ class _DisputesScreenState extends State<DisputesScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Job ${d['jobId']?.toString().substring(0, 6) ?? ''} • ${d['type'] ?? ''} • ${d['status'] ?? 'open'}',
+                      'Job ${d['jobId']?.toString().substring(0, 6) ?? ''} • ${d['type'] ?? ''}',
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -112,12 +126,50 @@ class _DisputesScreenState extends State<DisputesScreen>
                   ],
                 ),
                 trailing: Chip(
+                  backgroundColor: _statusColor(status).withOpacity(0.15),
                   label: Text(
-                    d['status'] ?? 'open',
-                    style: const TextStyle(fontSize: 11),
+                    status.toUpperCase(),
+                    style: GoogleFonts.montserrat(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: _statusColor(status),
+                    ),
                   ),
                 ),
-                onTap: () {},
+                onTap: () {
+                  showModalBottomSheet(
+                    context: context,
+                    builder: (_) => Container(
+                      padding: EdgeInsets.all(16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            d['reason'] ?? '',
+                            style: GoogleFonts.montserrat(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Status: $status',
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text('Job: ${d['jobId'] ?? ''}'),
+                          SizedBox(height: 8),
+                          Text(
+                            d['description'] ?? '',
+                            style: GoogleFonts.inter(fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             );
           },

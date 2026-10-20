@@ -16,15 +16,21 @@ class AdminScreen extends StatefulWidget {
 
 class _AdminScreenState extends State<AdminScreen> {
   int _current = 0;
-  final _pages = const [
-    CategoriesTab(),
-    RevenueAnalyticsTab(), // <-- NOW 2ND
-    FraudReviewTab(),
-    DisputesTab(),
-  ];
+
+  void _openDisputes() {
+    setState(() => _current = 3); // index of DisputesTab
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Pages can't be const anymore because CategoriesTab needs the callback
+    final pages = [
+      CategoriesTab(onOpenDisputes: _openDisputes),
+      const RevenueAnalyticsTab(),
+      const FraudReviewTab(),
+      const DisputesTab(),
+    ];
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
@@ -72,7 +78,7 @@ class _AdminScreenState extends State<AdminScreen> {
             ),
           ],
         ),
-        body: _pages[_current],
+        body: pages[_current],
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -104,7 +110,6 @@ class _AdminScreenState extends State<AdminScreen> {
                 label: 'Categories (24)',
               ),
               BottomNavigationBarItem(
-                // <-- 2ND NOW
                 icon: Icon(Icons.payments_outlined),
                 activeIcon: Icon(Icons.payments),
                 label: 'Revenue',

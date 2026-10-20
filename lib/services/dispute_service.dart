@@ -4,6 +4,27 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class DisputeService {
+  // Helper to get badge for sorting
+  static Future<String> _getMyBadge(String uid) async {
+    var f = await FirebaseFirestore.instance
+        .collection('fundis')
+        .doc(uid)
+        .get();
+    if (f.exists) {
+      var m = f.data() as Map;
+      return (m['badge'] ?? m['subscriptionBadge'] ?? 'none').toString();
+    }
+    var c = await FirebaseFirestore.instance
+        .collection('clients')
+        .doc(uid)
+        .get();
+    if (c.exists) {
+      var m = c.data() as Map;
+      return (m['badge'] ?? 'none').toString();
+    }
+    return 'none';
+  }
+
   static Future<void> showFundiDisputeDialog(
     BuildContext context, {
     required String jobId,
@@ -145,6 +166,7 @@ class DisputeService {
 
     var uid = FirebaseAuth.instance.currentUser!.uid;
     var user = FirebaseAuth.instance.currentUser;
+    var badge = await _getMyBadge(uid); // <-- for sorting
 
     await FirebaseFirestore.instance.collection('disputes').add({
       'jobId': jobId,
@@ -157,6 +179,8 @@ class DisputeService {
       'type': type,
       'reason': reasonCtrl.text.trim(),
       'reporterRole': 'fundi',
+      'reportedBy': uid,
+      'reporterBadge': badge, // <-- GOLD FIRST LOGIC
       'status': 'open',
       'escrowStatus': jobData['escrowStatus'] ?? 'unknown',
       'escrowAmount':
@@ -315,6 +339,8 @@ class DisputeService {
     }
     var uid = FirebaseAuth.instance.currentUser!.uid;
     var user = FirebaseAuth.instance.currentUser;
+    var badge = await _getMyBadge(uid); // <-- for sorting
+
     await FirebaseFirestore.instance.collection('disputes').add({
       'jobId': jobId,
       'jobTitle': jobData['title'] ?? '',
@@ -325,6 +351,8 @@ class DisputeService {
       'type': type,
       'reason': reasonCtrl.text.trim(),
       'reporterRole': 'client',
+      'reportedBy': uid,
+      'reporterBadge': badge, // <-- GOLD FIRST LOGIC
       'status': 'open',
       'escrowStatus': jobData['escrowStatus'] ?? 'unknown',
       'escrowAmount': jobData['escrowAmount'] ?? jobData['agreedPrice'] ?? 0,
