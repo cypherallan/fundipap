@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../../../services/fundi_badge_service.dart';
+import '../../../services/fundi_penalty_service.dart';
 
 mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
   Future<void> payEscrowSimulated(
@@ -134,7 +135,25 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
         } catch (_) {}
       }
       int platformFee = (totalRelease * commissionPct / 100).round();
-      int fundiPayout = totalRelease - platformFee;
+      int baseFundiPayout = totalRelease - platformFee;
+
+      // ===== NEW: CHECK FOR 50% DEDUCTION FROM REPEAT JOB DISPUTE =====
+      int finalFundiPayout = baseFundiPayout;
+      double deductedThisJob = 0;
+      String? deductionDisputeId;
+      double? deductionRemainingAfter;
+
+      if (fundiId.isNotEmpty) {
+        var result = await FundiPenaltyService.applyPendingDeductionOnPayout(
+          fundiId: fundiId,
+          jobId: jobId,
+          currentJobAmount: baseFundiPayout.toDouble(),
+        );
+        finalFundiPayout = (result['fundiPayout'] as double).round();
+        deductedThisJob = result['deducted'] as double;
+        deductionDisputeId = result['disputeId'] as String?;
+        deductionRemainingAfter = result['remaining'] as double?;
+      }
 
       await jobRef.update({
         'status': 'completed',
@@ -142,7 +161,13 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
         'extraEscrowStatus': 'released',
         'completedAt': FieldValue.serverTimestamp(),
         'totalReleasedAmount': totalRelease,
-        'fundiPayoutAmount': fundiPayout,
+        'fundiPayoutAmount': finalFundiPayout,
+        'baseFundiPayoutBeforeDeduction': baseFundiPayout,
+        'deductionThisJob': deductedThisJob,
+        'deductionDisputeId': deductionDisputeId,
+        'deductionRemainingAfter': deductionRemainingAfter,
+        'originalReleasedAmount': baseFundiPayout,
+        'fundiPayoutAfterDeduction': finalFundiPayout,
         'platformFee': platformFee,
         'fundiCommissionPct': commissionPct,
         'initialEscrowReleased': initialAmount,
@@ -156,10 +181,20 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
               .collection('users')
               .doc(fundiId)
               .update({
-                'totalEarned': FieldValue.increment(fundiPayout),
-                'balance': FieldValue.increment(fundiPayout),
+                'totalEarned': FieldValue.increment(finalFundiPayout),
+                'balance': FieldValue.increment(finalFundiPayout),
                 'completedJobs': FieldValue.increment(1),
               });
+        } catch (_) {}
+        // Also update fundis collection balance
+        try {
+          await FirebaseFirestore.instance
+              .collection('fundis')
+              .doc(fundiId)
+              .set({
+                'totalEarned': FieldValue.increment(finalFundiPayout),
+                'balance': FieldValue.increment(finalFundiPayout),
+              }, SetOptions(merge: true));
         } catch (_) {}
       }
 
@@ -171,7 +206,9 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
               'status': 'released',
               'amount': totalRelease,
               'platformFee': platformFee,
-              'fundiPayout': fundiPayout,
+              'fundiPayout': finalFundiPayout,
+              'baseFundiPayout': baseFundiPayout,
+              'deductionThisJob': deductedThisJob,
               'commissionPct': commissionPct,
               'initialAmount': initialAmount,
               'extraAmount': extraAmount,

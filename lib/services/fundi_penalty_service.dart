@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class FundiPenaltyService {
@@ -124,5 +125,173 @@ class FundiPenaltyService {
       'onTimeDeliveries': FieldValue.increment(1),
       'onTimeArrivalCount': FieldValue.increment(1),
     }, SetOptions(merge: true));
+  }
+
+  // ============= NEW: REPEAT JOB 14 DAYS + 50% TO CLIENT =============
+
+  static Future<void> onRepeatJobNoRedo({
+    required String fundiId,
+    required String disputeId,
+    required String clientId,
+    required String clientName,
+    required String jobId,
+    required double disputedJobAmount, // amount of job that was disputed
+  }) async {
+    double refund50 = disputedJobAmount * 0.5;
+    var db = FirebaseFirestore.instance;
+
+    // Add strike + pending deduction to fundi
+    await db.collection('fundis').doc(fundiId).set({
+      'strikes': FieldValue.increment(1),
+      'pendingDeductionRemaining': FieldValue.increment(refund50),
+      'pendingDeduction': FieldValue.increment(refund50),
+      'pendingDeductionDisputeId': disputeId,
+      'pendingDeductionClientId': clientId,
+      'pendingDeductionClientName': clientName,
+      'pendingDeductionOriginalJobId': jobId,
+      'lastStrikeReason':
+          'repeat_job - no redo after 30h (24h + 6h reminder) - dispute $disputeId',
+      'strikeUpdatedAt': FieldValue.serverTimestamp(),
+      'penaltyScore': FieldValue.increment(100), // heavier than cancel
+    }, SetOptions(merge: true));
+
+    await db.collection('fundiStats').doc(fundiId).set({
+      'repeatJobStrikes': FieldValue.increment(1),
+      'lastRepeatStrikeAt': FieldValue.serverTimestamp(),
+      'pendingDeductionRemaining': FieldValue.increment(refund50),
+    }, SetOptions(merge: true));
+
+    // Update dispute
+    await db.collection('disputes').doc(disputeId).update({
+      'status': 'resolved_client_win_fundi_no_redo',
+      'resolutionAction': 'deduct_50_next_job',
+      'deductionAmount': refund50,
+      'deductionOwedToClientId': clientId,
+      'deductionOwedToClientName': clientName,
+      'deductionRemaining': refund50,
+      'deductionCreatedAt': FieldValue.serverTimestamp(),
+      'fundiDeclinedRedo': true,
+    });
+
+    await db.collection('adminFlags').add({
+      'type': 'repeat_job_deduction',
+      'fundiId': fundiId,
+      'disputeId': disputeId,
+      'clientId': clientId,
+      'amount': refund50,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // Called when fundi's NEXT job is being released - deducts 50% of THIS job until 50% refund paid
+  static Future<Map<String, dynamic>> applyPendingDeductionOnPayout({
+    required String fundiId,
+    required String jobId,
+    required double currentJobAmount,
+  }) async {
+    var db = FirebaseFirestore.instance;
+    var fundiSnap = await db.collection('fundis').doc(fundiId).get();
+    var fundiData = fundiSnap.data() ?? {};
+
+    double remaining = (fundiData['pendingDeductionRemaining'] ?? 0).toDouble();
+    String? disputeId = fundiData['pendingDeductionDisputeId'];
+    String? clientId = fundiData['pendingDeductionClientId'];
+
+    if (remaining <= 0 || disputeId == null || clientId == null) {
+      return {
+        'fundiPayout': currentJobAmount,
+        'deducted': 0.0,
+        'remaining': 0.0,
+        'message': null,
+      };
+    }
+
+    double deductThisJob = min(currentJobAmount * 0.5, remaining);
+    double newRemaining = remaining - deductThisJob;
+    double fundiPayout = currentJobAmount - deductThisJob;
+
+    String shortId = disputeId.length > 6
+        ? disputeId.substring(0, 6)
+        : disputeId;
+    String message =
+        'KES ${deductThisJob.toStringAsFixed(0)} deducted from your pay as a result of dispute $shortId (repeat job within 14 days - you did not redo within 24h + 6h). ${newRemaining > 0 ? "KES ${newRemaining.toStringAsFixed(0)} still owed to client ${fundiData['pendingDeductionClientName'] ?? ''} - will be deducted from next jobs until 50% refund complete." : "Deduction complete - client refunded 50%."}';
+
+    // Credit original client
+    if (deductThisJob > 0) {
+      await db.collection('clients').doc(clientId).update({
+        'walletBalance': FieldValue.increment(deductThisJob),
+      });
+      await db.collection('transactions').add({
+        'userId': clientId,
+        'type': 'dispute_refund_50',
+        'amount': deductThisJob,
+        'disputeId': disputeId,
+        'fromFundiId': fundiId,
+        'fromJobId': jobId,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Notify original client he got 50% refund
+      String shortId = disputeId.length > 6
+          ? disputeId.substring(0, 6)
+          : disputeId;
+      await db.collection('notifications').add({
+        'toUserId': clientId,
+        'toRole': 'client',
+        'type': 'dispute_refund',
+        'disputeId': disputeId,
+        'title':
+            'Refund received: KES ${deductThisJob.toStringAsFixed(0)} from dispute $shortId',
+        'body':
+            'KES ${deductThisJob.toStringAsFixed(0)} refunded to your wallet as 50% of disputed job. Fundi had repeat job within 14 days and did not redo. ${newRemaining > 0 ? "KES ${newRemaining.toStringAsFixed(0)} more will be refunded from his next jobs." : "Full 50% refund complete."}',
+        'amount': deductThisJob,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Update fundi
+    await db.collection('fundis').doc(fundiId).update({
+      'pendingDeductionRemaining': newRemaining,
+      'pendingDeduction': newRemaining,
+      if (newRemaining <= 0) 'pendingDeductionDisputeId': FieldValue.delete(),
+      if (newRemaining <= 0) 'pendingDeductionClientId': FieldValue.delete(),
+      if (newRemaining <= 0) 'pendingDeductionClientName': FieldValue.delete(),
+    });
+
+    // Update dispute
+    await db.collection('disputes').doc(disputeId).update({
+      'deductionRemaining': newRemaining,
+      if (newRemaining <= 0) 'deductionFullyPaid': true,
+      if (newRemaining <= 0)
+        'deductionCompletedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Update this job with deduction info
+    await db.collection('jobs').doc(jobId).update({
+      'deductionThisJob': deductThisJob,
+      'deductionDisputeId': disputeId,
+      'deductionRemainingAfter': newRemaining,
+      'originalReleasedAmount': currentJobAmount,
+      'fundiPayoutAfterDeduction': fundiPayout,
+    });
+
+    await db.collection('transactions').add({
+      'userId': fundiId,
+      'type': 'payout_with_deduction',
+      'amount': fundiPayout,
+      'deduction': deductThisJob,
+      'disputeId': disputeId,
+      'jobId': jobId,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    return {
+      'fundiPayout': fundiPayout,
+      'deducted': deductThisJob,
+      'remaining': newRemaining,
+      'message': message,
+      'disputeId': disputeId,
+    };
   }
 }

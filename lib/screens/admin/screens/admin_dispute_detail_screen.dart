@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../services/fundi_penalty_service.dart';
 
 class AdminDisputeDetailScreen extends StatefulWidget {
   final String disputeId;
@@ -67,45 +68,18 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
   }
 
   Future<void> applyDeductionAfterNoResponse(Map<String, dynamic> d) async {
-    String fundiId = d['fundiId'];
-    String clientId = d['clientId'];
-    double jobAmount = (d['escrowAmount'] ?? 0).toDouble();
-    double refund50 = jobAmount * 0.5;
-
-    var fundiDoc = await FirebaseFirestore.instance
-        .collection('fundis')
-        .doc(fundiId)
-        .get();
-    int strikes = (fundiDoc.data()?['strikes'] ?? 0) as int;
-
-    await FirebaseFirestore.instance
-        .collection('disputes')
-        .doc(widget.disputeId)
-        .update({
-          'status': 'resolved_client_win_fundi_no_redo',
-          'resolutionAction': 'deduct_50_next_job',
-          'deductionAmount': refund50,
-          'deductionOwedToClientId': clientId,
-          'deductionOwedToClientName': d['clientName'],
-          'deductionRemaining': refund50, // will deduct until this is 0
-          'fundiDeclinedRedo': true,
-        });
-
-    await FirebaseFirestore.instance.collection('fundis').doc(fundiId).update({
-      'strikes': strikes + 1,
-      'pendingDeduction': FieldValue.increment(refund50),
-      'pendingDeductionDisputeId': widget.disputeId,
-      'pendingDeductionClientId': clientId,
-      'pendingDeductionRemaining': refund50,
-      'lastStrikeReason': 'repeat_job - no redo after 30h',
-      'strikeUpdatedAt': FieldValue.serverTimestamp(),
-    });
-
+    await FundiPenaltyService.onRepeatJobNoRedo(
+      fundiId: d['fundiId'],
+      disputeId: widget.disputeId,
+      clientId: d['clientId'],
+      clientName: d['clientName'] ?? 'client',
+      jobId: d['jobId'],
+      disputedJobAmount: (d['escrowAmount'] ?? 0).toDouble(),
+    );
     await FirebaseFirestore.instance.collection('jobs').doc(d['jobId']).update({
       'status': 'refunded',
       'escrowStatus': 'refunded',
     });
-
     if (mounted) Navigator.pop(context);
   }
 

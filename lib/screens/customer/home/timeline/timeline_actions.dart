@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'timeline_utils.dart';
 import '../../rating/rate_fundi_screen.dart';
+import '../../../../services/fundi_penalty_service.dart';
 
 class TimelineActions {
   static Future<void> payEscrow(String jobId, double amount) async {
@@ -37,9 +38,9 @@ class TimelineActions {
           .doc(fundiId)
           .get();
       var fd = fundiSnap.data() ?? {};
-      if (fd['badgeLevel'] == 'gold' || fd['isTrialGold'] == true) {
+      if (fd['badgeLevel'] == 'gold' || fd['isTrialGold'] == true)
         fundiPct = 5;
-      } else if (fd['badgeLevel'] == 'silver')
+      else if (fd['badgeLevel'] == 'silver')
         fundiPct = 8;
       else if (fd['badgeLevel'] == 'bronze')
         fundiPct = 10;
@@ -252,9 +253,9 @@ class TimelineActions {
           .get();
       var fundiData = fundiSnap.data() ?? {};
       int fundiPct = 5;
-      if (fundiData['isTrialGold'] == true) {
+      if (fundiData['isTrialGold'] == true)
         fundiPct = 5;
-      } else if (fundiData['badgeLevel'] == 'gold')
+      else if (fundiData['badgeLevel'] == 'gold')
         fundiPct = 5;
       else if (fundiData['badgeLevel'] == 'silver')
         fundiPct = 8;
@@ -268,7 +269,7 @@ class TimelineActions {
       int clientAppFee = (labour * 0.05).round();
       int fundiAppFee = (labour * fundiPct / 100).round();
       int totalClient = labour + transport + clientAppFee;
-      int fundiReceives = labour - fundiAppFee + transport;
+      int baseFundiReceives = labour - fundiAppFee + transport;
 
       if (reneg != null && reneg['newLaborTotal'] != null) {
         int newLabour = toInt(reneg['newLaborTotal']);
@@ -279,10 +280,30 @@ class TimelineActions {
         int newFundiReceives =
             newLabour - (newLabour * fundiPct / 100).round() + transport;
         totalClient = newTotalClient > 0 ? newTotalClient : totalClient;
-        fundiReceives = newFundiReceives > 0 ? newFundiReceives : fundiReceives;
+        baseFundiReceives = newFundiReceives > 0
+            ? newFundiReceives
+            : baseFundiReceives;
       }
 
       int alreadyLocked = toInt(j['escrowAmount'] ?? totalClient);
+
+      // ===== 50% DEDUCTION CHECK - repeat job within 14 days no redo =====
+      int finalFundiPayout = baseFundiReceives;
+      double deductedThisJob = 0;
+      String? deductionDisputeId;
+      double? deductionRemainingAfter;
+
+      if (fundiId.isNotEmpty) {
+        var result = await FundiPenaltyService.applyPendingDeductionOnPayout(
+          fundiId: fundiId,
+          jobId: jobId,
+          currentJobAmount: baseFundiReceives.toDouble(),
+        );
+        finalFundiPayout = (result['fundiPayout'] as double).round();
+        deductedThisJob = result['deducted'] as double;
+        deductionDisputeId = result['disputeId'] as String?;
+        deductionRemainingAfter = result['remaining'] as double?;
+      }
 
       await jobRef.update({
         'status': 'completed',
@@ -294,8 +315,14 @@ class TimelineActions {
         'completedAt': FieldValue.serverTimestamp(),
         'totalReleasedAmount': totalClient,
         'totalClientPays': totalClient,
-        'fundiPayoutAmount': fundiReceives,
-        'fundiReceives': fundiReceives,
+        'fundiPayoutAmount': finalFundiPayout,
+        'baseFundiPayoutBeforeDeduction': baseFundiReceives,
+        'fundiReceives': finalFundiPayout,
+        'deductionThisJob': deductedThisJob,
+        'deductionDisputeId': deductionDisputeId,
+        'deductionRemainingAfter': deductionRemainingAfter,
+        'originalReleasedAmount': baseFundiReceives,
+        'fundiPayoutAfterDeduction': finalFundiPayout,
         'totalClientPaid': totalClient,
         'initialEscrowReleased': alreadyLocked,
         'fundiHasUnread': true,
@@ -308,14 +335,14 @@ class TimelineActions {
             .collection('users')
             .doc(fundiId)
             .update({
-              'totalEarned': FieldValue.increment(fundiReceives),
-              'totalEarnings': FieldValue.increment(fundiReceives),
+              'totalEarned': FieldValue.increment(finalFundiPayout),
+              'totalEarnings': FieldValue.increment(finalFundiPayout),
               'completedJobs': FieldValue.increment(1),
               'jobsDone': FieldValue.increment(1),
               'updatedAt': FieldValue.serverTimestamp(),
             });
         await FirebaseFirestore.instance.collection('fundis').doc(fundiId).set({
-          'totalEarned': FieldValue.increment(fundiReceives),
+          'totalEarned': FieldValue.increment(finalFundiPayout),
           'completedJobs': FieldValue.increment(1),
         }, SetOptions(merge: true));
       } catch (_) {}
@@ -327,10 +354,14 @@ class TimelineActions {
             .collection('notifications')
             .add({
               'jobId': jobId,
-              'type': 'escrow_released',
-              'title':
-                  'Client released KES $fundiReceives - Tap to view receipt',
-              'amount': fundiReceives,
+              'type': deductedThisJob > 0
+                  ? 'escrow_released_with_deduction'
+                  : 'escrow_released',
+              'title': deductedThisJob > 0
+                  ? 'KES $finalFundiPayout released (KES ${deductedThisJob.toInt()} deducted for dispute ${deductionDisputeId?.substring(0, 6) ?? ''})'
+                  : 'Client released KES $finalFundiPayout - Tap to view receipt',
+              'amount': finalFundiPayout,
+              'deduction': deductedThisJob,
               'isRead': false,
               'createdAt': FieldValue.serverTimestamp(),
             });
@@ -345,7 +376,9 @@ class TimelineActions {
               'fundiId': fundiId,
               'status': 'released',
               'amount': totalClient,
-              'fundiPayout': fundiReceives,
+              'fundiPayout': finalFundiPayout,
+              'baseFundiPayout': baseFundiReceives,
+              'deductionThisJob': deductedThisJob,
               'initialAmount': alreadyLocked,
               'releasedAt': FieldValue.serverTimestamp(),
               'updatedAt': FieldValue.serverTimestamp(),
@@ -353,12 +386,15 @@ class TimelineActions {
       } catch (_) {}
 
       if (!context.mounted) return;
-      int displayRelease = labour + transport;
-      if (reneg != null && reneg['newLaborTotal'] != null) {
-        displayRelease = toInt(reneg['newLaborTotal']) + transport;
-      }
+      int displayRelease = finalFundiPayout;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Released KES $displayRelease to Fundi')),
+        SnackBar(
+          content: Text(
+            deductedThisJob > 0
+                ? 'Released KES $finalFundiPayout to Fundi (KES ${deductedThisJob.toInt()} deducted for prior dispute)'
+                : 'Released KES $displayRelease to Fundi',
+          ),
+        ),
       );
       Navigator.of(context).push(
         MaterialPageRoute(

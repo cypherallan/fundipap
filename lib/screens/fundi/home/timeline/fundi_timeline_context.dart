@@ -42,6 +42,13 @@ class FundiTimelineContext {
   final String clientId;
   final bool isBidSent;
 
+  // NEW: deduction from repeat job dispute
+  final double? deductionThisJob;
+  final double? originalReleasedAmount;
+  final double? deductionRemaining;
+  final String? deductionDisputeId;
+  final String? deductionReason;
+
   FundiTimelineContext({
     required this.context,
     required this.jobId,
@@ -79,6 +86,11 @@ class FundiTimelineContext {
     required this.fundiRatedClient,
     required this.clientId,
     required this.isBidSent,
+    this.deductionThisJob,
+    this.originalReleasedAmount,
+    this.deductionRemaining,
+    this.deductionDisputeId,
+    this.deductionReason,
   });
 
   factory FundiTimelineContext.fromSnapshot({
@@ -144,13 +156,39 @@ class FundiTimelineContext {
       fundiPct = 15;
 
     int fundiAppFee = (labour * fundiPct / 100).round();
-    int fundiReceives = labour - fundiAppFee + transport;
+    int baseFundiReceives = labour - fundiAppFee + transport;
     int fundiSeesWaiting = labour + transport;
     int newTotalFundiLocked = newLabour + transport;
     int newFundiReceivesVal =
         newLabour - (newLabour * fundiPct / 100).round() + transport;
     bool isCounterAccepted = counterExtra > 0;
-    int releasedAmount = fundiReceives;
+
+    // DEDUCTION LOGIC - check if this payout has 50% deduction from repeat job
+    double deduction = (job['deductionThisJob'] ?? 0).toDouble();
+    double originalAmount = (job['originalReleasedAmount'] ?? baseFundiReceives)
+        .toDouble();
+    double remainingAfter = (job['deductionRemainingAfter'] ?? 0).toDouble();
+    String? disputeId = job['deductionDisputeId']?.toString();
+    double payoutAfterDeduction =
+        (job['fundiPayoutAfterDeduction'] ?? (baseFundiReceives - deduction))
+            .toDouble();
+
+    int finalFundiReceives;
+    int finalReleasedAmount;
+    double? finalOriginal;
+    double? finalRemaining;
+
+    if (deduction > 0) {
+      finalFundiReceives = payoutAfterDeduction.round();
+      finalReleasedAmount = payoutAfterDeduction.round();
+      finalOriginal = originalAmount;
+      finalRemaining = remainingAfter;
+    } else {
+      finalFundiReceives = baseFundiReceives;
+      finalReleasedAmount = baseFundiReceives;
+      finalOriginal = null;
+      finalRemaining = null;
+    }
 
     bool siteDone = toBool(job['siteVisitDone']) || toBool(job['siteVisited']);
     bool travelling = toBool(job['travelling']) || status == 'travelling';
@@ -175,6 +213,15 @@ class FundiTimelineContext {
     bool isBidSent =
         status == 'bid_sent' || status == 'pending_client_response';
 
+    String? deductionReason;
+    if (deduction > 0 && disputeId != null) {
+      String shortId = disputeId.length > 6
+          ? disputeId.substring(0, 6)
+          : disputeId;
+      deductionReason =
+          'KES ${deduction.toStringAsFixed(0)} deducted from your pay as a result of dispute $shortId, it will be deducted until client gets a refund of 50% of what was paid to you. Reason: repeat job within 14 days - no redo after 24h + 6h reminder.';
+    }
+
     return FundiTimelineContext(
       context: context,
       jobId: jobId,
@@ -194,12 +241,12 @@ class FundiTimelineContext {
       labour: labour,
       transport: transport,
       fundiAppFee: fundiAppFee,
-      fundiReceives: fundiReceives,
+      fundiReceives: finalFundiReceives,
       fundiSeesWaiting: fundiSeesWaiting,
       newTotalFundiLocked: newTotalFundiLocked,
       newFundiReceivesVal: newFundiReceivesVal,
       isCounterAccepted: isCounterAccepted,
-      releasedAmount: releasedAmount,
+      releasedAmount: finalReleasedAmount,
       escrowDone: escrowDone,
       escrowReleased: escrowReleased,
       siteDone: siteDone,
@@ -212,6 +259,11 @@ class FundiTimelineContext {
       fundiRatedClient: fundiRatedClient,
       clientId: clientId,
       isBidSent: isBidSent,
+      deductionThisJob: deduction > 0 ? deduction : null,
+      originalReleasedAmount: finalOriginal,
+      deductionRemaining: finalRemaining,
+      deductionDisputeId: disputeId,
+      deductionReason: deductionReason,
     );
   }
 }
