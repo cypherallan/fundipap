@@ -335,14 +335,17 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
                       ),
                       onPressed: () async {
                         try {
-                          int oldLabour = _toInt(
-                            job['currentLabour'] ?? job['agreedPrice'] ?? 5000,
-                          );
+                          // FIXED: lastCounterAmount first, oldLabor from reneg first
                           var reneg =
                               job['renegotiation'] as Map<String, dynamic>?;
-                          if (reneg != null && reneg['oldLabor'] != null) {
-                            oldLabour = _toInt(reneg['oldLabor']);
-                          }
+                          int oldLabour = _toInt(
+                            reneg?['oldLabor'] ??
+                                job['lastCounterAmount'] ??
+                                job['currentLabour'] ??
+                                job['laborCost'] ??
+                                job['agreedPrice'] ??
+                                5000,
+                          );
 
                           int transport = _toInt(
                             job['transportFee'] ??

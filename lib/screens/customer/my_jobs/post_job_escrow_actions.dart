@@ -54,7 +54,11 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
     Map<String, dynamic> renegotiation,
     double oldPrice,
   ) async {
-    double newPrice = (renegotiation['newPrice'] ?? oldPrice).toDouble();
+    double newPrice =
+        (renegotiation['newPrice'] ??
+                renegotiation['lastCounterAmount'] ??
+                oldPrice)
+            .toDouble();
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'agreedPrice': newPrice,
       'totalCost': newPrice,
@@ -91,7 +95,15 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
     var reneg = j['renegotiation'] as Map<String, dynamic>?;
 
     int initialAmount =
-        (j['escrowAmount'] ?? j['agreedPrice'] ?? j['budgetMax'] ?? 0).toInt();
+        (j['escrowAmount'] ??
+                j['lastCounterAmount'] ??
+                j['laborCost'] ??
+                j['agreedPrice'] ??
+                j['acceptedBidAmount'] ??
+                j['budgetMax'] ??
+                j['budget'] ??
+                0)
+            .toInt();
     int extraAmount =
         (j['extraLaborAmount'] ??
                 reneg?['extraLabor'] ??

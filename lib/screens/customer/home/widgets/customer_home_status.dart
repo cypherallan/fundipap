@@ -102,17 +102,30 @@ class HomeStatusWidget extends StatelessWidget {
         status == 'awaiting_extra_escrow' ||
         status == 'awaiting_extra_payment';
 
+    // FIXED: Use lastCounterAmount first, never allow 0 fee/total
     int labour = toInt(
-      job['laborCost'] ?? job['agreedPrice'] ?? job['acceptedBidAmount'] ?? 0,
+      job['lastCounterAmount'] ??
+          job['laborCost'] ??
+          job['agreedPrice'] ??
+          job['acceptedBidAmount'] ??
+          job['lastCounterPrice'] ??
+          0,
     );
-    int transport = toInt(job['transportFee'] ?? 0);
-    int clientAppFee = toInt(job['clientAppFee'] ?? (labour * 0.05).round());
-    int totalToPay = toInt(
-      job['totalClientPays'] ??
-          job['totalCost'] ??
-          labour + transport + clientAppFee,
-    );
+    int transport = toInt(job['transportFee'] ?? job['transport'] ?? 100);
+
+    int rawFee = toInt(job['clientAppFee'] ?? -1);
+    int clientAppFee = rawFee <= 0 && labour > 0
+        ? (labour * 0.05).round()
+        : rawFee;
+    if (clientAppFee == 0 && labour > 0) clientAppFee = (labour * 0.05).round();
+
+    int rawTotal = toInt(job['totalClientPays'] ?? job['totalCost'] ?? -1);
+    int totalToPay = rawTotal <= 0
+        ? labour + transport + clientAppFee
+        : rawTotal;
+
     int alreadyLocked = toInt(job['escrowAmount'] ?? 0);
+    if (alreadyLocked <= 0) alreadyLocked = totalToPay;
     bool escrowHeldFlag =
         toBool(job['escrowHeld']) || job['escrowPaidAt'] != null;
     bool escrowDone =

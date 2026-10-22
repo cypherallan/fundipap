@@ -26,7 +26,9 @@ class TimelineActions {
     final snap = await jobRef.get();
     final job = snap.data() as Map<String, dynamic>;
 
-    int oldLabor = toInt(job['laborCost'] ?? job['agreedPrice'] ?? 0);
+    int oldLabor = toInt(
+      job['lastCounterAmount'] ?? job['laborCost'] ?? job['agreedPrice'] ?? 0,
+    );
     int transport = toInt(job['transportFee'] ?? 164);
     String fundiId = (job['assignedFundiId'] ?? job['fundiId'] ?? '')
         .toString();
@@ -168,7 +170,10 @@ class TimelineActions {
     final bidData = bidSnap.data();
 
     int labour = toInt(
-      bidData['agreedPrice'] ??
+      job['lastCounterAmount'] ??
+          bidData['lastCounterAmount'] ??
+          bidData['lastCounterPrice'] ??
+          bidData['agreedPrice'] ??
           bidData['price'] ??
           job['laborCost'] ??
           job['agreedPrice'] ??
@@ -264,7 +269,13 @@ class TimelineActions {
       else if (fundiData['badgeLevel'] == 'none')
         fundiPct = 15;
 
-      int labour = toInt(j['laborCost'] ?? j['agreedPrice'] ?? 0);
+      int labour = toInt(
+        j['lastCounterAmount'] ??
+            j['laborCost'] ??
+            j['agreedPrice'] ??
+            j['acceptedBidAmount'] ??
+            0,
+      );
       int transport = toInt(j['transportFee'] ?? 100);
       int clientAppFee = (labour * 0.05).round();
       int fundiAppFee = (labour * fundiPct / 100).round();

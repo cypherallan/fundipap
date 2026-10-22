@@ -111,14 +111,15 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
     await bidRef.update({
       'status': 'countered',
       'lastCounterPrice': newPrice,
+      'lastCounterAmount': newPrice, // FIXED: save both names
       'lastCounterBy': uid,
       'lastCounterAt': FieldValue.serverTimestamp(),
     });
+
     var jobSnap = await FirebaseFirestore.instance
         .collection('jobs')
         .doc(jobId)
         .get();
-
     var bidSnap = await bidRef.get();
     var bidData = bidSnap.data() as Map<String, dynamic>?;
     var transport = await TransportCalculator.calc(
@@ -127,18 +128,24 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
     );
     int transportFee = transport['fee'] as int;
     if (transportFee < 100) transportFee = 100;
+
     var jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
+    // FIXED: Also save counter to job, not just bid
     await jobRef.update({
       'transportFee': transportFee,
       'transportDistanceKm': transport['km'],
       'transportMode': transport['mode'],
       'transportLocked': true,
+      'lastCounterAmount': newPrice, // FIXED
+      'lastCounterPrice': newPrice, // FIXED
+      'lastCounterBy': uid,
+      'clientCounterAmount': newPrice,
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
     var hasReneg = (jobSnap.data()?['renegotiation']?['requested'] == true);
     if (hasReneg) {
-      await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      await jobRef.update({
         'status': 'negotiating',
         'renegotiation.status': 'countered_by_client',
         'renegotiation.newPrice': newPrice,
@@ -153,10 +160,9 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
             'at': DateTime.now().toIso8601String(),
           },
         ]),
-        'updatedAt': FieldValue.serverTimestamp(),
       });
     } else {
-      await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+      await jobRef.update({
         'status': 'negotiating',
         'renegotiation': {'requested': false},
         'priceHistory': FieldValue.arrayUnion([
@@ -167,7 +173,6 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
             'at': DateTime.now().toIso8601String(),
           },
         ]),
-        'updatedAt': FieldValue.serverTimestamp(),
       });
     }
   }
@@ -181,12 +186,19 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
     var jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
     var jobSnap = await jobRef.get();
     var jobData = jobSnap.data() ?? {};
+
+    // FIXED: Priority is lastCounterAmount (5000) from job, not old bid price
     double finalPrice =
-        (bidData['lastCounterPrice'] ??
+        (jobData['lastCounterAmount'] ??
+                jobData['lastCounterPrice'] ??
+                bidData['lastCounterAmount'] ??
+                bidData['lastCounterPrice'] ??
                 bidData['price'] ??
                 jobData['budget'] ??
                 0)
             .toDouble();
+
+    if (finalPrice <= 0) finalPrice = (jobData['budgetMax'] ?? 1000).toDouble();
 
     var transport = await TransportCalculator.calc(
       jobData: jobData,
@@ -198,7 +210,6 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
     String mode = transport['mode'] as String;
 
     int labour = finalPrice.toInt();
-    if (labour == 0) labour = (jobData['budgetMax'] ?? 1000) as int;
     int clientAppFee = (labour * 0.05).round();
     int fundiAppFee = (labour * 0.05).round();
     int adminComm = clientAppFee + fundiAppFee;
@@ -212,6 +223,8 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
       'acceptedBidId': bidRef.id,
       'agreedPrice': labour,
       'laborCost': labour,
+      'acceptedBidAmount': labour,
+      'lastCounterAmount': labour, // keep in sync
       'transportFee': transportFee,
       'transportDistanceKm': km,
       'transportMode': mode,
@@ -227,12 +240,11 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
         'appFee': -fundiAppFee,
         'total': fundiPayout,
       },
-      'escrowAmount': 0,
+      'escrowAmount': totalLocked, // FIXED: was 0, now totalLocked
       'escrowStatus': 'pending',
       'escrowJob': labour,
       'escrowTransport': transportFee,
       'status': 'pending_escrow',
-      'acceptedBidAmount': labour,
       'updatedAt': FieldValue.serverTimestamp(),
       'fundiHasUnread': true,
     });

@@ -42,7 +42,14 @@ class ClientConfirmedTab extends StatelessWidget {
         var doc = docs[i];
         var job = doc.data() as Map<String, dynamic>;
         var jobId = doc.id;
-        double agreed = (job['agreedPrice'] ?? job['budget'] ?? 0).toDouble();
+        double agreed =
+            (job['lastCounterAmount'] ??
+                    job['laborCost'] ??
+                    job['agreedPrice'] ??
+                    job['acceptedBidAmount'] ??
+                    job['budget'] ??
+                    0)
+                .toDouble();
         String escrow = job['escrowStatus'] ?? 'pending';
         String fundiName = (job['assignedFundiName'] ?? 'Fundi').toString();
         var reneg = job['renegotiation'] as Map<String, dynamic>?;
@@ -50,7 +57,12 @@ class ClientConfirmedTab extends StatelessWidget {
         String status = (job['status'] ?? '').toString();
 
         int initialAmt =
-            (job['escrowAmount'] ?? job['agreedPrice'] ?? agreed.toInt() ?? 0)
+            (job['escrowAmount'] ??
+                    job['lastCounterAmount'] ??
+                    job['laborCost'] ??
+                    job['agreedPrice'] ??
+                    agreed.toInt() ??
+                    0)
                 .toInt();
         int extraAmt = (job['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0)
             .toInt();

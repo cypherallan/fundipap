@@ -180,7 +180,10 @@ class FundiConfirmedTab extends StatelessWidget {
               'job_completed',
             ].contains((job['status'] ?? '').toString());
             int agreedPrice =
-                (job['agreedPrice'] ??
+                (job['lastCounterAmount'] ??
+                        job['lastCounterPrice'] ??
+                        job['laborCost'] ??
+                        job['agreedPrice'] ??
                         job['acceptedBidAmount'] ??
                         job['fundiBidAmount'] ??
                         job['budget'] ??

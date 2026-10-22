@@ -89,9 +89,11 @@ class ClientCancelCalculator {
 
     int oldLabour = _toInt(
       reneg?['oldLabor'] ??
+          job['lastCounterAmount'] ?? // 5000 FIRST!
+          job['laborCost'] ??
+          job['agreedPrice'] ??
           job['acceptedBidAmount'] ??
           job['currentLabour'] ??
-          job['agreedPrice'] ??
           0,
     );
     int extraLabour = _toInt(
@@ -116,7 +118,12 @@ class ClientCancelCalculator {
       totalLabour = oldLabour + extraLabour; // 5000+1000=6000
     }
     if (totalLabour == 0) {
-      totalLabour = _toInt(job['laborCost'] ?? job['agreedPrice'] ?? oldLabour);
+      totalLabour = _toInt(
+        job['lastCounterAmount'] ??
+            job['laborCost'] ??
+            job['agreedPrice'] ??
+            oldLabour,
+      );
     }
 
     int transport = _toInt(

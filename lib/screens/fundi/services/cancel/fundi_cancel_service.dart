@@ -187,7 +187,18 @@ class FundiCancelService {
 
     String reason = fundiReasons[0];
     final otherCtrl = TextEditingController();
-    int escrowAmount = _toInt(job['escrowAmount'] ?? 0);
+    int escrowAmount = _toInt(
+      job['escrowAmount'] ??
+              job['totalClientPays'] ??
+              job['totalCost'] ??
+              job['lastCounterAmount'] != null
+          ? (job['lastCounterAmount'] as int) +
+                ((job['lastCounterAmount'] as int) * 0.07).round()
+          : null ?? job['laborCost'] != null
+          ? (job['laborCost'] as int) +
+                ((job['laborCost'] as int) * 0.07).round()
+          : null ?? job['agreedPrice'] ?? 0,
+    );
     bool priceRequestPending = _isFundiPriceRequestPending(job);
 
     await showDialog(

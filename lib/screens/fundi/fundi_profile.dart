@@ -7,6 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../theme/app_theme.dart';
 import '../../data/job_taxonomy.dart';
+import 'package:file_picker/file_picker.dart' as fp;
 
 class FundiProfile extends StatefulWidget {
   const FundiProfile({super.key});
@@ -208,17 +209,23 @@ class _FundiProfileState extends State<FundiProfile> {
   }
 
   Future<void> _pickAndUpload(String field) async {
-    var file = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 70,
+    var result = await (fp.FilePicker as dynamic).platform.pickFiles(
+      type: fp.FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
+      withData: false,
     );
-    if (file == null) return;
+    if (result == null || result.files.isEmpty) return;
+    var picked = result.files.first;
+    var path = picked.path;
+    if (path == null) return;
+
     try {
       var uid = FirebaseAuth.instance.currentUser!.uid;
+      var ext = picked.extension ?? 'pdf';
       var ref = FirebaseStorage.instance.ref().child(
-        'fundi_docs/$uid/${field}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        'fundi_docs/$uid/${field}_${DateTime.now().millisecondsSinceEpoch}.$ext',
       );
-      await ref.putFile(File(file.path));
+      await ref.putFile(File(path));
       var url = await ref.getDownloadURL();
       await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
         field: FieldValue.arrayUnion([url]),
@@ -646,16 +653,25 @@ class _FundiProfileState extends State<FundiProfile> {
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              height: 48,
               child: ElevatedButton(
                 onPressed: _save,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: FundipapColors.blackGray,
                   foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 54),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 14,
+                    horizontal: 16,
+                  ),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 child: Text(
-                  'Update Public Profile - 24 Categories',
-                  style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+                  'Update Profile',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ),

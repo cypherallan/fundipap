@@ -12,7 +12,11 @@ mixin ActionsMixin
     setState(() => loading = true);
     try {
       int oldLabor = _toInt(
-        job['agreedPrice'] ??
+        job['lastCounterAmount'] ??
+            widget.job['lastCounterAmount'] ??
+            job['laborCost'] ??
+            widget.job['laborCost'] ??
+            job['agreedPrice'] ??
             widget.job['agreedPrice'] ??
             newLabor - extraLabor,
       );
@@ -98,7 +102,16 @@ mixin ActionsMixin
   ) async {
     setState(() => loading = true);
     try {
-      int oldLabor = newLabor - extraLabor;
+      int oldLabor = _toInt(
+        job['lastCounterAmount'] ??
+            widget.job['lastCounterAmount'] ??
+            job['laborCost'] ??
+            widget.job['laborCost'] ??
+            job['agreedPrice'] ??
+            widget.job['agreedPrice'] ??
+            0,
+      );
+      if (oldLabor == 0) oldLabor = newLabor - extraLabor;
       int oldClientFee = (oldLabor * 0.05).round();
       int newClientFee = (newLabor * 0.05).round();
       int newFundiFee = (newLabor * 0.05).round();

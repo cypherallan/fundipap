@@ -70,9 +70,12 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
         'subcategoryName': oldJob['subcategoryName'],
         'faultId': oldJob['faultId'],
         'budget':
+            oldJob['lastCounterAmount'] ??
             oldJob['budget'] ??
             oldJob['currentLabour'] ??
-            oldJob['agreedPrice'],
+            oldJob['agreedPrice'] ??
+            oldJob['laborCost'] ??
+            0,
         'transportFee': oldJob['transportFee'] ?? 0,
         'images': oldJob['images'] ?? [],
         'location': oldJob['location'],
@@ -233,7 +236,7 @@ class _ClientCancelledTabState extends State<ClientCancelledTab> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  'Labour: KES ${job['currentLabour'] ?? job['agreedPrice'] ?? job['budget'] ?? 0}',
+                                  'Labour: KES ${job['lastCounterAmount'] ?? job['currentLabour'] ?? job['laborCost'] ?? job['agreedPrice'] ?? job['budget'] ?? 0}',
                                   style: GoogleFonts.inter(fontSize: 11),
                                 ),
                                 Text(

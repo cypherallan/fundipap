@@ -59,15 +59,27 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
     int? transportFee,
     int? labor,
   }) async {
+    // --- FIXED: Priority is lastCounterAmount (5000) not budgetMax (12000) ---
     int finalPrice =
         labor ??
-        (bidData['amount'] ??
+        (jobData['lastCounterAmount'] ??
+                jobData['lastCounterPrice'] ??
+                bidData['lastCounterAmount'] ??
+                bidData['agreedPrice'] ??
+                bidData['clientCounterAmount'] ??
+                bidData['lastCounterPrice'] ??
+                bidData['amount'] ??
                 bidData['bidAmount'] ??
                 bidData['price'] ??
+                jobData['agreedPrice'] ??
                 jobData['budget'] ??
                 0)
             .toInt();
-    if (finalPrice == 0) finalPrice = (jobData['budgetMax'] ?? 1000).toInt();
+
+    // Only fallback to budgetMax if REALLY nothing else
+    if (finalPrice == 0) {
+      finalPrice = (jobData['budgetMax'] ?? 1000).toInt();
+    }
 
     var t = await TransportCalculator.calc(
       jobData: jobData,
@@ -89,7 +101,7 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
       'assignedFundiName': bidData['fundiName'],
       'assignedFundiId': bidData['fundiId'],
       'agreedPrice': finalPrice,
-      'laborCost': finalPrice,
+      'laborCost': finalPrice, // will be 5000 now
       'transportFee': transFee,
       'transportDistanceKm': km,
       'transportMode': mode,
@@ -97,7 +109,7 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
       'fundiAppFee': fAppFee,
       'adminCommission': adminComm,
       'totalCost': totalLocked,
-      'totalClientPays': totalLocked,
+      'totalClientPays': totalLocked, // will be 5000+100+250 = 5350, not 0
       'fundiReceives': fundiPayout,
       'fundiReceivesBreakdown': {
         'labour': finalPrice,
@@ -105,10 +117,11 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
         'appFee': -fAppFee,
         'total': fundiPayout,
       },
-      'escrowAmount': 0,
+      'escrowAmount': totalLocked, // FIXED: was 0, now totalLocked
       'escrowStatus': 'pending',
       'acceptedBidAmount': finalPrice,
       'acceptedBidId': bidId,
+      'lastCounterAmount': finalPrice, // keep in sync
       'updatedAt': FieldValue.serverTimestamp(),
       'fundiHasUnread': true,
     });

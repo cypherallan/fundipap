@@ -568,7 +568,15 @@ class DisputeService {
         DateTime.now().add(Duration(hours: 48)),
       ),
       'escrowStatus': jobData['escrowStatus'] ?? 'unknown',
-      'escrowAmount': jobData['escrowAmount'] ?? jobData['agreedPrice'] ?? 0,
+      'escrowAmount':
+          jobData['escrowAmount'] ??
+          jobData['totalClientPays'] ??
+          jobData['totalCost'] ??
+          jobData['lastCounterAmount'] ??
+          jobData['laborCost'] ??
+          jobData['agreedPrice'] ??
+          jobData['acceptedBidAmount'] ??
+          0,
       'createdAt': FieldValue.serverTimestamp(),
     });
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({

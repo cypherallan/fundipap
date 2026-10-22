@@ -427,9 +427,13 @@ class _RateFundiScreenState extends State<RateFundiScreen> {
       var v =
           _job?['totalReleasedAmount'] ??
           _job?['fundiPayoutAmount'] ??
+          _job?['fundiReceives'] ??
           _job?['totalCost'] ??
           _job?['escrowAmount'] ??
+          _job?['lastCounterAmount'] ??
+          _job?['laborCost'] ??
           _job?['agreedPrice'] ??
+          _job?['acceptedBidAmount'] ??
           0;
       if (v is int) {
         paid = v;

@@ -128,7 +128,10 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                 if (h.length >= 2) prev = _toInt(h[h.length - 2]['price']);
               } else {
                 amt = _toInt(
-                  bid['clientCounterAmount'] ?? bid['lastCounterAmount'] ?? 0,
+                  bid['lastCounterAmount'] ??
+                      bid['clientCounterAmount'] ??
+                      bid['lastCounterPrice'] ??
+                      0,
                 );
                 prev = _toInt(bid['fundiCounterAmount'] ?? bid['price'] ?? 0);
               }
@@ -153,9 +156,11 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
               });
             } else if (status == 'counter_accepted_by_fundi') {
               int amt = _toInt(
-                bid['agreedPrice'] ??
-                    bid['price'] ??
+                bid['lastCounterAmount'] ??
+                    bid['lastCounterPrice'] ??
+                    bid['agreedPrice'] ??
                     bid['clientCounterAmount'] ??
+                    bid['price'] ??
                     0,
               );
               _acceptedCounters.add({

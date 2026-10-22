@@ -96,35 +96,56 @@ class TimelineContext {
     bool needsExtraEscrow = renegStatus.contains('pending_extra_escrow');
 
     int labour = toInt(
-      job['laborCost'] ??
+      job['lastCounterAmount'] ??
           job['agreedPrice'] ??
+          job['laborCost'] ??
           job['acceptedBidAmount'] ??
-          job['lastCounterAmount'] ??
+          job['lastCounterPrice'] ??
           0,
     );
-    int transport = toInt(job['transportFee'] ?? 100);
+
+    int transport = toInt(job['transportFee'] ?? job['transport'] ?? 100);
     double km = toDouble(job['transportDistanceKm'] ?? 0);
     String mode = (job['transportMode'] ?? 'boda').toString();
     String transportLabel = km > 0
         ? 'Transport cost ($mode ${km.toStringAsFixed(1)}km):'
         : 'Transport cost ($mode):';
-    int clientAppFee = toInt(job['clientAppFee'] ?? (labour * 0.05).round());
-    int fundiAppFee = toInt(job['fundiAppFee'] ?? (labour * 0.05).round());
-    int totalToPay = toInt(
-      job['totalClientPays'] ??
-          job['totalCost'] ??
-          labour + transport + clientAppFee,
-    );
+
+    int rawClientFee = toInt(job['clientAppFee'] ?? -1);
+    int clientAppFee = rawClientFee <= 0 && labour > 0
+        ? (labour * 0.05).round()
+        : rawClientFee;
+
+    int rawFundiFee = toInt(job['fundiAppFee'] ?? -1);
+    int fundiAppFee = rawFundiFee <= 0 && labour > 0
+        ? (labour * 0.05).round()
+        : rawFundiFee;
+
+    int rawTotal = toInt(job['totalClientPays'] ?? job['totalCost'] ?? -1);
+    int totalToPay = rawTotal <= 0
+        ? labour + transport + clientAppFee
+        : rawTotal;
+
     double agreed = totalToPay.toDouble();
-    int alreadyLocked = toInt(job['escrowAmount'] ?? 0);
+
+    // FIXED: alreadyLocked is ONLY real locked amount, never fallback to totalToPay
+    int alreadyLocked = toInt(
+      job['escrowAmount'] ??
+          job['lockedEscrow'] ??
+          job['escrowLockedAmount'] ??
+          0,
+    );
+
     bool escrowHeldFlag =
         toBool(job['escrowHeld']) || job['escrowPaidAt'] != null;
+
+    // FIXED: escrowDone ONLY based on escrow status, NOT alreadyLocked > 0
     bool escrowDone =
         ['held', 'paid', 'released'].contains(escrow) ||
         escrowHeldFlag ||
-        alreadyLocked > 0 ||
         status == 'escrow_locked' ||
         status == 'completed';
+
     bool clientRated = toBool(job['clientRated']);
     String fundiId =
         (job['fundiId'] ?? job['assignedFundiId'] ?? job['acceptedBidId'] ?? '')

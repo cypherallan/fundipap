@@ -48,7 +48,14 @@ class CustomerMyJobs extends StatelessWidget {
         .toString();
 
     int initialAmount =
-        (j['escrowAmount'] ?? j['agreedPrice'] ?? j['budgetMax'] ?? 0).toInt();
+        (j['escrowAmount'] ??
+                j['lastCounterAmount'] ??
+                j['laborCost'] ??
+                j['agreedPrice'] ??
+                j['acceptedBidAmount'] ??
+                j['budgetMax'] ??
+                0)
+            .toInt();
     int extraAmount =
         (j['extraLaborAmount'] ??
                 reneg?['extraLabor'] ??
@@ -172,7 +179,13 @@ class CustomerMyJobs extends StatelessWidget {
             bool siteDone = j['siteVisitDone'] ?? false;
             var reneg = j['renegotiation'] as Map<String, dynamic>?;
             int initialAmt =
-                (j['escrowAmount'] ?? j['agreedPrice'] ?? j['budgetMax'] ?? 0)
+                (j['escrowAmount'] ??
+                        j['lastCounterAmount'] ??
+                        j['laborCost'] ??
+                        j['agreedPrice'] ??
+                        j['acceptedBidAmount'] ??
+                        j['budgetMax'] ??
+                        0)
                     .toInt();
             int extraAmt = (j['extraLaborAmount'] ?? reneg?['extraLabor'] ?? 0)
                 .toInt();
@@ -354,7 +367,12 @@ class CustomerMyJobs extends StatelessWidget {
                         ),
                         onPressed: () => _payToEscrow(
                           doc.id,
-                          (j['agreedPrice'] ?? j['budgetMax'] ?? 1000)
+                          (j['lastCounterAmount'] ??
+                                  j['laborCost'] ??
+                                  j['agreedPrice'] ??
+                                  j['acceptedBidAmount'] ??
+                                  j['budgetMax'] ??
+                                  1000)
                               .toDouble(),
                         ),
                         child: Text(

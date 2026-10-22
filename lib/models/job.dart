@@ -20,40 +20,40 @@ class Job {
   final String description;
   final String customOtherText;
 
-  // --- NEW TAXONOMY (24 categories) - SYSTEM DICTATES PRICE ---
-  final String categoryId; // e.g. plumbing_waterworks
-  final String categorySlug; // e.g. plumbing (backward compat)
-  final String categoryName; // e.g. Plumbing & Waterworks
+  final int? lastCounterAmount;
+  final int? laborCost;
+  final int? agreedPrice;
+  final int? acceptedBidAmount;
+
+  final String categoryId;
+  final String categorySlug;
+  final String categoryName;
   final String? subcategoryId;
   final String? subcategoryName;
   final String? faultId;
   final String? faultName;
 
-  // --- SYSTEM PRICING - CLIENT/FUNDI NEVER DICTATE ---
   final int systemPriceMin;
   final int systemPriceMax;
   final int systemPriceAvg;
   final int siteVisitFee;
-  final int estimatedTotal; // avg + siteVisit
+  final int estimatedTotal;
   final String pricingVersion;
-  final String priceDictatedBy; // always 'system'
+  final String priceDictatedBy;
   final bool requiresSiteVisit;
   final bool isOtherCategory;
 
-  // --- OLD COMPAT FIELDS (auto-filled from system) ---
   final int budget;
   final int offeredPrice;
   final int? budgetMin;
   final int? budgetMax;
-  final int amount; // alias for budget for your old UI
+  final int amount;
 
-  // --- LOCATION ---
   final double? lat;
   final double? lng;
   final GeoPoint? clientLocation;
   final String? locationText;
 
-  // --- STATUS / ESCROW ---
   JobStatus status;
   final String escrowStatus;
   final String? extraEscrowStatus;
@@ -73,6 +73,10 @@ class Job {
     required this.title,
     required this.description,
     this.customOtherText = '',
+    this.lastCounterAmount,
+    this.laborCost,
+    this.agreedPrice,
+    this.acceptedBidAmount,
     required this.categoryId,
     required this.categorySlug,
     required this.categoryName,
@@ -111,7 +115,6 @@ class Job {
     this.createdAt,
   });
 
-  // System pricing resolver - NEVER takes input from client/fundi
   static Map<String, int> getSystemPrice(
     String categoryId,
     String subcategoryId,
@@ -136,11 +139,39 @@ class Job {
 
   factory Job.fromFirestore(DocumentSnapshot doc) {
     var d = doc.data() as Map<String, dynamic>;
+
+    int resolvedLastCounter = (d['lastCounterAmount'] as num?)?.toInt() ?? 0;
+    int resolvedLabor = (d['laborCost'] as num?)?.toInt() ?? 0;
+    int resolvedAgreed = (d['agreedPrice'] as num?)?.toInt() ?? 0;
+    int resolvedAccepted = (d['acceptedBidAmount'] as num?)?.toInt() ?? 0;
+    int resolvedBudget = (d['budget'] as num?)?.toInt() ?? 0;
+    int resolvedOffered =
+        (d['offeredPrice'] as num?)?.toInt() ?? resolvedBudget;
+
+    // Counter takes priority - this fixes 12000 bug
+    int effectiveBudget = resolvedLastCounter != 0
+        ? resolvedLastCounter
+        : resolvedLabor != 0
+        ? resolvedLabor
+        : resolvedAgreed != 0
+        ? resolvedAgreed
+        : resolvedAccepted != 0
+        ? resolvedAccepted
+        : resolvedBudget;
+
+    int effectiveAmount = effectiveBudget != 0
+        ? effectiveBudget
+        : resolvedOffered;
+
     return Job(
       id: doc.id,
       title: d['title'] ?? '',
       description: d['description'] ?? '',
       customOtherText: d['customOtherText'] ?? '',
+      lastCounterAmount: (d['lastCounterAmount'] as num?)?.toInt(),
+      laborCost: (d['laborCost'] as num?)?.toInt(),
+      agreedPrice: (d['agreedPrice'] as num?)?.toInt(),
+      acceptedBidAmount: (d['acceptedBidAmount'] as num?)?.toInt(),
       categoryId: d['categoryId'] ?? d['category'] ?? 'electrical',
       categorySlug: d['categorySlug'] ?? d['category'] ?? 'electrical',
       categoryName: d['categoryName'] ?? d['category'] ?? 'Electrical',
@@ -150,7 +181,9 @@ class Job {
       faultName: d['faultName'],
       systemPriceMin: (d['systemPriceMin'] ?? d['budgetMin'] ?? 0).toInt(),
       systemPriceMax: (d['systemPriceMax'] ?? d['budgetMax'] ?? 0).toInt(),
-      systemPriceAvg: (d['systemPriceAvg'] ?? d['budget'] ?? 0).toInt(),
+      systemPriceAvg: effectiveBudget != 0
+          ? effectiveBudget
+          : (d['systemPriceAvg'] ?? d['budget'] ?? 0).toInt(),
       siteVisitFee: (d['siteVisitFee'] ?? FundiTaxonomy.siteVisitFeeStandard)
           .toInt(),
       estimatedTotal: (d['estimatedTotal'] ?? 0).toInt(),
@@ -158,11 +191,11 @@ class Job {
       priceDictatedBy: d['priceDictatedBy'] ?? 'system',
       requiresSiteVisit: d['requiresSiteVisit'] ?? true,
       isOtherCategory: d['isOtherCategory'] ?? false,
-      budget: (d['budget'] ?? 0).toInt(),
-      offeredPrice: (d['offeredPrice'] ?? d['budget'] ?? 0).toInt(),
+      budget: effectiveBudget,
+      offeredPrice: effectiveBudget != 0 ? effectiveBudget : resolvedOffered,
       budgetMin: (d['budgetMin'] as num?)?.toInt(),
       budgetMax: (d['budgetMax'] as num?)?.toInt(),
-      amount: (d['budget'] ?? d['offeredPrice'] ?? 0).toInt(),
+      amount: effectiveAmount,
       lat: (d['lat'] ?? d['customerLat'])?.toDouble(),
       lng: (d['lng'] ?? d['customerLng'])?.toDouble(),
       clientLocation: d['clientLocation'] as GeoPoint?,
@@ -208,32 +241,18 @@ class Job {
     }
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'title': title,
-      'description': description,
-      'customOtherText': customOtherText,
-      'categoryId': categoryId,
-      'categorySlug': categorySlug,
-      'categoryName': categoryName,
-      'category': categorySlug, // backward compat
-      'subcategoryId': subcategoryId,
-      'subcategoryName': subcategoryName,
-      'faultId': faultId,
-      'faultName': faultName,
-      'systemPriceMin': systemPriceMin,
-      'systemPriceMax': systemPriceMax,
-      'systemPriceAvg': systemPriceAvg,
-      'siteVisitFee': siteVisitFee,
-      'estimatedTotal': estimatedTotal,
-      'pricingVersion': pricingVersion,
-      'priceDictatedBy': priceDictatedBy,
-      'requiresSiteVisit': requiresSiteVisit,
-      'isOtherCategory': isOtherCategory,
-      'budget': budget,
-      'offeredPrice': offeredPrice,
-      'budgetMin': budgetMin,
-      'budgetMax': budgetMax,
-    };
-  }
+  Map<String, dynamic> toMap() => {
+    'title': title,
+    'description': description,
+    'categoryId': categoryId,
+    'categorySlug': categorySlug,
+    'categoryName': categoryName,
+    'category': categorySlug,
+    'budget': budget,
+    'offeredPrice': offeredPrice,
+    'budgetMin': budgetMin,
+    'budgetMax': budgetMax,
+    'lastCounterAmount': lastCounterAmount,
+    'laborCost': laborCost,
+  };
 }

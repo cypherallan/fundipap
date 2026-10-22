@@ -105,12 +105,30 @@ FundiWaitingState? getFundiWaitingState({
   if (oldLaborTop > 0) {
     baseLabourTop = oldLaborTop;
   } else {
-    baseLabourTop = _toInt(job['laborCost'] ?? job['originalLaborCost'] ?? 0);
+    // FIXED: lastCounterAmount first
+    baseLabourTop = _toInt(
+      job['lastCounterAmount'] ??
+          job['lastCounterPrice'] ??
+          job['laborCost'] ??
+          job['originalLaborCost'] ??
+          0,
+    );
     if (baseLabourTop == 0) {
-      int maybeAgreed = _toInt(job['agreedPrice'] ?? job['price'] ?? 0);
+      int maybeAgreed = _toInt(
+        job['lastCounterAmount'] ??
+            job['agreedPrice'] ??
+            job['acceptedBidAmount'] ??
+            job['price'] ??
+            0,
+      );
       baseLabourTop = maybeAgreed - origExtraTop;
       if (baseLabourTop <= 0) {
-        baseLabourTop = _toInt(job['laborCost'] ?? job['agreedPrice'] ?? 0);
+        baseLabourTop = _toInt(
+          job['lastCounterAmount'] ??
+              job['laborCost'] ??
+              job['agreedPrice'] ??
+              0,
+        );
       }
     }
   }
@@ -123,8 +141,11 @@ FundiWaitingState? getFundiWaitingState({
   int labour = totalLabourTop > 0
       ? totalLabourTop
       : _toInt(
-          job['laborCost'] ??
+          job['lastCounterAmount'] ?? // FIXED FIRST
+              job['lastCounterPrice'] ??
+              job['laborCost'] ??
               job['agreedPrice'] ??
+              job['acceptedBidAmount'] ??
               job['price'] ??
               bid['price'] ??
               bid['amount'] ??
@@ -553,7 +574,9 @@ FundiWaitingState? getFundiWaitingState({
 
   if (bidStatus == 'pending' || bidStatus == 'sent' || bidStatus == '') {
     int hasAgreed = _toInt(
-      job['agreedPrice'] ??
+      job['lastCounterAmount'] ??
+          job['laborCost'] ??
+          job['agreedPrice'] ??
           job['acceptedBidAmount'] ??
           job['fundiBidAmount'] ??
           0,

@@ -32,7 +32,12 @@ class PartsSteps {
 
     if (isWaitingBuy) {
       final oldLabor = toInt(
-        c.reneg?['oldLabor'] ?? c.job['laborCost'] ?? c.job['agreedPrice'] ?? 0,
+        c.reneg?['oldLabor'] ??
+            c.job['lastCounterAmount'] ??
+            c.job['laborCost'] ??
+            c.job['agreedPrice'] ??
+            c.job['acceptedBidAmount'] ??
+            0,
       );
       final transportVal = toInt(c.job['transportFee'] ?? 0);
       final oldClientFee = (oldLabor * 0.05).round();

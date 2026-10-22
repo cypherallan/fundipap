@@ -48,7 +48,15 @@ export const autoCancelNoArrival = onSchedule({ schedule: 'every 5 minutes', reg
         if (startTime > cutoff) return;
         const siteDone = job.siteVisitDone === true || job.siteVisited === true || job.fundiArrivedAt != null;
         if (siteDone) return;
-        const total = job.escrowAmount || 0;
+        let total = Number(job.escrowAmount || job.totalClientPays || job.totalCost || 0);
+        if (total === 0) {
+            const base = Number(job.lastCounterAmount || job.laborCost || job.agreedPrice || 0);
+            const transport = Number(job.transportFee || job.transport || 0);
+            if (base > 0) {
+                const clientFee = Math.round(base * 0.05); // 5% client commission
+                total = base + clientFee + transport; // 5000 + 250 + transport = 5250-5350
+            }
+        }
         batch.update(doc.ref, {
             status: 'auto_cancelled_no_arrival', cancelled: true, autoCancelled: true,
             cancelledBy: 'system', cancelReason: 'Fundi took too long to arrive - 20km rule',
@@ -195,6 +203,17 @@ async function getFcmTokens(uid: string): Promise<string[]> {
     return [...set];
 }
 
+async function getAllAdminTokens(): Promise<string[]> {
+    const snap = await db().collection("users").where("role", "==", "admin").get();
+    const set = new Set<string>();
+    snap.forEach(doc => {
+        const d = doc.data() as any;
+        if (d.fcmToken) set.add(d.fcmToken);
+        if (Array.isArray(d.fcmTokens)) d.fcmTokens.forEach((t: string) => { if (t) set.add(t); });
+    });
+    return [...set];
+}
+
 async function sendPush(tokens: string[], title: string, body: string, data: any) {
     if (!tokens.length) return;
     try {
@@ -333,14 +352,14 @@ export const onBidPush = onDocumentWritten({ document: "jobs/{jobId}/bids/{bidId
     // FUNDI FLOW - LOCKED
     if (newS === "accepted" && oldS !== "accepted") {
         const tokens = await getFcmTokens(fundiId);
-        const agreed = after.agreedPrice || after.lastCounterAmount || after.clientCounterAmount || after.amount || after.bidAmount || 0;
+        const agreed = after.lastCounterAmount || after.laborCost || after.agreedPrice || after.clientCounterAmount || after.acceptedBidAmount || after.amount || 0;
         const escrowLock = Number(agreed) + Number(transport);
         await sendPush(tokens, "Bid accepted", `Bid accepted. Waiting for client to lock escrow KES ${escrowLock} • Tap to view`, { jobId, type: "accepted", escrow: escrowLock.toString() });
     }
 
     if ((newS.includes("counter_accepted_by_client") || newS === "counter_accepted") && !oldS.includes("counter_accepted")) {
         const tokens = await getFcmTokens(fundiId);
-        const agreed = after.agreedPrice || after.lastCounterAmount || after.fundiCounterAmount || after.amount || 0;
+        const agreed = after.lastCounterAmount || after.laborCost || after.agreedPrice || after.fundiCounterAmount || after.amount || 0;
         const escrowLock = Number(agreed) + Number(transport);
         await sendPush(tokens, "Counter accepted", `Client accepted KES ${agreed} • Waiting to lock escrow KES ${escrowLock}`, { jobId, type: "counter_accepted_by_client", escrow: escrowLock.toString() });
     }
@@ -441,7 +460,7 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const oldLaborFromRenego = Number((r as any).oldLabor ?? (r as any).oldLabour ?? 0);
     let baseLabor = 0;
     if (oldLaborFromRenego > 0) baseLabor = oldLaborFromRenego;
-    else baseLabor = Number(after.laborCost ?? after.originalLaborCost ?? 0) || (Number(after.agreedPrice || 0) - originalExtra) || Number(after.agreedPrice || after.clientCounterAmount || after.lastCounterAmount || 0);
+    else baseLabor = Number(after.lastCounterAmount ?? after.laborCost ?? after.originalLaborCost ?? 0) || (Number(after.agreedPrice || 0) - originalExtra) || Number(after.lastCounterAmount || after.laborCost || after.agreedPrice || after.clientCounterAmount || 0);
     const totalLabor = oldLaborFromRenego > 0 ? baseLabor + finalExtra : (baseLabor >= 6000 + finalExtra && finalExtra > 0 ? baseLabor : baseLabor + finalExtra);
     const fundiSees = baseLabor + transport;
 
@@ -528,5 +547,58 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
         await sendPush(fundiTokens, `Client released KES ${fundiReceives}`, `${title} • Tap to view receipt`, { jobId, type: "released" });
         await sendPush(clientTokens, `You released KES ${clientPays} • Completed`, `${title}`, { jobId, type: "released" });
         await db().collection('notifications').add({ toUserId: clientId, title: `You released KES ${clientPays} • Completed`, body: `${title} • Completed`, type: 'released', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
+    }
+});
+export const onDisputePush = onDocumentWritten({ document: "disputes/{disputeId}", region: "europe-west1" }, async (event) => {
+    const before = event.data?.before?.data() as any;
+    const after = event.data?.after?.data() as any; if (!after) return;
+    const disputeId = event.params.disputeId;
+    const oldS = (before?.status || "").toString();
+    const newS = (after.status || "").toString();
+    const fundiId = after.fundiId;
+    const clientId = after.clientId || after.customerId;
+
+    const fundiTokens = await getFcmTokens(fundiId);
+    const clientTokens = await getFcmTokens(clientId);
+    const adminTokens = await getAllAdminTokens();
+
+    // CASE 1: Client or Fundi raises dispute -> Admin only
+    if (!before) {
+        await sendPush(adminTokens, "New dispute raised", `${after.reason || 'New dispute'} • ${after.trade || ''} • Tap to review`, { disputeId, type: "new_dispute" });
+        return;
+    }
+
+    // CASE 2: Admin engaging with Fundi -> Fundi only
+    if (newS === 'redo_offered' && oldS !== 'redo_offered') {
+        await sendPush(fundiTokens, "Will you redo? 24h to respond", `Dispute ${disputeId.substring(0, 6)} • Admin asks if you will redo same job`, { disputeId, type: "redo_offered" });
+        return;
+    }
+    if (newS === 'redo_reminder_sent' && oldS !== 'redo_reminder_sent') {
+        await sendPush(fundiTokens, "Reminder: 6h left to respond", `Dispute ${disputeId.substring(0, 6)} • Respond or get strike`, { disputeId, type: "redo_reminder" });
+        return;
+    }
+
+    // CASE 3: Admin engaging with Client -> Client only
+    if (newS === 'admin_requesting_client_info' && oldS !== 'admin_requesting_client_info') {
+        await sendPush(clientTokens, "Admin needs more info", `Dispute ${disputeId.substring(0, 6)} • ${after.adminMessage || 'Please respond'}`, { disputeId, type: "admin_to_client" });
+        return;
+    }
+
+    // CASE 4: Fundi responds with reason -> Admin only
+    if (newS === 'fundi_responded' && oldS !== 'fundi_responded') {
+        await sendPush(adminTokens, "Fundi responded to dispute", `Dispute ${disputeId.substring(0, 6)} • ${after.fundiResponse || ''}`, { disputeId, type: "fundi_responded" });
+        return;
+    }
+
+    // CASE 5: Final resolution -> Fundi + Client (relevant to both)
+    if (newS === 'resolved_client_win_fundi_no_redo' && oldS !== 'resolved_client_win_fundi_no_redo') {
+        await sendPush(fundiTokens, "Strike: No redo response", `Dispute ${disputeId.substring(0, 6)} • KES ${after.pendingDeductionRemaining || 0} will be deducted from next jobs`, { disputeId, type: "strike_no_redo" });
+        await sendPush(clientTokens, "Dispute won - refund pending", `Dispute ${disputeId.substring(0, 6)} • KES ${after.pendingDeductionRemaining || 0} will be refunded from fundi's next jobs`, { disputeId, type: "client_win_no_redo" });
+        return;
+    }
+    if ((newS === 'resolved_client_win' || newS === 'resolved_fundi_win') && oldS !== newS) {
+        await sendPush(fundiTokens, newS === 'resolved_client_win' ? "Dispute lost" : "Dispute won", `Dispute ${disputeId.substring(0, 6)}`, { disputeId, type: newS });
+        await sendPush(clientTokens, newS === 'resolved_client_win' ? "Dispute won" : "Dispute lost", `Dispute ${disputeId.substring(0, 6)}`, { disputeId, type: newS });
+        return;
     }
 });

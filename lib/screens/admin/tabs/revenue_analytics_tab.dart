@@ -13,11 +13,20 @@ class _RevenueAnalyticsTabState extends State<RevenueAnalyticsTab> {
   String _filterCat = 'All';
 
   double _getAgreed(Map<String, dynamic> d) {
+    if (d['lastCounterAmount'] != null)
+      return (d['lastCounterAmount'] as num).toDouble();
+    if (d['laborCost'] != null) return (d['laborCost'] as num).toDouble();
     if (d['agreedAmount'] != null) return (d['agreedAmount'] as num).toDouble();
+    if (d['acceptedBidAmount'] != null)
+      return (d['acceptedBidAmount'] as num).toDouble();
     if (d['finalAmount'] != null) return (d['finalAmount'] as num).toDouble();
-    if (d['budget'] != null) return (d['budget'] as num).toDouble();
+    if (d['totalClientPays'] != null)
+      return (d['totalClientPays'] as num).toDouble() / 1.05;
     if (d['escrowAmount'] != null)
       return (d['escrowAmount'] as num).toDouble() / 1.05;
+    if (d['budget'] != null) return (d['budget'] as num).toDouble();
+    if (d['budgetMax'] != null) return (d['budgetMax'] as num).toDouble();
+    if (d['agreedPrice'] != null) return (d['agreedPrice'] as num).toDouble();
     return 0;
   }
 
