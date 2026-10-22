@@ -16,7 +16,7 @@ void addHistoryCards(
       iconColor: Colors.green,
       title: 'Escrow locked - Done KES ${c.fundiSeesWaiting}',
       message:
-          'Labour KES ${c.labour} + Transport KES ${c.transport} = KES ${c.fundiSeesWaiting} locked. You will receive KES ${c.fundiReceives} after fee KES ${c.fundiAppFee}',
+          'Labour KES ${c.labour} + Transport KES ${c.transport} = KES ${c.fundiSeesWaiting} locked.',
       time: 'Done',
       isDone: true,
     ),

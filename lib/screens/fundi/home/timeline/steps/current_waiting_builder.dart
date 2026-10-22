@@ -600,7 +600,7 @@ Widget? buildCurrentWaiting({
             ),
             const SizedBox(height: 6),
             Text(
-              'Labour KES $labour • You will receive KES $fundiReceives. Tap START JOB.',
+              'Labour KES $labour • Tap START JOB.',
               style: GoogleFonts.inter(fontSize: 11),
             ),
             const SizedBox(height: 12),
@@ -657,7 +657,7 @@ Widget? buildCurrentWaiting({
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'You are working - Labour KES $labour - You will receive KES $fundiReceives',
+                    'You are working - Labour KES $labour',
                     style: GoogleFonts.montserrat(
                       fontWeight: FontWeight.w800,
                       fontSize: 12,

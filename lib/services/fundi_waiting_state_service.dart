@@ -235,8 +235,8 @@ FundiWaitingState? getFundiWaitingState({
           ? 'Extra KES $extraApproved approved - Ready to start'
           : 'Site visited - Ready to start',
       message: extraApproved > 0
-          ? 'Extra labour KES $extraApproved approved. You will receive KES $fundiReceives. Tap START JOB'
-          : 'No materials needed. You will receive KES $fundiReceives. Tap START JOB',
+          ? 'Extra labour KES $extraApproved approved. Tap START JOB'
+          : 'No materials needed. Tap START JOB',
       price: fundiSees,
     );
   }
@@ -247,7 +247,7 @@ FundiWaitingState? getFundiWaitingState({
       !hasParts) {
     return FundiWaitingState(
       type: FundiWaitingType.siteVisited,
-      title: 'Ready to start work - You will receive KES $fundiReceives',
+      title: 'Ready to start work',
       message: 'Ready to start work',
       price: fundiSees,
     );
@@ -289,8 +289,7 @@ FundiWaitingState? getFundiWaitingState({
       return FundiWaitingState(
         type: FundiWaitingType.siteVisited,
         title: 'Client bought materials - Confirm receipt',
-        message:
-            'Client uploaded receipt • Tap to confirm and start • You will receive KES $fundiReceives',
+        message: 'Client uploaded receipt • Tap to confirm and start •',
         price: labour,
       );
     }
@@ -312,8 +311,8 @@ FundiWaitingState? getFundiWaitingState({
         type: FundiWaitingType.waitingNewPriceApproval,
         title: 'Waiting for client to buy materials',
         message: extra > 0
-            ? 'Client approved extra KES $extra • You will receive KES $fundiReceives • Waiting for receipt'
-            : 'Waiting for client receipt • You will receive KES $fundiReceives',
+            ? 'Client approved extra KES $extra'
+            : 'Waiting for client receipt',
         price: labour,
       );
     }
@@ -359,7 +358,7 @@ FundiWaitingState? getFundiWaitingState({
       lowPhase == 'in_progress') {
     return FundiWaitingState(
       type: FundiWaitingType.working,
-      title: 'You are working - You will receive KES $fundiReceives',
+      title: 'You are working',
       message: 'Working on this job',
       price: labour,
     );
@@ -544,8 +543,7 @@ FundiWaitingState? getFundiWaitingState({
   if (siteDone && !renegoPending && !renegoCountered) {
     return FundiWaitingState(
       type: FundiWaitingType.siteVisited,
-      title:
-          'Waiting for you to start work - You will receive KES $fundiReceives',
+      title: 'Waiting for you to start work',
       message: 'You visited site. Tap START JOB',
       price: fundiSees,
     );
