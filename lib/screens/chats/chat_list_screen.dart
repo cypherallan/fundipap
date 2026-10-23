@@ -33,7 +33,6 @@ class ChatListScreen extends StatelessWidget {
             .snapshots(),
         builder: (_, snap) {
           if (snap.hasError) {
-            debugPrint('Chat list error: ${snap.error}');
             return Center(
               child: Text(
                 'You have no messages from customers',

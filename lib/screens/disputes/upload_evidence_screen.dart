@@ -41,9 +41,7 @@ class _UploadEvidenceScreenState extends State<UploadEvidenceScreen> {
       try {
         var url = await _uploadFile(File(img.path), 'photos');
         setState(() => photoUrls.add(url));
-      } catch (e) {
-        debugPrint('Upload failed $e');
-      }
+      } catch (e) {}
     }
     setState(() => uploading = false);
   }
@@ -55,9 +53,7 @@ class _UploadEvidenceScreenState extends State<UploadEvidenceScreen> {
     try {
       var url = await _uploadFile(File(video.path), 'videos');
       setState(() => videoUrls.add(url));
-    } catch (e) {
-      debugPrint('Video upload failed $e');
-    }
+    } catch (e) {}
     setState(() => uploading = false);
   }
 
@@ -72,9 +68,7 @@ class _UploadEvidenceScreenState extends State<UploadEvidenceScreen> {
     try {
       var url = await _uploadFile(File(img.path), 'docs');
       setState(() => docUrls.add(url));
-    } catch (e) {
-      debugPrint('Doc upload failed $e');
-    }
+    } catch (e) {}
     setState(() => uploading = false);
   }
 

@@ -81,7 +81,6 @@ class LocationService {
   static Future<void> startTracking(String uid) async {
     if (_isTracking) await stopTracking(uid);
     _isTracking = true;
-    print("LOCATION START tracking uid=$uid");
     try {
       await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
         'isOnline': true,
@@ -105,9 +104,7 @@ class LocationService {
         'speed': pos.speed,
         'ts': ServerValue.timestamp,
       });
-    } catch (e) {
-      debugPrint("RTDB error: $e");
-    }
+    } catch (e) {}
   }
 
   static Future<void> _updateFirestoreThrottled(
@@ -116,7 +113,6 @@ class LocationService {
   ) async {
     try {
       final now = DateTime.now();
-      print("FIRESTORE THROTTLE CHECK dist lastLat=$_lastLat");
       if (_lastLat != null) {
         double dist = Geolocator.distanceBetween(
           _lastLat!,
@@ -125,7 +121,6 @@ class LocationService {
           pos.longitude,
         );
         if (dist < 50) {
-          print("FIRESTORE SKIP dist=$dist <50");
           return;
         }
         if (dist < 500 && now.difference(_lastFirestoreWrite).inSeconds < 60) {
@@ -137,7 +132,6 @@ class LocationService {
       _lastLat = pos.latitude;
       _lastLng = pos.longitude;
       _lastFirestoreWrite = now;
-      print("FIRESTORE WRITE fundis/$uid location $pos");
       GeoPoint geo = GeoPoint(pos.latitude, pos.longitude);
       await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
         'location': geo,

@@ -72,7 +72,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
   @override
   void initState() {
     super.initState();
-    print("FUNDI_HOME initState uid=${FirebaseAuth.instance.currentUser?.uid}");
     initOnlineStatus();
     _loadMe();
     _loadLocation();
@@ -127,18 +126,12 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
   Future<void> _loadMe() async {
     try {
       var uid = FirebaseAuth.instance.currentUser!.uid;
-      print("LOAD_ME START uid=$uid");
-      var result = await FundiBadgeService.recalcAndUpdate(uid);
-      print(
-        'LOAD_ME BADGE FIXED -> Level: ${result.fundiLevel} Badge: ${result.badgeLevel} Score: ${result.score}',
-      );
+      
       var doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .get();
-      print("LOAD_ME users/$uid exists=${doc.exists} data=${doc.data()}");
       if (!doc.exists) {
-        print("!!! ZOMBIE: users doc missing for $uid !!!");
         return;
       }
       var data = doc.data()!;
@@ -149,9 +142,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
         totalEarned = (data['totalEarned'] ?? 0).toDouble();
         mySkill = (data['skill'] ?? 'General').toString();
       });
-      print("LOAD_ME DONE me=${me?['name']} jobs=$completedJobs");
     } catch (e) {
-      print("LOAD_ME ERROR $e");
     }
   }
 
@@ -195,13 +186,11 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
     if (mounted) setState(() {});
 
     var uid = FirebaseAuth.instance.currentUser!.uid;
-    print("INIT LISTENERS uid=$uid");
     _bidsSub = FirebaseFirestore.instance
         .collectionGroup('bids')
         .where('fundiId', isEqualTo: uid)
         .snapshots()
         .listen((snap) {
-          print("BIDS SNAP: ${snap.docs.length} bids");
           _bids.clear();
           for (var b in snap.docs) {
             var bid = Map<String, dynamic>.from(b.data());
@@ -242,7 +231,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
         .where('assignedFundiId', isEqualTo: uid)
         .snapshots()
         .listen((snap) {
-          print("JOBS SNAP: ${snap.docs.length} assigned jobs");
           _jobsMap.clear();
           for (var d in snap.docs) {
             var job = d.data();
@@ -350,9 +338,6 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
 
   @override
   Widget build(BuildContext context) {
-    print(
-      "BUILD FundiHome me=${me?['name']} isOnline=$isOnline bids=${_bids.length} jobs=${_assignedJobs.length}",
-    );
     BadgeResult? badgeResult;
     if (me != null) {
       try {

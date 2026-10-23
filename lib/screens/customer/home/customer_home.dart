@@ -230,9 +230,7 @@ class _CustomerHomeState extends State<CustomerHome> {
         }
       }
       await batch.commit();
-    } catch (e) {
-      debugPrint('clear fundi failed $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> _loadMe() async {
