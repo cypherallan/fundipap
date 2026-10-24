@@ -7,7 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../theme/app_theme.dart';
 import '../../data/job_taxonomy.dart';
-import 'package:file_picker/file_picker.dart' as fp;
+import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 
 class FundiProfile extends StatefulWidget {
   const FundiProfile({super.key});
@@ -209,36 +209,45 @@ class _FundiProfileState extends State<FundiProfile> {
   }
 
   Future<void> _pickAndUpload(String field) async {
-    var result = await (fp.FilePicker as dynamic).platform.pickFiles(
-      type: fp.FileType.custom,
-      allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
-      withData: false,
-    );
-    if (result == null || result.files.isEmpty) return;
-    var picked = result.files.first;
-    var path = picked.path;
-    if (path == null) return;
-
     try {
-      var uid = FirebaseAuth.instance.currentUser!.uid;
-      var ext = picked.extension ?? 'pdf';
-      var ref = FirebaseStorage.instance.ref().child(
+      final List<PlatformFile> picked = await FilePickerPlatform.instance
+          .pickFiles(
+            type: FileType.custom,
+            allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
+          );
+
+      if (picked.isEmpty) return;
+      final file = picked.first;
+
+      if (file.path == null) {
+        throw 'No path - file could not be read';
+      }
+
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final ext = file.extension ?? 'pdf';
+      final ref = FirebaseStorage.instance.ref().child(
         'fundi_docs/$uid/${field}_${DateTime.now().millisecondsSinceEpoch}.$ext',
       );
-      await ref.putFile(File(path));
-      var url = await ref.getDownloadURL();
+
+      await ref.putFile(File(file.path!));
+
+      final url = await ref.getDownloadURL();
       await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
         field: FieldValue.arrayUnion([url]),
       }, SetOptions(merge: true));
-      if (!mounted) return;
-      _load();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('$field uploaded ✓')));
+
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$field uploaded ✓')));
+      }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      }
     }
   }
 
@@ -253,6 +262,23 @@ class _FundiProfileState extends State<FundiProfile> {
       selectedCategoryId,
       ...selectedCategoryIds,
     }.toList();
+
+    int maxJobs =
+        [data?['jobsCompleted'], data?['completedJobs'], data?['jobsDone']]
+            .where((e) => e != null)
+            .map((e) => (e as num).toInt())
+            .fold<int>(0, (a, b) => a > b ? a : b);
+
+    int maxRefs =
+        [
+              data?['referralYesCount'],
+              data?['referralCount'],
+              data?['referralsCount'],
+              data?['totalReferrals'],
+            ]
+            .where((e) => e != null)
+            .map((e) => (e as num).toInt())
+            .fold<int>(0, (a, b) => a > b ? a : b);
 
     await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
       'primaryCategoryId': selectedCategoryId,
@@ -278,10 +304,13 @@ class _FundiProfileState extends State<FundiProfile> {
       'experience': _expCtrl.text,
       'available': true,
       'updatedAt': FieldValue.serverTimestamp(),
-      'jobsCompleted': data?['jobsCompleted'] ?? 0,
+      'jobsCompleted': maxJobs,
+      'completedJobs': maxJobs,
+      'referralCount': maxRefs,
+      'referralYesCount': maxRefs,
       'fraudCount': data?['fraudCount'] ?? 0,
       'averageRating': data?['averageRating'] ?? data?['rating'] ?? 4.5,
-      'ratingCount': data?['ratingCount'] ?? 0,
+      'ratingCount': data?['ratingCount'] ?? data?['reviewsCount'] ?? 0,
     }, SetOptions(merge: true));
 
     await FirebaseFirestore.instance.collection('users').doc(uid).set({
@@ -308,7 +337,15 @@ class _FundiProfileState extends State<FundiProfile> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     var combined = {...?userData, ...?data};
-    var jobsDone = combined['jobsCompleted'] ?? 0;
+    var jobsDone =
+        [
+              combined['jobsCompleted'],
+              combined['completedJobs'],
+              combined['jobsDone'],
+            ]
+            .where((e) => e != null)
+            .map((e) => (e as num).toInt())
+            .fold<int>(0, (a, b) => a > b ? a : b);
     var rating = (combined['averageRating'] ?? combined['rating'] ?? 4.5)
         .toDouble();
     var fraud = combined['fraudCount'] ?? 0;
