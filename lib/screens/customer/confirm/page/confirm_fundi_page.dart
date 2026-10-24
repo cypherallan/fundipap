@@ -13,8 +13,6 @@ import '../profile/confirm_fundi_reviews.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../../../../services/job_cancel_watcher.dart';
-import '../../../../widgets/fundi_badge_chip.dart';
-import '../../../fundi/services/fundi_badge_service.dart';
 import '../../../../services/pricing_service.dart';
 
 class ConfirmFundiPage extends StatefulWidget {
@@ -315,24 +313,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         ? totalClientPays
         : labor + effectiveTransport + clientAppFee;
 
-    BadgeLevel bLevel;
-    FundiLevel fLevel;
-    try {
-      bLevel = BadgeLevel.values.byName(
-        (widget.bidData['badgeLevel'] ?? 'none').toString(),
-      );
-    } catch (_) {
-      bLevel = BadgeLevel.none;
-    }
-    try {
-      fLevel = FundiLevel.values.byName(
-        (widget.bidData['fundiLevel'] ?? 'L1_NEW').toString(),
-      );
-    } catch (_) {
-      fLevel = FundiLevel.L1_NEW;
-    }
-    int fundiCommPct = (widget.bidData['fundiCommissionPct'] ?? 10) as int;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF6F6F6),
       appBar: AppBar(
@@ -562,19 +542,6 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
         child: Column(
           children: [
             ConfirmFundiProfileCard(combined: combined),
-            const SizedBox(height: 8),
-            FundiBadgeChip(
-              level: bLevel,
-              fundiLevel: fLevel,
-              isVerified: widget.bidData['isVerifiedFundi'] ?? false,
-              isTrialGold: widget.bidData['isTrialGold'] ?? false,
-              referralCount: widget.bidData['referralCount'] ?? 0,
-              jobsDone:
-                  widget.bidData['completedJobs'] ??
-                  widget.bidData['fundiJobsCompleted'] ??
-                  0,
-              commissionPct: fundiCommPct,
-            ),
             const SizedBox(height: 12),
             ConfirmFundiDetailsSection(combined: combined),
             const SizedBox(height: 12),

@@ -150,45 +150,6 @@ class FundiBadgeChip extends StatelessWidget {
             ],
           ),
         ),
-        if (!compact && !hideCommission) ...[
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: commissionPct == 5
-                  ? Colors.green.shade50
-                  : commissionPct == 8
-                  ? Colors.grey.shade200
-                  : commissionPct == 10
-                  ? Colors.orange.shade50
-                  : Colors.red.shade50,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: commissionPct == 5
-                    ? Colors.green
-                    : commissionPct == 8
-                    ? Colors.grey
-                    : commissionPct == 10
-                    ? Colors.orange
-                    : Colors.red,
-              ),
-            ),
-            child: Text(
-              '$commissionPct% fee',
-              style: GoogleFonts.inter(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                color: commissionPct == 5
-                    ? Colors.green.shade800
-                    : commissionPct == 8
-                    ? Colors.black87
-                    : commissionPct == 10
-                    ? Colors.orange.shade800
-                    : Colors.red.shade800,
-              ),
-            ),
-          ),
-        ],
         if (jobsDone > 0 && !compact) ...[
           const SizedBox(width: 6),
           Text(
