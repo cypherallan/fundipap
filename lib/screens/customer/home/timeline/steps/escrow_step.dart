@@ -11,15 +11,25 @@ class EscrowSteps {
     final int oldLocked = c.reneg != null
         ? toInt(c.reneg?['oldLabor'] ?? 0)
         : 0;
-    final int extraReq = c.reneg != null
-        ? toInt(
-            c.reneg?['extraLabor'] ??
-                c.reneg?['approvedExtra'] ??
-                c.reneg?['counterExtraLabor'] ??
-                c.reneg?['fundiCounterExtraLabor'] ??
-                c.reneg?['clientCounterExtraLabor'] ??
-                0,
-          )
+       final int extraReq = c.reneg != null
+        ? (() {
+            int clientC = toInt(c.reneg?['clientCounterExtraLabor'] ?? 0);
+            int fundiC = toInt(c.reneg?['fundiCounterExtraLabor'] ?? 0);
+            if (c.renegStatus == 'countered_by_client') {
+              return clientC > 0
+                  ? clientC
+                  : toInt(c.reneg?['counterExtraLabor'] ?? c.reneg?['extraLabor'] ?? 0);
+            }
+            if (c.renegStatus == 'countered_by_fundi') {
+              return fundiC > 0
+                  ? fundiC
+                  : toInt(c.reneg?['extraLabor'] ?? 0);
+            }
+            int accepted = toInt(c.reneg?['acceptedCounterExtraLabor'] ?? 0);
+            if (accepted > 0) return accepted;
+            return toInt(
+                c.reneg?['counterExtraLabor'] ?? c.reneg?['extraLabor'] ?? 0);
+          })()
         : 0;
     final bool hasExtra = oldLocked > 0 && extraReq > 0;
     final int extraFee = hasExtra ? (extraReq * 0.05).round() : c.clientAppFee;
