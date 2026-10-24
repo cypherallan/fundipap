@@ -31,10 +31,30 @@ class ProfileUploads extends StatelessWidget {
     return c;
   }
 
-  Future<void> _openFile(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+  Future<void> _openFile(String url, BuildContext context) async {
+    if (url.isEmpty) return;
+    try {
+      final uri = Uri.parse(url);
+      // try external first (Chrome / PDF viewer)
+      bool launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        // fallback to in-app browser
+        launched = await launchUrl(uri, mode: LaunchMode.inAppWebView);
+      }
+      if (!launched && context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not open file: $url')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Open failed: $e')));
+      }
     }
   }
 
@@ -42,8 +62,9 @@ class ProfileUploads extends StatelessWidget {
     ext = ext.toLowerCase();
     if (ext.contains('pdf')) return Icons.picture_as_pdf;
     if (ext.contains('doc')) return Icons.description;
-    if (ext.contains('jpg') || ext.contains('jpeg') || ext.contains('png'))
+    if (ext.contains('jpg') || ext.contains('jpeg') || ext.contains('png')) {
       return Icons.image;
+    }
     return Icons.attach_file;
   }
 
@@ -117,11 +138,12 @@ class ProfileUploads extends StatelessWidget {
               .snapshots(),
           builder: (_, snap) {
             if (!snap.hasData) return const CircularProgressIndicator();
-            if (snap.data!.docs.isEmpty)
+            if (snap.data!.docs.isEmpty) {
               return Text(
                 'No feedbacks yet',
                 style: GoogleFonts.inter(fontSize: 11, color: Colors.black45),
               );
+            }
             return Column(
               children: snap.data!.docs.map((d) {
                 var r = d.data() as Map<String, dynamic>;
@@ -275,7 +297,7 @@ class ProfileUploads extends StatelessWidget {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.open_in_new, size: 18),
-                      onPressed: () => _openFile(url),
+                      onPressed: () => _openFile(url, context),
                     ),
                     IconButton(
                       icon: const Icon(
@@ -295,7 +317,7 @@ class ProfileUploads extends StatelessWidget {
                     ),
                   ],
                 ),
-                onTap: () => _openFile(url),
+                onTap: () => _openFile(url, context),
               ),
             );
           }),
