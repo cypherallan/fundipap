@@ -279,16 +279,13 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
             );
             timeline = [locationBanner, waitingCounter, ...timeline];
           } else if (isRenegFundiCountered) {
-            int clientPrev = _toInt(
-              reneg?['clientCounterExtraLabor'] ??
-                  reneg?['counterExtraLabor'] ??
-                  0,
-            );
+            int clientPrev = _toInt(reneg?['clientCounterExtraLabor'] ?? 0);
             int fundiNew = _toInt(
-              reneg?['extraLabor'] ?? reneg?['fundiCounterExtraLabor'] ?? 0,
+              reneg?['fundiCounterExtraLabor'] ?? reneg?['extraLabor'] ?? 0,
             );
             int fundiNewToLock = _toInt(
-              reneg?['counterExtraToLock'] ??
+              reneg?['fundiCounterExtraToLock'] ??
+                  reneg?['extraToLock'] ??
                   fundiNew + (fundiNew * 0.05).round(),
             );
             Widget fundiCounterCard = Container(
@@ -364,6 +361,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
                               }
                               return;
                             }
+                            int newToLock = newAmt + (newAmt * 0.05).round();
                             await FirebaseFirestore.instance
                                 .collection('jobs')
                                 .doc(widget.jobId)
@@ -371,8 +369,10 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
                                   'renegotiation.counterExtraLabor': newAmt,
                                   'renegotiation.clientCounterExtraLabor':
                                       newAmt,
-                                  'renegotiation.counterExtraToLock':
-                                      newAmt + (newAmt * 0.05).round(),
+                                  'renegotiation.extraToLock': newToLock,
+                                  'renegotiation.counterExtraToLock': newToLock,
+                                  'renegotiation.clientCounterExtraToLock':
+                                      newToLock,
                                   'renegotiation.status': 'countered_by_client',
                                   'renegotiation.currentPhase':
                                       'countered_by_client',

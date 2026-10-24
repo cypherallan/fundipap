@@ -49,10 +49,30 @@ Future<void> counterAsFundi(
   final job = jobSnap.data() as Map<String, dynamic>;
   final renego = job['renegotiation'] as Map<String, dynamic>? ?? {};
   int round = (renego['counterRound'] ?? 0) + 1;
-  if (round > 3) return;
+  if (round > 3) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Max 3 counters reached')));
+    }
+    return;
+  }
+  int clientLastCounter =
+      (renego['clientCounterExtraLabor'] ??
+              renego['counterExtraLabor'] ??
+              renego['extraLabor'] ??
+              0)
+          as int;
+  int newToLock = newAmt + (newAmt * 0.05).round();
   await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
     'renegotiation.extraLabor': newAmt,
     'renegotiation.counterExtraLabor': newAmt,
+    'renegotiation.fundiCounterExtraLabor': newAmt,
+    'renegotiation.clientCounterExtraLabor': clientLastCounter,
+    'renegotiation.extraToLock': newToLock,
+    'renegotiation.counterExtraToLock': newToLock,
+    'renegotiation.fundiCounterExtraToLock': newToLock,
+    'renegotiation.counteredExtraRequested': newAmt,
     'renegotiation.status': 'countered_by_fundi',
     'renegotiation.currentPhase': 'countered_by_fundi',
     'renegotiation.counterRound': round,
@@ -68,9 +88,10 @@ Future<void> counterAsFundi(
     await FirebaseFirestore.instance.collection('notifications').add({
       'jobId': jobId,
       'toUserId': clientId,
-      'type': 'fundi_counter_extra',
-      'title': 'Fundi countered extra to KES $newAmt',
-      'message': 'Fundi countered your extra labour counter to KES $newAmt',
+      'type': 'fundi_countered_extra',
+      'title': 'Fundi countered extra KES $newAmt',
+      'message':
+          'Fundi countered your extra KES $clientLastCounter with KES $newAmt • Lock KES $newToLock',
       'createdAt': FieldValue.serverTimestamp(),
       'read': false,
     });

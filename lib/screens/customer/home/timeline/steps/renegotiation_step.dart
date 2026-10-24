@@ -8,13 +8,46 @@ import '../timeline_context.dart';
 
 class RenegotiationSteps {
   static bool handle(List<Widget> timeline, TimelineContext c) {
+    // FUNDI COUNTERED - has priority
+    if (c.reneg != null &&
+        ((c.renegStatus == 'countered_by_fundi') ||
+            (c.job['status'] ?? '').toString() ==
+                'renegotiation_countered_by_fundi' ||
+            (toInt(c.reneg!['fundiCounterExtraLabor'] ?? 0) > 0 &&
+                toInt(c.reneg!['clientCounterExtraLabor'] ?? 0) > 0 &&
+                toInt(c.reneg!['fundiCounterExtraLabor']) !=
+                    toInt(c.reneg!['clientCounterExtraLabor'])))) {
+      int clientPrev = toInt(c.reneg!['clientCounterExtraLabor'] ?? 0);
+      int fundiNew = toInt(
+        c.reneg!['fundiCounterExtraLabor'] ?? c.reneg!['extraLabor'] ?? 0,
+      );
+      int fundiToLock = toInt(
+        c.reneg!['fundiCounterExtraToLock'] ??
+            c.reneg!['extraToLock'] ??
+            fundiNew + (fundiNew * 0.05).round(),
+      );
+      timeline.add(
+        OrangeAnimatedWaitingCard(
+          title: 'Waiting for you to confirm extra labour',
+          message:
+              'Fundi countered your extra KES $clientPrev with KES $fundiNew (KES $fundiToLock to lock) Accept or counter back.',
+        ),
+      );
+      return true;
+    }
+
     if (c.reneg != null &&
         ((c.renegStatus == 'countered_by_client') ||
             (c.job['status'] ?? '').toString() ==
                 'renegotiation_countered_by_client')) {
-      int extraLabor = toInt(c.reneg!['counterExtraLabor'] ?? 0);
+      int extraLabor = toInt(
+        c.reneg!['clientCounterExtraLabor'] ??
+            c.reneg!['counterExtraLabor'] ??
+            0,
+      );
       int extraToLock = toInt(
-        c.reneg!['counterExtraToLock'] ??
+        c.reneg!['clientCounterExtraToLock'] ??
+            c.reneg!['counterExtraToLock'] ??
             extraLabor + (extraLabor * 0.05).round(),
       );
       int extraRequested = toInt(
@@ -22,20 +55,11 @@ class RenegotiationSteps {
       );
 
       timeline.add(
-        TimelineCard(
+        OrangeAnimatedWaitingCard(
           title:
               'You countered extra KES $extraLabor - waiting for fundi to confirm',
-          body:
-              'Fundi requested extra KES $extraRequested • You offered KES $extraLabor (KES $extraToLock with 5% fee)\nWaiting for ${c.fundiName} to confirm your counter offer',
-          icon: Icons.hourglass_top,
-          isDone: false,
-        ),
-      );
-      timeline.add(
-        OrangeAnimatedWaitingCard(
-          title: 'Waiting for fundi to confirm extra labour counter',
           message:
-              'You countered KES $extraRequested with KES $extraLabor (KES $extraToLock to lock). Fundi will accept or counter back.',
+              'You countered KES $extraRequested with KES $extraLabor (KES $extraToLock to lock). Waiting for fundi to accept or counter.',
         ),
       );
       return true;

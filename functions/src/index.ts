@@ -278,7 +278,8 @@ export const onNotificationPush = onDocumentCreated({ document: "notifications/{
     if (!d) return;
     const toUserId = d.toUserId as string;
     if (!toUserId) return;
-    if ((d.title || '').toLowerCase().includes('counter offer received')) return; // <-- ADD THIS LINE HERE
+    if ((d.title || '').toLowerCase().includes('counter offer received')) return;
+    if ((d.type || '').toString().includes('countered_extra')) return; // already pushed in onJobPush
 
     const tokens = await getFcmTokens(toUserId);
     if (tokens.length === 0) {
@@ -540,6 +541,20 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     if (after.renegotiation?.status === "pending" && before?.renegotiation?.status !== "pending") {
         await sendPush(clientTokens, "Fundi requests price review", `${after.renegotiation.reasonDetails || 'New breakdown'} • Tap to REVIEW`, { jobId, type: "price_review" });
         await db().collection('notifications').add({ toUserId: clientId, title: `Fundi requests price review`, body: `${after.renegotiation.reasonDetails || 'New breakdown'}`, type: 'price_review', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
+    }
+    const oldRenegStatus = (before?.renegotiation?.status || "").toString();
+    const newRenegStatus = (after?.renegotiation?.status || "").toString();
+    if (newRenegStatus === "countered_by_client" && oldRenegStatus !== newRenegStatus) {
+        const counterAmount = after.renegotiation?.clientCounterExtraLabor ?? after.renegotiation?.counterExtraLabor ?? 0;
+        const round = after.renegotiation?.counterRound ?? 1;
+        await sendPush(fundiTokens, `Client countered extra KES ${counterAmount} (${round}/3)`, `${title} • Tap to Accept/Counter`, { jobId, type: "client_countered_extra" });
+        await db().collection('notifications').add({ toUserId: fundiId, title: `Client countered extra KES ${counterAmount}`, body: `${title} • ${round}/3 • Tap to view`, type: 'client_countered_extra', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
+    }
+    if (newRenegStatus === "countered_by_fundi" && oldRenegStatus !== newRenegStatus) {
+        const counterAmount = after.renegotiation?.fundiCounterExtraLabor ?? after.renegotiation?.counterExtraLabor ?? 0;
+        const round = after.renegotiation?.counterRound ?? 2;
+        await sendPush(clientTokens, `Fundi countered extra KES ${counterAmount} (${round}/3)`, `${title} • Tap to Accept/Counter`, { jobId, type: "fundi_countered_extra" });
+        await db().collection('notifications').add({ toUserId: clientId, title: `Fundi countered extra KES ${counterAmount}`, body: `${title} • ${round}/3 • Tap to view`, type: 'fundi_countered_extra', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
     }
     const wasReleased = oldEscStatus === "released" || before?.escrowReleased === true || before?.escrowStatus === "released";
     const nowReleased = newEscStatus === "released" || after?.escrowReleased === true || after?.escrowStatus === "released";
