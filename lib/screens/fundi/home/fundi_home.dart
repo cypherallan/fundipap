@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../fundi_profile.dart';
 import '../services/fundi_badge_service.dart';
 import 'fundi_home_jobs_tab.dart';
 import 'timeline/fundi_customer_timeline_page.dart';
@@ -19,6 +18,7 @@ import '../services/fundi_penalty_service.dart';
 import '../../../widgets/fundi_badge_chip.dart';
 import '../../../widgets/fundi_level_progress_widget.dart';
 import '../../../widgets/todo_photo_mandatory_reminder.dart';
+import '../../fundi/profile data/fundi_profile.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});
