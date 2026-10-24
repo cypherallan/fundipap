@@ -25,6 +25,9 @@ class _FundiProfileState extends State<FundiProfile> {
   Map<String, dynamic>? userData;
   bool loading = true;
   bool uploadingPhoto = false;
+  bool _uploading = false;
+  double _uploadProgress = 0;
+  String _uploadingField = '';
 
   String selectedCategoryId = 'plumbing_waterworks';
   List<String> selectedCategoryIds = [];
@@ -215,13 +218,9 @@ class _FundiProfileState extends State<FundiProfile> {
             type: FileType.custom,
             allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
           );
-
       if (picked.isEmpty) return;
       final file = picked.first;
-
-      if (file.path == null) {
-        throw 'No path - file could not be read';
-      }
+      if (file.path == null) throw 'No path';
 
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final ext = file.extension ?? 'pdf';
@@ -229,7 +228,23 @@ class _FundiProfileState extends State<FundiProfile> {
         'fundi_docs/$uid/${field}_${DateTime.now().millisecondsSinceEpoch}.$ext',
       );
 
-      await ref.putFile(File(file.path!));
+      setState(() {
+        _uploading = true;
+        _uploadProgress = 0;
+        _uploadingField = field;
+      });
+
+      final task = ref.putFile(File(file.path!));
+
+      // listen to progress
+      task.snapshotEvents.listen((TaskSnapshot snap) {
+        if (!mounted) return;
+        setState(() {
+          _uploadProgress = snap.bytesTransferred / snap.totalBytes;
+        });
+      });
+
+      await task; // wait until done
 
       final url = await ref.getDownloadURL();
       await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
@@ -247,6 +262,14 @@ class _FundiProfileState extends State<FundiProfile> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploading = false;
+          _uploadProgress = 0;
+          _uploadingField = '';
+        });
       }
     }
   }
@@ -805,6 +828,8 @@ class _FundiProfileState extends State<FundiProfile> {
 
   Widget _uploadSection(String title, String field, IconData icon) {
     List urls = data?[field] ?? [];
+    final isUploadingThis = _uploading && _uploadingField == field;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -821,14 +846,42 @@ class _FundiProfileState extends State<FundiProfile> {
               ),
             ),
             const Spacer(),
-            TextButton.icon(
-              onPressed: () => _pickAndUpload(field),
-              icon: const Icon(Icons.upload, size: 16),
-              label: const Text('Upload'),
-            ),
+            if (isUploadingThis)
+              Text(
+                '${(_uploadProgress * 100).toStringAsFixed(0)}%',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                  color: FundipapColors.primaryYellow,
+                ),
+              )
+            else
+              TextButton.icon(
+                onPressed: () => _pickAndUpload(field),
+                icon: const Icon(Icons.upload, size: 16),
+                label: const Text('Upload'),
+              ),
           ],
         ),
-        if (urls.isEmpty)
+        if (isUploadingThis) ...[
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: _uploadProgress,
+              minHeight: 8,
+              backgroundColor: Colors.black12,
+              valueColor: AlwaysStoppedAnimation(FundipapColors.primaryYellow),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Uploading... ${(_uploadProgress * 100).toStringAsFixed(0)}%',
+            style: GoogleFonts.inter(fontSize: 11, color: Colors.black54),
+          ),
+        ],
+        const SizedBox(height: 8),
+        if (urls.isEmpty && !isUploadingThis)
           Text(
             'No $title yet',
             style: GoogleFonts.inter(fontSize: 11, color: Colors.black54),
