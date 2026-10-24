@@ -49,12 +49,11 @@ class ConfirmFundiDetailsSection extends StatelessWidget {
               combined['jobsDone'],
               combined['referralCount'] == null
                   ? null
-                  : combined['referralCount'], // fallback
+                  : combined['referralCount'],
             ]
             .where((e) => e != null)
             .map((e) => (e as num).toInt())
             .fold<int>(0, (a, b) => max(a, b));
-    // if still 0 but we have reviews list length, use that
     if (jobsDone == 0) {
       var reviewsLen =
           (combined['reviewsCount'] ?? combined['totalJobs'] ?? 0) as num;

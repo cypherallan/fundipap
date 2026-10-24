@@ -30,6 +30,19 @@ class FundiBadgeChip extends StatelessWidget {
     this.hideCommission = false,
   });
 
+  int get _realCommission {
+    switch (level) {
+      case BadgeLevel.gold:
+        return 5;
+      case BadgeLevel.silver:
+        return 8;
+      case BadgeLevel.bronze:
+        return 10;
+      case BadgeLevel.none:
+        return 15;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     Color bg;
@@ -126,7 +139,7 @@ class FundiBadgeChip extends StatelessWidget {
               Icon(icon, size: 12, color: fg),
               const SizedBox(width: 4),
               Text(
-                label,
+                hideCommission ? label : '$label $_realCommission% fee',
                 style: GoogleFonts.montserrat(
                   fontWeight: FontWeight.w800,
                   fontSize: 10,

@@ -586,11 +586,12 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                             fundiLevel: badgeResult.fundiLevel,
                             isVerified: badgeResult.isVerified,
                             isTrialGold: badgeResult.isTrialGold,
-                            commissionPct: badgeResult.fundiCommissionPct,
                             referralCount: referralCount,
                             jobsDone: completedJobs,
                             compact: true,
                             showLevel: true,
+                            hideCommission:
+                                false, // shows BRONZE 10% fee inside badge
                           ),
                         if (badgeResult != null) const SizedBox(height: 6),
                         if (badgeResult != null)
