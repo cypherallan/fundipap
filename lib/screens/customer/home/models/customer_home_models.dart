@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../../services/fundi_badge_service.dart';
+import '../../../fundi/services/fundi_badge_service.dart';
 
 enum FilterType { all, verified, topRated, highReferral, clean, badge, nearby }
 

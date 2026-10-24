@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
-import '../../../../services/fundi_badge_service.dart';
+import '../../../fundi/services/fundi_badge_service.dart';
 import '../models/customer_home_models.dart';
 
 int toInt(dynamic v, [int fb = 0]) {
@@ -79,6 +79,24 @@ Future<List<BidWithFundi>> enrichBids(
   List<QueryDocumentSnapshot> bids,
   Position? userPos,
 ) async {
+  int extractYes(Map<String, dynamic>? d) {
+    if (d == null) return -1;
+    if (d.containsKey('referralYesCount'))
+      return toInt(d['referralYesCount'], -1);
+    if (d.containsKey('referralCount')) return toInt(d['referralCount'], -1);
+    if (d.containsKey('referrals')) return toInt(d['referrals'], -1);
+    if (d.containsKey('totalReferrals')) return toInt(d['totalReferrals'], -1);
+    return -1;
+  }
+
+  int extractJobs(Map<String, dynamic>? d) {
+    if (d == null) return -1;
+    if (d.containsKey('completedJobs')) return toInt(d['completedJobs'], -1);
+    if (d.containsKey('jobsDone')) return toInt(d['jobsDone'], -1);
+    if (d.containsKey('jobsCompleted')) return toInt(d['jobsCompleted'], -1);
+    return -1;
+  }
+
   return Future.wait(
     bids.map((b) async {
       var m = b.data() as Map<String, dynamic>;
@@ -87,20 +105,20 @@ Future<List<BidWithFundi>> enrichBids(
       Map<String, dynamic>? fundiLive;
 
       if (fid.isNotEmpty) {
-        var d = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(fid)
-            .get();
-        f = d.data();
+        try {
+          var d = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(fid)
+              .get();
+          f = d.data();
+        } catch (_) {}
         try {
           var liveDoc = await FirebaseFirestore.instance
               .collection('fundis')
               .doc(fid)
-              .get(const GetOptions(source: Source.server));
+              .get();
           fundiLive = liveDoc.data();
-        } catch (_) {
-          fundiLive = f;
-        }
+        } catch (_) {}
       }
 
       double dist = 0;
@@ -138,20 +156,23 @@ Future<List<BidWithFundi>> enrichBids(
             f?['averageRating'] ??
             0,
       );
-      int referrals = toInt(
-        src?['referrals'] ??
-            src?['referralCount'] ??
-            src?['totalReferrals'] ??
-            f?['referrals'] ??
-            0,
-      );
-      int jobsDone = toInt(
-        src?['jobsDone'] ??
-            src?['completedJobs'] ??
-            src?['jobsCompleted'] ??
-            f?['jobsDone'] ??
-            0,
-      );
+
+      // collect candidates and take max > -1, so 0 in fundis doesn't hide 10 in users
+      var yesCandidates = [
+        extractYes(fundiLive),
+        extractYes(f),
+      ].where((v) => v >= 0).toList();
+      var jobCandidates = [
+        extractJobs(fundiLive),
+        extractJobs(f),
+      ].where((v) => v >= 0).toList();
+      int yesRefs = yesCandidates.isEmpty
+          ? 0
+          : yesCandidates.reduce((a, b) => a > b ? a : b);
+      int totalJobs = jobCandidates.isEmpty
+          ? 0
+          : jobCandidates.reduce((a, b) => a > b ? a : b);
+
       int penalty = toInt(
         src?['penaltyScore'] ?? src?['penalty'] ?? f?['penaltyScore'] ?? 0,
       );
@@ -163,8 +184,8 @@ Future<List<BidWithFundi>> enrichBids(
         verified:
             (src?['isVerifiedFundi'] == true) ||
             (f?['isVerifiedFundi'] == true),
-        referrals: referrals,
-        jobsDone: jobsDone,
+        referrals: yesRefs,
+        jobsDone: totalJobs,
         rating: rating,
         penalty: penalty,
         distanceKm: dist,

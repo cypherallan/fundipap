@@ -72,7 +72,6 @@ FundiWaitingState? getFundiWaitingState({
       .toLowerCase();
   bool escrowDone = ['held', 'paid', 'released'].contains(escrowStatus);
 
-
   if (jobStatus.contains('cancel') ||
       _toBool(job['cancelled']) ||
       _toBool(job['autoCancelled']) ||

@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/job_taxonomy.dart';
-import 'fundi_badge_service.dart';
+import '../screens/fundi/services/fundi_badge_service.dart';
 
 class PricingService {
   static const String version = 'v3_2026_badge_commission';

@@ -4,7 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/customer_home_models.dart';
 import '../../helpers/customer_home_utils.dart';
-import '../../../../../services/fundi_badge_service.dart';
+import '../../../../fundi/services/fundi_badge_service.dart';
 import '../../../../../widgets/animated_waiting_card.dart';
 import 'pending_bid_card.dart';
 

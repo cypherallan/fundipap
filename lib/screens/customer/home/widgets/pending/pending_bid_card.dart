@@ -10,7 +10,7 @@ import '../../../../../widgets/animated_waiting_card.dart';
 import '../../models/customer_home_models.dart';
 import '../../../confirm/page/confirm_fundi_page.dart';
 import '../../timeline/customer_fundi_timeline_page.dart';
-import '../../../../../services/fundi_badge_service.dart';
+import '../../../../fundi/services/fundi_badge_service.dart';
 
 class PendingBidCard extends StatefulWidget {
   final BidWithFundi bid;
@@ -371,7 +371,7 @@ class _PendingBidCardState extends State<PendingBidCard> {
                           const SizedBox(width: 6),
                           Flexible(
                             child: Text(
-                              '${widget.bid.referrals} refs • ${widget.bid.jobsDone} jobs',
+                              '${widget.bid.referrals}/${widget.bid.jobsDone} referrals',
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                               style: GoogleFonts.inter(

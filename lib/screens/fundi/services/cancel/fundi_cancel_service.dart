@@ -2,8 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../../services/fundi_penalty_service.dart';
-import '../../../../services/fundi_badge_service.dart';
+import '../fundi_penalty_service.dart';
+import '../fundi_badge_service.dart';
 
 class FundiCancelService {
   static const double feeRate = 0.05;

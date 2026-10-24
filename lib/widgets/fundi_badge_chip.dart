@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../services/fundi_badge_service.dart';
+import '../screens/fundi/services/fundi_badge_service.dart';
 
 class FundiBadgeChip extends StatelessWidget {
   final BadgeLevel level;

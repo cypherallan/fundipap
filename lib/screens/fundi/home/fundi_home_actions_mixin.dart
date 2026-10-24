@@ -6,7 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../../services/location_service.dart';
 import 'fundi_home_logic.dart';
 import 'fundi_bid_dialog.dart';
-import '../../../services/fundi_penalty_service.dart';
+import '../services/fundi_penalty_service.dart';
 
 mixin FundiHomeActionsMixin<T extends StatefulWidget> on State<T> {
   String get search;

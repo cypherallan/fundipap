@@ -14,7 +14,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../../../../services/job_cancel_watcher.dart';
 import '../../../../widgets/fundi_badge_chip.dart';
-import '../../../../services/fundi_badge_service.dart';
+import '../../../fundi/services/fundi_badge_service.dart';
 import '../../../../services/pricing_service.dart';
 
 class ConfirmFundiPage extends StatefulWidget {

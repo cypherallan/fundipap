@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../services/fundi_penalty_service.dart';
+import '../../fundi/services/fundi_penalty_service.dart';
 
 class AdminDisputeDetailScreen extends StatefulWidget {
   final String disputeId;

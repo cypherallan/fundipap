@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../theme/app_theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../../services/fundi_badge_service.dart';
+import '../services/fundi_badge_service.dart';
 
 class FundiRequestNewPriceScreen extends StatefulWidget {
   final String jobId;

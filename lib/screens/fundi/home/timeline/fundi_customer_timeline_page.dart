@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/job_chat_section.dart';
-import '../../../../services/fundi_waiting_state_service.dart';
+import '../../services/fundi_waiting_state_service.dart';
 import '../timeline/fundi_timeline_context.dart';
 import 'core/timeline_utils.dart';
 import 'core/timeline_navigation.dart';

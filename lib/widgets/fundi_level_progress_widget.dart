@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
-import '../services/fundi_badge_service.dart';
+import '../screens/fundi/services/fundi_badge_service.dart';
 import 'fundi_badge_chip.dart';
 
 class FundiLevelProgressWidget extends StatefulWidget {

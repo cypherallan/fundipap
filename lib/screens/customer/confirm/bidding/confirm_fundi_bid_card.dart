@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/fundi_badge_chip.dart';
-import '../../../../services/fundi_badge_service.dart';
+import '../../../fundi/services/fundi_badge_service.dart';
 
 class ConfirmFundiBidCard extends StatelessWidget {
   final Map<String, dynamic> jobData;

@@ -6,16 +6,16 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../fundi_profile.dart';
-import '../../../services/fundi_badge_service.dart';
+import '../services/fundi_badge_service.dart';
 import 'fundi_home_jobs_tab.dart';
 import 'timeline/fundi_customer_timeline_page.dart';
 import 'job_details_screen.dart';
 import 'fundi_home_logic.dart';
 import 'package:fundipap/widgets/animated_waiting_card.dart';
-import '../../../services/fundi_waiting_state_service.dart';
+import '../services/fundi_waiting_state_service.dart';
 import '../rating/rate_client_screen.dart';
 import 'fundi_home_actions_mixin.dart';
-import '../../../services/fundi_penalty_service.dart';
+import '../services/fundi_penalty_service.dart';
 import '../../../widgets/fundi_badge_chip.dart';
 import '../../../widgets/fundi_level_progress_widget.dart';
 import '../../../widgets/todo_photo_mandatory_reminder.dart';
@@ -31,6 +31,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
   Map<String, dynamic>? me;
   @override
   int completedJobs = 0;
+  int referralCount = 0;
   @override
   double totalEarned = 0;
   @override
@@ -126,7 +127,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
   Future<void> _loadMe() async {
     try {
       var uid = FirebaseAuth.instance.currentUser!.uid;
-      
+
       var doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -138,12 +139,17 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
       if (!mounted) return;
       setState(() {
         me = data;
-        completedJobs = (data['completedJobs'] ?? 0) as int;
+        completedJobs = (data['completedJobs'] ?? data['jobsDone'] ?? 0) as int;
+        referralCount =
+            (data['referralCount'] ??
+                    data['referralYesCount'] ??
+                    data['yesReferrals'] ??
+                    0)
+                as int;
         totalEarned = (data['totalEarned'] ?? 0).toDouble();
         mySkill = (data['skill'] ?? 'General').toString();
       });
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   Future<void> _loadLocation() async {
@@ -558,7 +564,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '$completedJobs jobs',
+                            '$referralCount/$completedJobs referrals',
                             style: GoogleFonts.inter(
                               color: Colors.white60,
                               fontSize: 10,
@@ -579,7 +585,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                             isVerified: badgeResult.isVerified,
                             isTrialGold: badgeResult.isTrialGold,
                             commissionPct: badgeResult.fundiCommissionPct,
-                            referralCount: 0,
+                            referralCount: referralCount,
                             jobsDone: completedJobs,
                             compact: true,
                             showLevel: true,

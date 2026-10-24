@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import 'timeline/fundi_customer_timeline_page.dart';
 import 'package:fundipap/widgets/animated_waiting_card.dart';
-import '../../../services/fundi_waiting_state_service.dart';
+import '../services/fundi_waiting_state_service.dart';
 
 class FundiNotificationsPage extends StatefulWidget {
   const FundiNotificationsPage({super.key});

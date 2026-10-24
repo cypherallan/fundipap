@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'timeline_utils.dart';
 import '../../rating/rate_fundi_screen.dart';
-import '../../../../services/fundi_penalty_service.dart';
+import '../../../fundi/services/fundi_penalty_service.dart';
 
 class TimelineActions {
   static Future<void> payEscrow(String jobId, double amount) async {

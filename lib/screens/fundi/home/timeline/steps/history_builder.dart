@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../core/timeline_utils.dart';
 import '../widgets/green_done_card.dart';
-import '../../../../../services/fundi_waiting_state_service.dart';
+import '../../../services/fundi_waiting_state_service.dart';
 
 List<Widget> buildDoneHistory({
   required Map<String, dynamic> job,

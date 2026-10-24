@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../../theme/app_theme.dart';
 import '../../../../../widgets/animated_waiting_card.dart';
-import '../../../../../services/fundi_waiting_state_service.dart';
+import '../../../services/fundi_waiting_state_service.dart';
 import '../core/timeline_utils.dart';
 import '../widgets/fundi_status_card.dart';
 import '../fundi_timeline_actions.dart';

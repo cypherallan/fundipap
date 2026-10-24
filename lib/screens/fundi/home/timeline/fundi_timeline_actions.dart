@@ -5,7 +5,7 @@ import '../../rating/rate_client_screen.dart';
 import '../../../../app.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'fundi_timeline_utils.dart';
-import '../../../../services/fundi_badge_service.dart';
+import '../../services/fundi_badge_service.dart';
 import '../../../../services/pricing_service.dart';
 
 class FundiTimelineActions {

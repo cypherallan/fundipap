@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../../widgets/fundi_badge_chip.dart';
 import '../../models/customer_home_models.dart';
-import '../../../../../services/fundi_badge_service.dart';
+import '../../../../fundi/services/fundi_badge_service.dart';
 
 class PendingFilterBar extends StatelessWidget {
   final FilterType value;
