@@ -352,12 +352,23 @@ class FundiBadgeService {
     var statsSnap = await db.collection('fundiStats').doc(fundiId).get();
     var fundiData = fundiSnap.data() ?? {};
     var statsData = statsSnap.data() ?? {};
-    var refQuery = await db
-        .collection('referrals')
-        .where('fundiId', isEqualTo: fundiId)
-        .count()
+    var revSnap = await db
+        .collection('fundis')
+        .doc(fundiId)
+        .collection('reviews')
         .get();
-    statsData['referralCount'] = refQuery.count ?? 0;
+    int total = revSnap.docs.length;
+    int yes = 0;
+    for (var d in revSnap.docs) {
+      if ((d.data()['wouldRefer'] ?? d.data()['wouldRecommend'] ?? false) ==
+          true)
+        yes++;
+    }
+    statsData['completedJobs'] = total;
+    statsData['jobsCompleted'] = total;
+    statsData['referralCount'] = yes;
+    statsData['referralYesCount'] = yes;
+    statsData['reviewsCount'] = total;
     var result = calculate(fundiData, statsData);
     await db.collection('fundis').doc(fundiId).set({
       'badgeLevel': result.badgeLevel.name,

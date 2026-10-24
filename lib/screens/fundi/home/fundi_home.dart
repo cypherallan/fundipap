@@ -76,6 +76,8 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
     initOnlineStatus();
     _loadMe();
     _loadLocation();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) FundiBadgeService.recalcAndUpdate(uid);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initNotificationListeners();
       _enforceMandatoryRating();

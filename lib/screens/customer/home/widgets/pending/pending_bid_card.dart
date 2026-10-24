@@ -34,6 +34,55 @@ class PendingBidCard extends StatefulWidget {
 
 class _PendingBidCardState extends State<PendingBidCard> {
   double? _lastKm;
+  int? _liveReferrals;
+  int? _liveJobsDone;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLiveCounts();
+  }
+
+  Future<void> _loadLiveCounts() async {
+    try {
+      final fid = (widget.bid.bid['fundiId'] ?? widget.bid.bidDoc.id)
+          .toString();
+      // read fundis doc
+      var snap = await FirebaseFirestore.instance
+          .collection('fundis')
+          .doc(fid)
+          .get();
+      var d = snap.data() ?? {};
+      int jobs =
+          (d['completedJobs'] ?? d['jobsCompleted'] ?? widget.bid.jobsDone ?? 0)
+              as int;
+      int refs =
+          (d['referralYesCount'] ??
+                  d['referralCount'] ??
+                  widget.bid.referrals ??
+                  0)
+              as int;
+      // override from fundis/{id}/reviews subcollection = source of truth
+      try {
+        var rSnap = await FirebaseFirestore.instance
+            .collection('fundis')
+            .doc(fid)
+            .collection('reviews')
+            .get();
+        if (rSnap.docs.isNotEmpty) {
+          jobs = rSnap.docs.length;
+          refs = rSnap.docs
+              .where((doc) => (doc.data()['wouldRefer'] ?? false) == true)
+              .length;
+        }
+      } catch (_) {}
+      if (mounted)
+        setState(() {
+          _liveJobsDone = jobs;
+          _liveReferrals = refs;
+        });
+    } catch (_) {}
+  }
 
   FirebaseDatabase get _rtdb => FirebaseDatabase.instanceFor(
     app: Firebase.app(),
@@ -209,6 +258,8 @@ class _PendingBidCardState extends State<PendingBidCard> {
                     myCounterAmt)
                 as num)
             .toInt();
+    final int displayJobs = _liveJobsDone ?? widget.bid.jobsDone;
+    final int displayRefs = _liveReferrals ?? widget.bid.referrals;
     final fundiName = (widget.bid.bid['fundiName'] ?? 'Fundi').toString();
     final fundiId = (widget.bid.bid['fundiId'] ?? widget.bid.bidDoc.id)
         .toString();
@@ -371,7 +422,7 @@ class _PendingBidCardState extends State<PendingBidCard> {
                           const SizedBox(width: 6),
                           Flexible(
                             child: Text(
-                              '${widget.bid.referrals}/${widget.bid.jobsDone} referrals',
+                              '$displayRefs/$displayJobs referrals',
                               overflow: TextOverflow.ellipsis,
                               maxLines: 1,
                               style: GoogleFonts.inter(
@@ -393,8 +444,8 @@ class _PendingBidCardState extends State<PendingBidCard> {
                   isVerified: widget.bid.verified,
                   isTrialGold: widget.bid.isTrialGold,
                   trialExpiresAt: widget.bid.trialExpiresAt,
-                  referralCount: widget.bid.referrals,
-                  jobsDone: widget.bid.jobsDone,
+                  referralCount: displayRefs,
+                  jobsDone: displayJobs,
                   commissionPct: widget.bid.fundiCommissionPct,
                   compact: true,
                   hideCommission: false,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:math';
 import '../../../../theme/app_theme.dart';
 
 class ConfirmFundiDetailsSection extends StatelessWidget {
@@ -42,11 +43,23 @@ class ConfirmFundiDetailsSection extends StatelessWidget {
     var rating = (combined['rating'] ?? combined['averageRating'] ?? 4.5)
         .toDouble();
     var jobsDone =
-        combined['jobsCompleted'] ??
-        combined['completedJobs'] ??
-        combined['jobsDone'] ??
-        combined['jobsDone'] ??
-        0;
+        [
+              combined['jobsCompleted'],
+              combined['completedJobs'],
+              combined['jobsDone'],
+              combined['referralCount'] == null
+                  ? null
+                  : combined['referralCount'], // fallback
+            ]
+            .where((e) => e != null)
+            .map((e) => (e as num).toInt())
+            .fold<int>(0, (a, b) => max(a, b));
+    // if still 0 but we have reviews list length, use that
+    if (jobsDone == 0) {
+      var reviewsLen =
+          (combined['reviewsCount'] ?? combined['totalJobs'] ?? 0) as num;
+      jobsDone = reviewsLen.toInt();
+    }
     var fraudCount = combined['fraudCount'] ?? combined['fraudCases'] ?? 0;
     var resumes = List.from(combined['resumes'] ?? []);
     var certs = List.from(combined['certificates'] ?? []);
