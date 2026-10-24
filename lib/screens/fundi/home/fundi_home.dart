@@ -18,7 +18,7 @@ import '../services/fundi_penalty_service.dart';
 import '../../../widgets/fundi_badge_chip.dart';
 import '../../../widgets/fundi_level_progress_widget.dart';
 import '../../../widgets/todo_photo_mandatory_reminder.dart';
-import '../../fundi/profile data/fundi_profile.dart';
+import '../my advert/fundi_profile.dart';
 
 class FundiHome extends StatefulWidget {
   const FundiHome({super.key});

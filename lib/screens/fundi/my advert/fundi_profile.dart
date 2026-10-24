@@ -5,9 +5,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import '../../../data/job_taxonomy.dart';
 import 'fundi_profile_service.dart';
-import '../../fundi/profile data/profile_header.dart';
-import '../../fundi/profile data/profile_form.dart';
-import '../../fundi/profile data/profile_uploads.dart';
+import 'profile_header.dart';
+import 'profile_form.dart';
+import 'profile_uploads.dart';
 
 class FundiProfile extends StatefulWidget {
   const FundiProfile({super.key});

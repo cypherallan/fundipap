@@ -12,7 +12,7 @@ import 'services/auth_service.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/fundi/my_jobs/fundi_my_jobs_page.dart';
 import 'screens/admin/screens/admin_screen.dart';
-import 'screens/fundi/profile data/fundi_profile.dart';
+import 'screens/fundi/my advert/fundi_profile.dart';
 
 class FundiPapApp extends StatelessWidget {
   const FundiPapApp({super.key});
