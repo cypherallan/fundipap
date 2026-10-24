@@ -4,6 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../theme/app_theme.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart';
 
 class ProfileUploads extends StatelessWidget {
   final Map<String, dynamic>? data;
@@ -31,29 +35,43 @@ class ProfileUploads extends StatelessWidget {
     return c;
   }
 
-  Future<void> _openFile(String url, BuildContext context) async {
+  Future<void> _openFile(
+    String url,
+    String fileName,
+    BuildContext context,
+  ) async {
     if (url.isEmpty) return;
     try {
-      final uri = Uri.parse(url);
-      // try external first (Chrome / PDF viewer)
-      bool launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-      if (!launched) {
-        // fallback to in-app browser
-        launched = await launchUrl(uri, mode: LaunchMode.inAppWebView);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Opening $fileName...'),
+            duration: const Duration(seconds: 1),
+          ),
+        );
       }
-      if (!launched && context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not open file: $url')));
+      // download to temp folder
+      final tempDir = await getTemporaryDirectory();
+      final filePath = '${tempDir.path}/$fileName';
+      final localFile = File(filePath);
+      if (!await localFile.exists()) {
+        // download from Firebase Storage
+        final ref = FirebaseStorage.instance.refFromURL(url);
+        await ref.writeToFile(localFile);
+      }
+      // This triggers Android chooser: "Open with Adobe / Drive / Photos"
+      final result = await OpenFilex.open(filePath);
+      if (result.type != ResultType.done && context.mounted) {
+        // fallback to Chrome if no app can open it
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Open failed: $e')));
+        // last fallback
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       }
     }
   }
@@ -297,7 +315,7 @@ class ProfileUploads extends StatelessWidget {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.open_in_new, size: 18),
-                      onPressed: () => _openFile(url, context),
+                      onPressed: () => _openFile(url, name, context),
                     ),
                     IconButton(
                       icon: const Icon(
@@ -317,7 +335,7 @@ class ProfileUploads extends StatelessWidget {
                     ),
                   ],
                 ),
-                onTap: () => _openFile(url, context),
+                onTap: () => _openFile(url, name, context),
               ),
             );
           }),
