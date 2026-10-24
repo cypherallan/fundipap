@@ -213,6 +213,60 @@ class HomeStatusWidget extends StatelessWidget {
       );
     }
 
+    if (renegStatus == 'countered_by_fundi') {
+      int clientPrev = toInt(reneg?['clientCounterExtraLabor'] ?? 0);
+      int fundiNew = toInt(
+        reneg?['fundiCounterExtraLabor'] ?? reneg?['extraLabor'] ?? 0,
+      );
+      int fundiToLock = toInt(
+        reneg?['fundiCounterExtraToLock'] ??
+            reneg?['extraToLock'] ??
+            fundiNew + (fundiNew * 0.05).round(),
+      );
+      return OrangeAnimatedWaitingCard(
+        title: 'Waiting for you to confirm extra labour',
+        message:
+            'Fundi countered your extra KES $clientPrev with KES $fundiNew (KES $fundiToLock to lock) Accept or counter back.',
+        onTap: () => Navigator.push(
+          parentContext,
+          MaterialPageRoute(
+            builder: (_) => CustomerFundiTimelinePage(
+              jobId: jobId,
+              fundiName: job['assignedFundiName'] ?? 'Fundi',
+              trade: job['category'] ?? '',
+              jobData: job,
+            ),
+          ),
+        ),
+      );
+    }
+    if (renegStatus == 'countered_by_client') {
+      int clientExtra = toInt(
+        reneg?['clientCounterExtraLabor'] ?? reneg?['counterExtraLabor'] ?? 0,
+      );
+      int clientToLock = toInt(
+        reneg?['clientCounterExtraToLock'] ??
+            reneg?['counterExtraToLock'] ??
+            clientExtra + (clientExtra * 0.05).round(),
+      );
+      return OrangeAnimatedWaitingCard(
+        title: 'You countered extra KES $clientExtra - Waiting for fundi',
+        message:
+            'You countered extra KES $clientExtra (KES $clientToLock to lock) • Waiting for fundi to accept or counter',
+        onTap: () => Navigator.push(
+          parentContext,
+          MaterialPageRoute(
+            builder: (_) => CustomerFundiTimelinePage(
+              jobId: jobId,
+              fundiName: job['assignedFundiName'] ?? 'Fundi',
+              trade: job['category'] ?? '',
+              jobData: job,
+            ),
+          ),
+        ),
+      );
+    }
+
     if (needsExtraEscrow) {
       int counterExtra = toInt(
         reneg?['acceptedCounterExtraLabor'] ?? reneg?['counterExtraLabor'] ?? 0,
@@ -356,60 +410,6 @@ class HomeStatusWidget extends StatelessWidget {
             ),
           ),
         ],
-      );
-    }
-
-    if (renegStatus == 'countered_by_client') {
-      int clientExtra = toInt(
-        reneg?['clientCounterExtraLabor'] ?? reneg?['counterExtraLabor'] ?? 0,
-      );
-      int clientToLock = toInt(
-        reneg?['clientCounterExtraToLock'] ??
-            reneg?['counterExtraToLock'] ??
-            clientExtra + (clientExtra * 0.05).round(),
-      );
-      return OrangeAnimatedWaitingCard(
-        title: 'You countered extra KES $clientExtra - Waiting for fundi',
-        message:
-            'You countered extra KES $clientExtra (KES $clientToLock to lock) • Waiting for fundi to accept or counter',
-        onTap: () => Navigator.push(
-          parentContext,
-          MaterialPageRoute(
-            builder: (_) => CustomerFundiTimelinePage(
-              jobId: jobId,
-              fundiName: job['assignedFundiName'] ?? 'Fundi',
-              trade: job['category'] ?? '',
-              jobData: job,
-            ),
-          ),
-        ),
-      );
-    }
-    if (renegStatus == 'countered_by_fundi') {
-      int clientPrev = toInt(reneg?['clientCounterExtraLabor'] ?? 0);
-      int fundiNew = toInt(
-        reneg?['fundiCounterExtraLabor'] ?? reneg?['extraLabor'] ?? 0,
-      );
-      int fundiToLock = toInt(
-        reneg?['fundiCounterExtraToLock'] ??
-            reneg?['extraToLock'] ??
-            fundiNew + (fundiNew * 0.05).round(),
-      );
-      return OrangeAnimatedWaitingCard(
-        title: 'Waiting for you to confirm extra labour',
-        message:
-            'Fundi countered your extra KES $clientPrev with KES $fundiNew (KES $fundiToLock to lock) Accept or counter back.',
-        onTap: () => Navigator.push(
-          parentContext,
-          MaterialPageRoute(
-            builder: (_) => CustomerFundiTimelinePage(
-              jobId: jobId,
-              fundiName: job['assignedFundiName'] ?? 'Fundi',
-              trade: job['category'] ?? '',
-              jobData: job,
-            ),
-          ),
-        ),
       );
     }
 

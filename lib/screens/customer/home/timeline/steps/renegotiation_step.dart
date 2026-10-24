@@ -8,15 +8,10 @@ import '../timeline_context.dart';
 
 class RenegotiationSteps {
   static bool handle(List<Widget> timeline, TimelineContext c) {
-    // FUNDI COUNTERED - has priority
     if (c.reneg != null &&
-        ((c.renegStatus == 'countered_by_fundi') ||
+        (c.renegStatus == 'countered_by_fundi' ||
             (c.job['status'] ?? '').toString() ==
-                'renegotiation_countered_by_fundi' ||
-            (toInt(c.reneg!['fundiCounterExtraLabor'] ?? 0) > 0 &&
-                toInt(c.reneg!['clientCounterExtraLabor'] ?? 0) > 0 &&
-                toInt(c.reneg!['fundiCounterExtraLabor']) !=
-                    toInt(c.reneg!['clientCounterExtraLabor'])))) {
+                'renegotiation_countered_by_fundi')) {
       int clientPrev = toInt(c.reneg!['clientCounterExtraLabor'] ?? 0);
       int fundiNew = toInt(
         c.reneg!['fundiCounterExtraLabor'] ?? c.reneg!['extraLabor'] ?? 0,
