@@ -104,6 +104,7 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
           var reneg = job['renegotiation'] as Map<String, dynamic>?;
           String renegStatus = (reneg?['status'] ?? '').toString();
           bool isRenegCountered = renegStatus == 'countered_by_client';
+          bool isRenegFundiCountered = renegStatus == 'countered_by_fundi';
           bool isRenegApprovedNeedsTopup =
               renegStatus == 'approved' &&
               (_toBool(job['clientNeedsToTopup']) ||
@@ -277,6 +278,167 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
               ),
             );
             timeline = [locationBanner, waitingCounter, ...timeline];
+          } else if (isRenegFundiCountered) {
+            int clientPrev = _toInt(
+              reneg?['clientCounterExtraLabor'] ??
+                  reneg?['counterExtraLabor'] ??
+                  0,
+            );
+            int fundiNew = _toInt(
+              reneg?['extraLabor'] ?? reneg?['fundiCounterExtraLabor'] ?? 0,
+            );
+            int fundiNewToLock = _toInt(
+              reneg?['counterExtraToLock'] ??
+                  fundiNew + (fundiNew * 0.05).round(),
+            );
+            Widget fundiCounterCard = Container(
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade400, width: 1.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Fundi countered your extra KES $clientPrev with KES $fundiNew',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      color: Colors.orange.shade900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Extra to lock if you accept: KES $fundiNewToLock',
+                    style: GoogleFonts.inter(fontSize: 11),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            final ctrl = TextEditingController(
+                              text: fundiNew.toString(),
+                            );
+                            final newAmt = await showDialog<int>(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: const Text('Counter Extra'),
+                                content: TextField(
+                                  controller: ctrl,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Your counter KES',
+                                  ),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () => Navigator.pop(
+                                      context,
+                                      int.tryParse(ctrl.text) ?? 0,
+                                    ),
+                                    child: const Text('Send'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (newAmt == null || newAmt <= 0) return;
+                            int round = _toInt(reneg?['counterRound'] ?? 0) + 1;
+                            if (round > 3) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Max 3 counters reached - only Accept',
+                                    ),
+                                  ),
+                                );
+                              }
+                              return;
+                            }
+                            await FirebaseFirestore.instance
+                                .collection('jobs')
+                                .doc(widget.jobId)
+                                .update({
+                                  'renegotiation.counterExtraLabor': newAmt,
+                                  'renegotiation.clientCounterExtraLabor':
+                                      newAmt,
+                                  'renegotiation.counterExtraToLock':
+                                      newAmt + (newAmt * 0.05).round(),
+                                  'renegotiation.status': 'countered_by_client',
+                                  'renegotiation.currentPhase':
+                                      'countered_by_client',
+                                  'renegotiation.counterRound': round,
+                                  'fundiHasUnread': true,
+                                  'customerHasUnread': false,
+                                  'updatedAt': FieldValue.serverTimestamp(),
+                                });
+                            String fundiId =
+                                (job['fundiId'] ??
+                                        job['assignedFundiId'] ??
+                                        job['acceptedFundiId'] ??
+                                        job['selectedFundiId'] ??
+                                        '')
+                                    .toString();
+                            if (fundiId.isNotEmpty) {
+                              await FirebaseFirestore.instance
+                                  .collection('notifications')
+                                  .add({
+                                    'jobId': widget.jobId,
+                                    'toUserId': fundiId,
+                                    'type': 'client_counter_extra',
+                                    'title':
+                                        'Client countered extra to KES $newAmt',
+                                    'message':
+                                        'Client countered your extra KES $fundiNew with KES $newAmt',
+                                    'createdAt': FieldValue.serverTimestamp(),
+                                    'read': false,
+                                  });
+                            }
+                          },
+                          child: const Text('Counter'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                          ),
+                          onPressed: () async {
+                            await FirebaseFirestore.instance
+                                .collection('jobs')
+                                .doc(widget.jobId)
+                                .update({
+                                  'renegotiation.status': 'approved',
+                                  'renegotiation.approvedExtra': fundiNew,
+                                  'renegotiation.approvedExtraToLock':
+                                      fundiNewToLock,
+                                  'clientNeedsToTopup': true,
+                                  'escrowStatus': 'pending_topup',
+                                  'updatedAt': FieldValue.serverTimestamp(),
+                                });
+                          },
+                          child: const Text(
+                            'Accept',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+            timeline = [locationBanner, fundiCounterCard, ...timeline];
           } else if (isRenegApprovedNeedsTopup) {
             int approvedExtra = _toInt(
               reneg?['approvedExtra'] ??

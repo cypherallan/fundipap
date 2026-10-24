@@ -141,6 +141,9 @@ class CustomerNotificationsSection extends StatelessWidget {
             final isRenegCountered =
                 renegStatus == 'countered_by_client' ||
                 jobStatus == 'renegotiation_countered_by_client';
+            final isRenegFundiCountered =
+                renegStatus == 'countered_by_fundi' ||
+                jobStatus == 'renegotiation_countered_by_fundi';
             final isRenegApprovedNeedsTopup =
                 (renegStatus.contains('approved') ||
                     renegStatus == 'approved_pending_extra_escrow') &&
@@ -269,6 +272,81 @@ class CustomerNotificationsSection extends StatelessWidget {
                   ),
                   subtitle: Text(
                     'Extra to lock KES $extraToLock • ${g['fundiName']}',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    size: 18,
+                    color: Colors.orange,
+                  ),
+                  onTap: () async {
+                    await onMarkRead(fundiKey);
+                    if (!context.mounted) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CustomerFundiTimelinePage(
+                          jobId: g['jobId'].toString(),
+                          fundiName: g['fundiName'].toString(),
+                          trade: g['category'].toString(),
+                          jobData: job,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            }
+            if (isRenegFundiCountered) {
+              int clientPrev = _toInt(
+                reneg['clientCounterExtraLabor'] ??
+                    reneg['counterExtraLabor'] ??
+                    reneg['oldLabor'] ??
+                    0,
+              );
+              int fundiNew = _toInt(
+                reneg['extraLabor'] ??
+                    reneg['fundiCounterExtraLabor'] ??
+                    reneg['counteredExtraRequested'] ??
+                    0,
+              );
+              return Container(
+                margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade400, width: 1.5),
+                ),
+                child: ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade700,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.compare_arrows,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    'Fundi countered your extra KES $clientPrev with KES $fundiNew',
+                    style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                      color: Colors.orange.shade900,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${g['fundiName']} • Tap to Accept or Counter',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       color: Colors.black87,

@@ -13,6 +13,70 @@ import 'steps/current_waiting_builder.dart';
 import 'steps/completed_released_view.dart';
 import '../../../customer/home/timeline/widgets/timeline_cancel_wrapper.dart';
 
+Future<void> counterAsFundi(
+  BuildContext context,
+  DocumentReference bidRef,
+  String jobId,
+  double displayClientAmt,
+) async {
+  final ctrl = TextEditingController(text: displayClientAmt.toInt().toString());
+  final newAmt = await showDialog<int>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Counter Extra Labour'),
+      content: TextField(
+        controller: ctrl,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(labelText: 'Your counter KES'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, int.tryParse(ctrl.text) ?? 0),
+          child: const Text('Send'),
+        ),
+      ],
+    ),
+  );
+  if (newAmt == null || newAmt <= 0) return;
+  final jobSnap = await FirebaseFirestore.instance
+      .collection('jobs')
+      .doc(jobId)
+      .get();
+  final job = jobSnap.data() as Map<String, dynamic>;
+  final renego = job['renegotiation'] as Map<String, dynamic>? ?? {};
+  int round = (renego['counterRound'] ?? 0) + 1;
+  if (round > 3) return;
+  await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+    'renegotiation.extraLabor': newAmt,
+    'renegotiation.counterExtraLabor': newAmt,
+    'renegotiation.status': 'countered_by_fundi',
+    'renegotiation.currentPhase': 'countered_by_fundi',
+    'renegotiation.counterRound': round,
+    'renegotiation.requested': true,
+    'renegotiation.counteredAt': FieldValue.serverTimestamp(),
+    'customerHasUnread': true,
+    'clientHasUnread': true,
+    'fundiHasUnread': false,
+    'updatedAt': FieldValue.serverTimestamp(),
+  });
+  String clientId = (job['customerId'] ?? job['clientId'] ?? '').toString();
+  if (clientId.isNotEmpty) {
+    await FirebaseFirestore.instance.collection('notifications').add({
+      'jobId': jobId,
+      'toUserId': clientId,
+      'type': 'fundi_counter_extra',
+      'title': 'Fundi countered extra to KES $newAmt',
+      'message': 'Fundi countered your extra labour counter to KES $newAmt',
+      'createdAt': FieldValue.serverTimestamp(),
+      'read': false,
+    });
+  }
+}
+
 class FundiCustomerTimelinePage extends StatefulWidget {
   final String jobId;
   final String clientName;
