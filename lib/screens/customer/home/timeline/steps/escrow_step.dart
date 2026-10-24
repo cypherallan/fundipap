@@ -4,9 +4,26 @@ import '../timeline_actions.dart';
 import '../widgets/timeline_card.dart';
 import '../widgets/timeline_fee_breakdown.dart';
 import '../timeline_context.dart';
+import '../timeline_utils.dart';
 
 class EscrowSteps {
   static bool handle(List<Widget> timeline, TimelineContext c) {
+    final int oldLocked = c.reneg != null
+        ? toInt(c.reneg?['oldLabor'] ?? 0)
+        : 0;
+    final int extraReq = c.reneg != null
+        ? toInt(
+            c.reneg?['extraLabor'] ??
+                c.reneg?['approvedExtra'] ??
+                c.reneg?['counterExtraLabor'] ??
+                c.reneg?['fundiCounterExtraLabor'] ??
+                c.reneg?['clientCounterExtraLabor'] ??
+                0,
+          )
+        : 0;
+    final bool hasExtra = oldLocked > 0 && extraReq > 0;
+    final int extraFee = hasExtra ? (extraReq * 0.05).round() : c.clientAppFee;
+    final int extraToLockNow = hasExtra ? extraReq + extraFee : c.totalToPay;
     timeline.add(
       TimelineCard(
         title: 'Bid accepted - Done',
@@ -17,8 +34,10 @@ class EscrowSteps {
           labour: c.labour,
           transport: c.transport,
           transportLabel: c.transportLabel,
-          clientAppFee: c.clientAppFee,
-          totalToPay: c.totalToPay,
+          clientAppFee: hasExtra ? extraFee : c.clientAppFee,
+          totalToPay: hasExtra ? extraToLockNow : c.totalToPay,
+          oldLaborLocked: hasExtra ? oldLocked : null,
+          extraRequested: hasExtra ? extraReq : null,
         ),
       ),
     );

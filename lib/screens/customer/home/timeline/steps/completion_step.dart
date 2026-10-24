@@ -10,12 +10,13 @@ import '../timeline_context.dart';
 class CompletionSteps {
   static void handle(List<Widget> timeline, TimelineContext c) {
     if (c.status == 'job_completed' || c.status == 'pending_completion') {
-      // FIXED: c.labour is already final 6000 after lock, don't add extra again
-      int newLabour = toInt(c.labour); // final labour, already includes extra
+      int newLabour = toInt(c.labour);
       int transportVal = toInt(c.job['transportFee'] ?? 0);
       int clientFee = (newLabour * 0.05).round();
-      int totalToRelease =
-          newLabour + transportVal + clientFee; // 6000+150+300=6450
+      int totalToRelease = newLabour + transportVal + clientFee;
+      final int oldLocked = c.reneg != null ? toInt(c.reneg?['oldLabor'] ?? 0) : 0;
+      final int extraReq = c.reneg != null ? toInt(c.reneg?['extraLabor'] ?? c.reneg?['approvedExtra'] ?? c.reneg?['counterExtraLabor'] ?? 0) : 0;
+      final bool hasExtra = oldLocked > 0 && extraReq > 0;
 
       timeline.add(
         TimelineCard(
@@ -25,11 +26,13 @@ class CompletionSteps {
               'Fundi marked job as complete. Confirm to release KES $totalToRelease (fundi gets labour+transport minus fee)',
           icon: Icons.verified,
           isDone: false,
-          extra: ReleaseFeeBreakdown(
+                    extra: ReleaseFeeBreakdown(
             labour: newLabour,
             transport: transportVal,
             clientFee: clientFee,
             total: totalToRelease,
+            oldLaborLocked: hasExtra ? oldLocked : null,
+            extraRequested: hasExtra ? extraReq : null,
           ),
           action: SizedBox(
             width: double.infinity,
