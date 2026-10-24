@@ -57,14 +57,11 @@ class FundiProfileService {
       'locksmith': 'locksmith',
       'key': 'locksmith',
     };
-    for (final e in keywords.entries) {
-      if (lower.contains(e.key)) return e.value;
-    }
+    for (final e in keywords.entries) if (lower.contains(e.key)) return e.value;
     return 'plumbing_waterworks';
   }
 
-  static Future<(Map<String, dynamic> fundi, Map<String, dynamic> user)>
-  loadDocs() async {
+  static Future<(Map<String, dynamic>, Map<String, dynamic>)> loadDocs() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
     final fundiDoc = await FirebaseFirestore.instance
         .collection('fundis')
@@ -84,8 +81,7 @@ class FundiProfileService {
         .toString()
         .isNotEmpty)
       pct += 15;
-    if ((combined['bio'] ?? '').toString().length > 20) pct += 20;
-    if ((combined['bio'] ?? '').toString().length > 20) pct += 30;
+    if ((combined['bio'] ?? '').toString().length > 20) pct += 50;
     if (combined['photoUrl'] != null) pct += 15;
     if ((combined['phone'] ?? '').toString().length > 5) pct += 5;
     if ((combined['resumes'] as List?)?.isNotEmpty ?? false) pct += 7;
@@ -108,7 +104,8 @@ class FundiProfileService {
     return url;
   }
 
-  static Future<String> uploadDocFile(
+  // NOW SAVES REAL FILE NAME FROM DEVICE
+  static Future<Map<String, dynamic>> uploadDocFile(
     PlatformFile file,
     String field,
     void Function(double) onProgress,
@@ -120,15 +117,22 @@ class FundiProfileService {
       'fundi_docs/$uid/${field}_${DateTime.now().millisecondsSinceEpoch}.$ext',
     );
     final task = ref.putFile(File(file.path!));
-    task.snapshotEvents.listen((snap) {
-      onProgress(snap.bytesTransferred / snap.totalBytes);
-    });
+    task.snapshotEvents.listen(
+      (snap) => onProgress(snap.bytesTransferred / snap.totalBytes),
+    );
     await task;
     final url = await ref.getDownloadURL();
+
+    final fileData = {
+      'url': url,
+      'name': file.name,
+      'ext': ext,
+      'uploadedAt': DateTime.now().toIso8601String(),
+    };
     await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
-      field: FieldValue.arrayUnion([url]),
+      field: FieldValue.arrayUnion([fileData]),
     }, SetOptions(merge: true));
-    return url;
+    return fileData;
   }
 
   static Future<void> saveProfile({
@@ -146,7 +150,6 @@ class FundiProfileService {
         ? (category['slug'] as String)
         : keyword.trim().toLowerCase();
     final allCatIds = {selectedCategoryId, ...selectedCategoryIds}.toList();
-
     int maxJobs =
         [
               oldData?['jobsCompleted'],
@@ -166,7 +169,6 @@ class FundiProfileService {
             .where((e) => e != null)
             .map((e) => (e as num).toInt())
             .fold<int>(0, (a, b) => a > b ? a : b);
-
     await FirebaseFirestore.instance.collection('fundis').doc(uid).set({
       'primaryCategoryId': selectedCategoryId,
       'primaryCategoryName': category['name'],
@@ -177,13 +179,6 @@ class FundiProfileService {
       'profession': category['name'],
       'skill': category['name'],
       'searchKeyword': finalKeyword,
-      'otherSkills': selectedCategoryIds.map((id) {
-        try {
-          return category['name'];
-        } catch (_) {
-          return id;
-        }
-      }).toList(),
       'bio': bio.trim(),
       'experienceYears': int.tryParse(exp) ?? exp,
       'experience': exp,
@@ -197,7 +192,6 @@ class FundiProfileService {
       'averageRating': oldData?['averageRating'] ?? oldData?['rating'] ?? 4.5,
       'ratingCount': oldData?['ratingCount'] ?? oldData?['reviewsCount'] ?? 0,
     }, SetOptions(merge: true));
-
     await FirebaseFirestore.instance.collection('users').doc(uid).set({
       'profession': category['name'],
       'skill': category['name'],

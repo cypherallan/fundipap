@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import '../../../data/job_taxonomy.dart';
@@ -223,12 +221,6 @@ class _FundiProfileState extends State<FundiProfile> {
               uploadProgress: _uploadProgress,
               uploadingField: _uploadingField,
               onPick: _pickAndUpload,
-              onDelete: (f, u) async => await FirebaseFirestore.instance
-                  .collection('fundis')
-                  .doc(FirebaseAuth.instance.currentUser!.uid)
-                  .update({
-                    f: FieldValue.arrayRemove([u]),
-                  }),
               onLoad: _load,
             ),
           ],
