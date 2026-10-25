@@ -337,49 +337,60 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       var cName = (job['customerName'] ?? job['clientName'] ?? 'Client')
           .toString();
 
-      FundiWaitingState? ws = getFundiWaitingState(
-        job: job,
-        bid: job,
-        counterOffers: [],
-        uid: uid,
-      );
-
+      bool isDisputed =
+          (job['lastDisputeStatus'] ?? '').toString() == 'open' ||
+          (job['status'] ?? '').toString() == 'payment_disputed_by_fundi' ||
+          (job['fundiHomeNotifType'] ?? '').toString() ==
+              'dispute_under_review';
       String category;
       String type;
       FundiWaitingType waitingType;
 
-      if (ws != null) {
-        category = ws.title;
-        type = ws.type.name;
-        waitingType = ws.type;
+      if (isDisputed) {
+        int amt = _toInt(job['fundiPayoutAmount'] ?? job['fundiReceives'] ?? 0);
+        category = 'Dispute under review - KES $amt • $title';
+        type = 'dispute_under_review';
+        waitingType = FundiWaitingType.jobCompleted;
       } else {
-        var reneg = job['renegotiation'] as Map<String, dynamic>?;
-        var renegStatus = (reneg?['status'] ?? '').toString();
-        bool isRenegCounter = renegStatus == 'countered_by_client';
-        bool isRenegPending =
-            renegStatus == 'pending' && reneg?['requested'] == true;
-        int counterExtra = _toInt(
-          reneg?['counterExtraLabor'] ?? reneg?['counterLabor'] ?? 0,
+        FundiWaitingState? ws = getFundiWaitingState(
+          job: job,
+          bid: job,
+          counterOffers: [],
+          uid: uid,
         );
-        int pendingExtra = _toInt(
-          reneg?['extraToLock'] ??
-              reneg?['pendingLabor'] ??
-              reneg?['extraLabor'] ??
-              0,
-        );
-        if (isRenegCounter) {
-          category = '$title • Client countered extra KES $counterExtra';
-          type = 'counter';
-          waitingType = FundiWaitingType.clientCounter;
-        } else if (isRenegPending) {
-          category =
-              '$title • Waiting for client to approve extra KES $pendingExtra';
-          type = 'reneg_pending';
-          waitingType = FundiWaitingType.waitingNewPriceApproval;
+        if (ws != null) {
+          category = ws.title;
+          type = ws.type.name;
+          waitingType = ws.type;
         } else {
-          category = title;
-          type = 'assigned';
-          waitingType = FundiWaitingType.escrowLocked;
+          var reneg = job['renegotiation'] as Map<String, dynamic>?;
+          var renegStatus = (reneg?['status'] ?? '').toString();
+          bool isRenegCounter = renegStatus == 'countered_by_client';
+          bool isRenegPending =
+              renegStatus == 'pending' && reneg?['requested'] == true;
+          int counterExtra = _toInt(
+            reneg?['counterExtraLabor'] ?? reneg?['counterLabor'] ?? 0,
+          );
+          int pendingExtra = _toInt(
+            reneg?['extraToLock'] ??
+                reneg?['pendingLabor'] ??
+                reneg?['extraLabor'] ??
+                0,
+          );
+          if (isRenegCounter) {
+            category = '$title • Client countered extra KES $counterExtra';
+            type = 'counter';
+            waitingType = FundiWaitingType.clientCounter;
+          } else if (isRenegPending) {
+            category =
+                '$title • Waiting for client to approve extra KES $pendingExtra';
+            type = 'reneg_pending';
+            waitingType = FundiWaitingType.waitingNewPriceApproval;
+          } else {
+            category = title;
+            type = 'assigned';
+            waitingType = FundiWaitingType.escrowLocked;
+          }
         }
       }
 

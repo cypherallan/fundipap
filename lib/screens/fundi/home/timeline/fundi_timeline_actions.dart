@@ -320,10 +320,20 @@ class FundiTimelineActions {
       final fundiId = FirebaseAuth.instance.currentUser?.uid ?? '';
       final fundiEmail = FirebaseAuth.instance.currentUser?.email ?? '';
 
+      final jobSnap = await FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(jobId)
+          .get();
+      final jobData = jobSnap.data() ?? {};
+      final amount =
+          jobData['fundiPayoutAmount'] ??
+          jobData['fundiReceives'] ??
+          jobData['releasedAmount'] ??
+          0;
+
       final disputeRef = FirebaseFirestore.instance
           .collection('disputes')
           .doc();
-
       final batch = FirebaseFirestore.instance.batch();
 
       // 1. Create dispute doc
@@ -333,10 +343,12 @@ class FundiTimelineActions {
         'fundiId': fundiId,
         'fundiEmail': fundiEmail,
         'reason': reason,
-        'description': description, // <-- "I did not receive money..."
+        'description': description,
         'status': 'open',
         'openedBy': 'fundi',
         'openedByRole': 'fundi',
+        'disputedAmount': amount,
+        'jobTitle': jobData['title'] ?? '',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -345,6 +357,8 @@ class FundiTimelineActions {
       batch.update(FirebaseFirestore.instance.collection('jobs').doc(jobId), {
         'status': 'payment_disputed_by_fundi',
         'disputeId': disputeRef.id,
+        'lastDisputeId': disputeRef.id,
+        'lastDisputeStatus': 'open',
         'disputeReason': reason,
         'disputeDescription': description,
         'disputedBy': fundiId,
@@ -368,11 +382,46 @@ class FundiTimelineActions {
 
       await batch.commit();
 
+      // 4. CHANGE FUNDI NOTIF from released -> dispute under review
+      try {
+        final old = await FirebaseFirestore.instance
+            .collection('notifications')
+            .where('jobId', isEqualTo: jobId)
+            .where('toUserId', isEqualTo: fundiId)
+            .where('type', isEqualTo: 'released')
+            .get();
+        for (var d in old.docs) await d.reference.delete();
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'toUserId': fundiId,
+          'toRole': 'fundi',
+          'type': 'dispute_under_review',
+          'jobId': jobId,
+          'disputeId': disputeRef.id,
+          'title': 'Dispute under review',
+          'body': 'KES $amount • Admin reviewing - you reported not received',
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        await FirebaseFirestore.instance
+            .collection('fundis')
+            .doc(fundiId)
+            .collection('notifications')
+            .add({
+              'type': 'dispute_under_review',
+              'jobId': jobId,
+              'disputeId': disputeRef.id,
+              'title': 'Dispute under review',
+              'body': 'KES $amount • Admin reviewing',
+              'isRead': false,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+      } catch (_) {}
+
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Dispute opened: $reason')));
-      goBackToMyJobs(context, tab: 2);
+      ).showSnackBar(SnackBar(content: Text('Dispute opened - under review')));
+      goBackToMyJobs(context, tab: 0);
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(

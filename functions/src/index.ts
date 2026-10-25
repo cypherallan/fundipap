@@ -587,9 +587,34 @@ export const onDisputePush = onDocumentWritten({ document: "disputes/{disputeId}
     const clientTokens = await getFcmTokens(clientId);
     const adminTokens = await getAllAdminTokens();
 
-    // CASE 1: Client or Fundi raises dispute -> Admin only
+    // CASE 1: Client or Fundi raises dispute -> Admin + change fundi notif to dispute under review
     if (!before) {
         await sendPush(adminTokens, "New dispute raised", `${after.reason || 'New dispute'} • ${after.trade || ''} • Tap to review`, { disputeId, type: "new_dispute" });
+        try {
+            const old = await db().collection('notifications').where('jobId', '==', after.jobId).where('toUserId', '==', fundiId).where('type', '==', 'released').get();
+            const batch = db().batch();
+            old.forEach(d => batch.delete(d.ref));
+            await batch.commit();
+            await db().collection('notifications').add({
+                toUserId: fundiId,
+                title: 'Dispute under review',
+                body: `KES ${after.disputedAmount || after.amount || ''} • Admin reviewing`,
+                type: 'dispute_under_review',
+                jobId: after.jobId,
+                disputeId,
+                createdAt: FieldValue.serverTimestamp(),
+                isRead: false
+            });
+            await db().collection('fundis').doc(fundiId).collection('notifications').add({
+                title: 'Dispute under review',
+                body: `KES ${after.disputedAmount || after.amount || ''} • Admin reviewing`,
+                type: 'dispute_under_review',
+                jobId: after.jobId,
+                disputeId,
+                createdAt: FieldValue.serverTimestamp(),
+                isRead: false
+            });
+        } catch (e) { console.log('dispute notif update error', e); }
         return;
     }
 

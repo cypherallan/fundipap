@@ -161,6 +161,21 @@ FundiWaitingState? getFundiWaitingState({
       .toString()
       .toLowerCase();
 
+  // DISPUTE UNDER REVIEW - show dispute, not released
+  if ((job['lastDisputeStatus'] ?? '').toString() == 'open' ||
+      (job['status'] ?? '').toString() == 'payment_disputed_by_fundi') {
+    int finalAmount = _toInt(
+      job['fundiPayoutAmount'] ?? job['fundiReceives'] ?? fundiReceives,
+    );
+    return FundiWaitingState(
+      type: FundiWaitingType.jobCompleted,
+      title:
+          'Dispute under review - KES $finalAmount • ${job['title'] ?? 'Job'}',
+      message: 'Dispute under review - admin checking payment',
+      price: finalAmount,
+    );
+  }
+
   // AUTO-RESOLVED DISPUTE - show receipt, not waiting
   if ((job['lastDisputeStatus'] ?? '').toString() == 'resolved_explained') {
     int finalAmount = _toInt(

@@ -687,7 +687,7 @@ void _openNotReceivedDispute(BuildContext context, FundiTimelineContext c) {
                           : Colors.grey,
                     ),
                     onPressed: canDisputeNow
-                        ? () {
+                        ? () async {
                             if (selected == 'partial' &&
                                 partialController.text.trim().isEmpty) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -700,13 +700,14 @@ void _openNotReceivedDispute(BuildContext context, FundiTimelineContext c) {
                             final reason = selected == 'not_received_any'
                                 ? 'Payment not received at all'
                                 : 'Partial payment received';
+                            final desc = buildDescription();
                             Navigator.pop(ctx);
-                            FundiTimelineActions.openDispute(
+                            await FundiTimelineActions.openDispute(
                               context,
                               c.jobId,
                               c.clientId,
                               reason: reason,
-                              description: buildDescription(),
+                              description: desc,
                             );
                           }
                         : null,
