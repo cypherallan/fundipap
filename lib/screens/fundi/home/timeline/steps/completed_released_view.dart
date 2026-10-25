@@ -16,6 +16,77 @@ Widget buildCompletedReleasedView(
   var job = c.job;
   bool isAutoResolved =
       (job['lastDisputeStatus'] ?? '').toString() == 'resolved_explained';
+  bool isUnderReview =
+      !isAutoResolved &&
+      ((job['lastDisputeStatus'] ?? '').toString() == 'open' ||
+          (job['status'] ?? '').toString() == 'payment_disputed_by_fundi');
+
+  if (isUnderReview) {
+    int _toIntSafe(dynamic v, int fb) {
+      if (v == null) return fb;
+      if (v is int) return v;
+      if (v is double) return v.toInt();
+      if (v is num) return v.toInt();
+      String s = v.toString().replaceAll(RegExp(r'[^0-9]'), '');
+      if (s.isEmpty) return fb;
+      return int.tryParse(s) ?? fb;
+    }
+
+    int amt = _toIntSafe(job['fundiPayoutAmount'], c.releasedAmount);
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back),
+          onPressed: () => FundiTimelineActions.goBackToMyJobs(context, tab: 2),
+        ),
+        title: Text(
+          'Dispute under review - KES $amt',
+          style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+        ),
+        backgroundColor: FundipapColors.blackGray,
+        foregroundColor: Colors.white,
+      ),
+      body: Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Container(
+            padding: EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.shade300),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.hourglass_top, size: 48, color: Colors.orange),
+                SizedBox(height: 12),
+                Text(
+                  'Dispute under review',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Admin is checking your payment KES $amt\nB2C: ${job['lastB2CId'] ?? 'pending'}\nC2B: ${job['lastC2BId'] ?? ''}\nDispute #${job['disputeCount'] ?? 1}',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(fontSize: 12),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'You will be notified when resolved. Do not create duplicate dispute.',
+                  style: GoogleFonts.inter(fontSize: 11, color: Colors.black54),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   if (isAutoResolved) {
     int _toIntSafe(dynamic v, int fb) {

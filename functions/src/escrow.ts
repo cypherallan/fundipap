@@ -286,7 +286,7 @@ export const onDisputeCreatedSecure = onDocumentCreated({ document: "disputes/{d
                 await db.collection('fundis').doc(fId).collection('notifications').add({
                     jobId,
                     type: 'payment_dispute_auto_resolved',
-                    title: 'Dispute auto-resolved - tap to see receipt',
+                    title: 'Dispute resolved - tap to see receipt',
                     body: msg,
                     finalAmount: j.fundiPayoutAmount,
                     baseAmount: j.baseFundiPayoutBeforeDeduction,

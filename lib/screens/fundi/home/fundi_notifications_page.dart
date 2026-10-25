@@ -337,16 +337,31 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       var cName = (job['customerName'] ?? job['clientName'] ?? 'Client')
           .toString();
 
-      bool isDisputed =
-          (job['lastDisputeStatus'] ?? '').toString() == 'open' ||
-          (job['status'] ?? '').toString() == 'payment_disputed_by_fundi' ||
-          (job['fundiHomeNotifType'] ?? '').toString() ==
-              'dispute_under_review';
+      String lastDisp = (job['lastDisputeStatus'] ?? '').toString();
+      String jobStatus = (job['status'] ?? '').toString();
+      bool isResolved = lastDisp == 'resolved_explained';
+      bool isUnderReview =
+          !isResolved &&
+          (lastDisp == 'open' ||
+              jobStatus == 'payment_disputed_by_fundi' ||
+              (job['fundiHomeNotifType'] ?? '').toString() ==
+                  'dispute_under_review');
       String category;
       String type;
       FundiWaitingType waitingType;
 
-      if (isDisputed) {
+      if (isResolved) {
+        int amt = _toInt(
+          job['fundiPayoutAmount'] ??
+              job['fundiReceives'] ??
+              job['finalAmount'] ??
+              0,
+        );
+        String b2c = (job['lastB2CId'] ?? '').toString();
+        category = 'Dispute resolved KES $amt - $b2c - Tap to see receipt';
+        type = 'auto_resolved';
+        waitingType = FundiWaitingType.jobCompleted;
+      } else if (isUnderReview) {
         int amt = _toInt(job['fundiPayoutAmount'] ?? job['fundiReceives'] ?? 0);
         category = 'Dispute under review - KES $amt • $title';
         type = 'dispute_under_review';
