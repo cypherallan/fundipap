@@ -161,7 +161,7 @@ FundiWaitingState? getFundiWaitingState({
       .toString()
       .toLowerCase();
 
-  // AUTO-RESOLVED DISPUTE - CHECK FIRST so it overrides under_review when both flags exist
+  // AUTO-RESOLVED DISPUTE - CHECK FIRST
   if ((job['lastDisputeStatus'] ?? '').toString() == 'resolved_explained') {
     int finalAmount = _toInt(
       job['fundiPayoutAmount'] ??
@@ -178,7 +178,19 @@ FundiWaitingState? getFundiWaitingState({
     );
   }
 
-  // DISPUTE UNDER REVIEW - only if NOT already resolved
+  if ((job['lastDisputeStatus'] ?? '').toString() == 'escalated_to_support') {
+    int finalAmount = _toInt(
+      job['fundiPayoutAmount'] ?? job['fundiReceives'] ?? fundiReceives,
+    );
+    return FundiWaitingState(
+      type: FundiWaitingType.jobCompleted,
+      title: 'Escalated to support - KES $finalAmount',
+      message: 'Contact support with M-Pesa statement',
+      price: finalAmount,
+    );
+  }
+
+  // DISPUTE UNDER REVIEW
   if ((job['lastDisputeStatus'] ?? '').toString() == 'open' ||
       (job['status'] ?? '').toString() == 'payment_disputed_by_fundi') {
     int finalAmount = _toInt(
@@ -189,22 +201,6 @@ FundiWaitingState? getFundiWaitingState({
       title:
           'Dispute under review - KES $finalAmount • ${job['title'] ?? 'Job'}',
       message: 'Dispute under review - admin checking payment',
-      price: finalAmount,
-    );
-  }
-
-  if ((job['lastDisputeStatus'] ?? '').toString() == 'resolved_explained') {
-    int finalAmount = _toInt(
-      job['fundiPayoutAmount'] ??
-          job['fundiPayoutAfterDeduction'] ??
-          job['baseFundiPayoutBeforeDeduction'] ??
-          fundiReceives,
-    );
-    return FundiWaitingState(
-      type: FundiWaitingType.jobCompleted,
-      title: 'Dispute resolved - KES $finalAmount - Tap to view receipt',
-      message:
-          'Tap to see breakdown with C2B ${job['lastC2BId'] ?? ''} / B2C ${job['lastB2CId'] ?? ''}',
       price: finalAmount,
     );
   }

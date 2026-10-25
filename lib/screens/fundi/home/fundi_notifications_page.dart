@@ -223,12 +223,18 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         .collection('fundis')
         .doc(uid)
         .collection('notifications')
-        .where('type', isEqualTo: 'payment_dispute_auto_resolved')
+        .orderBy('createdAt', descending: true)
+        .limit(20)
         .snapshots()
         .listen((snap) {
           _autoResolved.clear();
           for (var d in snap.docs) {
             var n = d.data();
+            String t = (n['type'] ?? '').toString();
+            if (t != 'payment_dispute_auto_resolved' &&
+                t != 'escalated_to_support' &&
+                t != 'dispute_under_review')
+              continue;
             _autoResolved.add({
               'jobId': n['jobId'],
               'title': n['title'],
@@ -237,7 +243,11 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
               'b2cId': n['b2cId'],
               'createdAt': n['createdAt'],
               'isRead': n['isRead'] == true,
-              'type': 'auto_resolved',
+              'type': t == 'escalated_to_support'
+                  ? 'escalated_to_support'
+                  : t == 'dispute_under_review'
+                  ? 'dispute_under_review'
+                  : 'auto_resolved',
               'waitingType': FundiWaitingType.jobCompleted,
               'jobData': n,
               'docId': d.id,
@@ -340,8 +350,10 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
       String lastDisp = (job['lastDisputeStatus'] ?? '').toString();
       String jobStatus = (job['status'] ?? '').toString();
       bool isResolved = lastDisp == 'resolved_explained';
+      bool isEscalated = lastDisp == 'escalated_to_support';
       bool isUnderReview =
           !isResolved &&
+          !isEscalated &&
           (lastDisp == 'open' ||
               jobStatus == 'payment_disputed_by_fundi' ||
               (job['fundiHomeNotifType'] ?? '').toString() ==
@@ -360,6 +372,11 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         String b2c = (job['lastB2CId'] ?? '').toString();
         category = 'Dispute resolved KES $amt - $b2c - Tap to see receipt';
         type = 'auto_resolved';
+        waitingType = FundiWaitingType.jobCompleted;
+      } else if (isEscalated) {
+        int amt = _toInt(job['fundiPayoutAmount'] ?? job['fundiReceives'] ?? 0);
+        category = 'Escalated to support - KES $amt • $title';
+        type = 'escalated_to_support';
         waitingType = FundiWaitingType.jobCompleted;
       } else if (isUnderReview) {
         int amt = _toInt(job['fundiPayoutAmount'] ?? job['fundiReceives'] ?? 0);
@@ -549,19 +566,33 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     }
 
     for (var r in _autoResolved) {
-      String key = "auto_${r['jobId']}_${r['b2cId']}";
+      String key = "auto_${r['jobId']}_${r['b2cId']}_${r['type']}";
+      String t = (r['type'] ?? '').toString();
+      String cat;
+      if (t == 'escalated_to_support') {
+        cat =
+            'Escalated to support - KES ${r['finalAmount']} • Tap to contact admin';
+      } else if (t == 'dispute_under_review') {
+        cat = 'Dispute under review - KES ${r['finalAmount']}';
+      } else {
+        cat =
+            'Dispute resolved KES ${r['finalAmount']} - ${r['b2cId']} - Tap to see receipt';
+      }
+      // don't duplicate if job already in map with same status
+      if (grouped.containsKey(r['jobId'])) continue;
       grouped[key] = {
         'jobId': r['jobId'],
-        'clientName': 'System - Dispute resolved',
+        'clientName': t == 'escalated_to_support'
+            ? 'Support'
+            : 'System - Dispute resolved',
         'clientId': 'system',
-        'category':
-            'Dispute resolved KES ${r['finalAmount']} - ${r['b2cId']} - Tap to see receipt',
+        'category': cat,
         'jobData': r['jobData'],
         'latestAt': (r['createdAt'] is Timestamp)
             ? (r['createdAt'] as Timestamp).toDate()
             : DateTime.now(),
         'isRead': r['isRead'],
-        'type': 'auto_resolved',
+        'type': t,
         'waitingType': FundiWaitingType.jobCompleted,
         'isAutoResolved': true,
         'docId': r['docId'],

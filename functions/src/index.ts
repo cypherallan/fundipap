@@ -22,7 +22,10 @@ function db() {
     return _db;
 }
 
-// ============ YOUR EXISTING MPESA - UNTOUCHED ============
+export * from "./escrow";
+export * from "./support";
+
+// ============ YOUR EXISTING MPESA
 export const initiateMpesaPayment = onCall(async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
     const { phoneNumber, amount, contributionId, groupId } = request.data;
@@ -651,4 +654,4 @@ export const onDisputePush = onDocumentWritten({ document: "disputes/{disputeId}
         await sendPush(clientTokens, newS === 'resolved_client_win' ? "Dispute won" : "Dispute lost", `Dispute ${disputeId.substring(0, 6)}`, { disputeId, type: newS });
         return;
     }
-}); export * from "./escrow";
+});

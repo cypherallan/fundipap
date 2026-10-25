@@ -175,7 +175,7 @@ export const confirmCompletionSecure = onCall({ region: "europe-west1" }, async 
     });
 });
 
-// 2. AUTO-CHECK ON DISPUTE CREATED - 3 MAX THREAD
+// 2. AUTO-CHECK ON DISPUTE CREATED - SINGLE CHECK ONLY - contact support after
 export const onDisputeCreatedSecure = onDocumentCreated({ document: "disputes/{disputeId}", region: "europe-west1" }, async (event) => {
     const snap = event.data;
     if (!snap) return;
@@ -188,39 +188,27 @@ export const onDisputeCreatedSecure = onDocumentCreated({ document: "disputes/{d
     const job = jobSnap.data() as any;
     if (!job) return;
 
-    // --- 3 MAX DISPUTES LOGIC - START ---
+    // --- SINGLE DISPUTE ONLY - no 3x loop ---
     const existingDisputes = await db.collection("disputes").where("jobId", "==", jobId).where("fundiId", "==", fundiId).get();
     const disputeCount = existingDisputes.size;
 
-    if (disputeCount > 3) {
-        await snap.ref.update({ status: "auto_closed_max_3", autoClosedReason: "Max 3 disputes reached", resolvedAt: admin.firestore.FieldValue.serverTimestamp() });
+    if (disputeCount > 1) {
+        await snap.ref.update({ status: "escalated_to_support", autoClosedReason: "Only 1 auto-check allowed - contact support", resolvedAt: admin.firestore.FieldValue.serverTimestamp() });
         await db.collection("jobs").doc(jobId).update({
             lastDisputeId: disputeId,
-            lastDisputeStatus: "auto_closed_max_3",
-            disputeCount,
-            autoResolveCount: disputeCount,
-            status: "completed",
-        });
-        return;
-    }
-
-    let sameResolutionCount = 0;
-    existingDisputes.forEach((d) => {
-        const s = (d.data().status || "").toString();
-        if (s === "resolved_explained" || s === "auto_resolved" || s === "resolved" || s === "auto_closed_same_resolution_3x") sameResolutionCount++;
-    });
-
-    if (sameResolutionCount >= 2 && disputeCount >= 3) {
-        await snap.ref.update({ status: "auto_closed_same_resolution_3x", autoClosedReason: "Same amount verified 3 times", resolvedAt: admin.firestore.FieldValue.serverTimestamp() });
-        await db.collection("jobs").doc(jobId).update({
-            lastDisputeId: disputeId,
-            lastDisputeStatus: "auto_closed_max_3",
-            lastDisputeMessage: `System verified same payout 3 times. B2C ${job.lastB2CId || ""} / C2B ${job.lastC2BId || ""} - job auto-closed after ${disputeCount} attempts.`,
+            lastDisputeStatus: "escalated_to_support",
+            lastDisputeMessage: "Only 1 auto-check allowed. Please contact support with M-Pesa statement if still wrong.",
             disputeCount,
         });
+        const fId2 = (job.assignedFundiId || (job as any).assignedFundi || (job as any).fundiId || fundiId || '').toString();
+        if (fId2) {
+            await db.collection('fundis').doc(fId2).collection('notifications').add({
+                jobId, type: 'escalated_to_support', title: 'Contact support - 1 auto-check only', body: 'Only 1 auto-check allowed. Contact support with M-Pesa statement.', isRead: false, createdAt: admin.firestore.FieldValue.serverTimestamp(), disputeId,
+            });
+        }
         return;
     }
-    // --- 3 MAX DISPUTES LOGIC - END ---
+    // --- END SINGLE DISPUTE ---
 
     try {
         const payoutSnap = await db.collection("mpesaPayouts").doc(jobId).get();
@@ -275,8 +263,7 @@ export const onDisputeCreatedSecure = onDocumentCreated({ document: "disputes/{d
                 lastB2CId: j.b2cTransactionId,
                 lastC2BId: j.c2bTransactionId,
                 lastAutoResolvedAt: admin.firestore.FieldValue.serverTimestamp(),
-                disputeCount: disputeCount,
-                autoResolveCount: disputeCount,
+                disputeCount: 1,
             });
 
             const fId = (j.assignedFundiId || (j as any).assignedFundi || (j as any).fundiId || fundiId || '').toString();

@@ -8,6 +8,7 @@ import '../fundi_timeline_actions.dart';
 import '../fundi_timeline_context.dart';
 import '../../../rating/rate_client_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../support/contact_admin_screen.dart';
 
 Widget buildCompletedReleasedView(
   BuildContext context,
@@ -16,10 +17,108 @@ Widget buildCompletedReleasedView(
   var job = c.job;
   bool isAutoResolved =
       (job['lastDisputeStatus'] ?? '').toString() == 'resolved_explained';
+  bool isEscalated =
+      (job['lastDisputeStatus'] ?? '').toString() == 'escalated_to_support';
   bool isUnderReview =
       !isAutoResolved &&
+      !isEscalated &&
       ((job['lastDisputeStatus'] ?? '').toString() == 'open' ||
           (job['status'] ?? '').toString() == 'payment_disputed_by_fundi');
+
+  if (isEscalated) {
+    int _toIntSafe(dynamic v, int fb) {
+      if (v == null) return fb;
+      if (v is int) return v;
+      if (v is double) return v.toInt();
+      if (v is num) return v.toInt();
+      String s = v.toString().replaceAll(RegExp(r'[^0-9]'), '');
+      if (s.isEmpty) return fb;
+      return int.tryParse(s) ?? fb;
+    }
+
+    int amt = _toIntSafe(job['fundiPayoutAmount'], c.releasedAmount);
+    String b2c = (job['lastB2CId'] ?? '').toString();
+    String c2b = (job['lastC2BId'] ?? '').toString();
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back),
+          onPressed: () => FundiTimelineActions.goBackToMyJobs(context, tab: 2),
+        ),
+        title: Text(
+          'Escalated to support - KES $amt',
+          style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
+        ),
+        backgroundColor: FundipapColors.blackGray,
+        foregroundColor: Colors.white,
+      ),
+      body: Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Container(
+            padding: EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blue.shade300),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.support_agent, size: 48, color: Colors.blue),
+                SizedBox(height: 12),
+                Text(
+                  'Escalated to support',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Your case KES $amt\nB2C: $b2c\nC2B: $c2b\nSupport team will check your M-Pesa statement.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(fontSize: 12),
+                ),
+                SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ContactAdminScreen(
+                            jobId: c.jobId,
+                            b2cId: b2c,
+                            c2bId: c2b,
+                            finalAmount: amt,
+                            clientName: c.clientName,
+                            jobTitle: c.jobTitle,
+                          ),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      'CONTACT SUPPORT',
+                      style: GoogleFonts.montserrat(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   if (isUnderReview) {
     int _toIntSafe(dynamic v, int fb) {
@@ -70,7 +169,7 @@ Widget buildCompletedReleasedView(
                 ),
                 SizedBox(height: 8),
                 Text(
-                  'Admin is checking your payment KES $amt\nB2C: ${job['lastB2CId'] ?? 'pending'}\nC2B: ${job['lastC2BId'] ?? ''}\nDispute #${job['disputeCount'] ?? 1}',
+                  'Admin is checking your payment KES $amt\nB2C: ${job['lastB2CId'] ?? 'pending'}\nC2B: ${job['lastC2BId'] ?? ''}',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(fontSize: 12),
                 ),
@@ -107,12 +206,7 @@ Widget buildCompletedReleasedView(
     String msg = (job['lastDisputeMessage'] ?? job['lastAutoCheck'] ?? '')
         .toString();
     int feePct = _toIntSafe(job['fundiCommissionPct'], 5);
-    int disputeCount = _toIntSafe(
-      job['disputeCount'] ?? job['autoResolveCount'],
-      1,
-    );
     String lastDisputeId = (job['lastDisputeId'] ?? '').toString();
-    bool maxReached = disputeCount >= 3;
 
     return Scaffold(
       appBar: AppBar(
@@ -121,7 +215,7 @@ Widget buildCompletedReleasedView(
           onPressed: () => FundiTimelineActions.goBackToMyJobs(context, tab: 2),
         ),
         title: Text(
-          'Dispute ${maxReached ? 'closed' : 'resolved'} - KES $finalAmount',
+          'Dispute resolved - KES $finalAmount',
           style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
         ),
         backgroundColor: FundipapColors.blackGray,
@@ -133,27 +227,20 @@ Widget buildCompletedReleasedView(
           Container(
             padding: EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: maxReached ? Colors.grey.shade100 : Colors.green.shade50,
+              color: Colors.green.shade50,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: maxReached ? Colors.grey : Colors.green.shade200,
-              ),
+              border: Border.all(color: Colors.green.shade200),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(
-                      maxReached ? Icons.block : Icons.check_circle,
-                      color: maxReached ? Colors.grey : Colors.green.shade700,
-                    ),
+                    Icon(Icons.check_circle, color: Colors.green.shade700),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        maxReached
-                            ? 'Auto-closed after 3 same resolutions'
-                            : 'System auto-checked - you got correct amount ($disputeCount/3)',
+                        'System auto-checked - you got correct amount',
                         style: GoogleFonts.montserrat(
                           fontWeight: FontWeight.w800,
                           fontSize: 13,
@@ -213,108 +300,95 @@ Widget buildCompletedReleasedView(
             ),
           ),
           SizedBox(height: 16),
-          if (!maxReached) ...[
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: FundipapColors.greenSuccess,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () async {
-                  try {
-                    if (lastDisputeId.isNotEmpty) {
-                      await FirebaseFirestore.instance
-                          .collection('disputes')
-                          .doc(lastDisputeId)
-                          .update({
-                            'status': 'closed_confirmed',
-                            'fundiConfirmedAt': FieldValue.serverTimestamp(),
-                            'fundiConfirmed': true,
-                          });
-                    }
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: FundipapColors.greenSuccess,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                try {
+                  if (lastDisputeId.isNotEmpty) {
                     await FirebaseFirestore.instance
-                        .collection('jobs')
-                        .doc(c.jobId)
+                        .collection('disputes')
+                        .doc(lastDisputeId)
                         .update({
-                          'lastDisputeStatus': 'resolved_confirmed',
-                          'autoResolvedConfirmedAt':
-                              FieldValue.serverTimestamp(),
-                          'status': 'completed',
-                          'fundiConfirmedPayment': true,
+                          'status': 'closed_confirmed',
+                          'fundiConfirmedAt': FieldValue.serverTimestamp(),
+                          'fundiConfirmed': true,
                         });
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Job closed - thank you!')),
-                      );
-                      FundiTimelineActions.goBackToMyJobs(context, tab: 2);
-                    }
-                  } catch (e) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text('Error: $e')));
                   }
-                },
-                child: Text(
-                  'YES, CONFIRM KES $finalAmount & CLOSE JOB',
-                  style: GoogleFonts.montserrat(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: FundipapColors.redAlert,
-                  side: BorderSide(color: FundipapColors.redAlert, width: 1.5),
-                ),
-                onPressed: () {
-                  if (disputeCount >= 3) {
+                  await FirebaseFirestore.instance
+                      .collection('jobs')
+                      .doc(c.jobId)
+                      .update({
+                        'lastDisputeStatus': 'resolved_confirmed',
+                        'autoResolvedConfirmedAt': FieldValue.serverTimestamp(),
+                        'status': 'completed',
+                        'fundiConfirmedPayment': true,
+                      });
+                  if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Max 3 disputes reached - job auto-closed',
-                        ),
-                      ),
+                      SnackBar(content: Text('Job closed - thank you!')),
                     );
-                    return;
+                    FundiTimelineActions.goBackToMyJobs(context, tab: 2);
                   }
-                  _openFollowUpDispute(context, c, lastDisputeId, disputeCount);
-                },
-                child: Text(
-                  'NO, STILL WRONG - RAISE FOLLOW-UP (${disputeCount}/3)',
-                  style: GoogleFonts.montserrat(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11,
-                  ),
+                } catch (e) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
+              },
+              child: Text(
+                'YES, CONFIRM KES $finalAmount & CLOSE JOB',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
                 ),
               ),
             ),
-            SizedBox(height: 8),
-            Text(
-              'You can dispute up to 3 times. Same resolution 3x auto-closes job.',
-              style: GoogleFonts.inter(fontSize: 10, color: Colors.black54),
-              textAlign: TextAlign.center,
-            ),
-          ] else ...[
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.circular(8),
+          ),
+          SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.blue.shade700,
+                side: BorderSide(color: Colors.blue.shade700, width: 1.5),
               ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ContactAdminScreen(
+                      jobId: c.jobId,
+                      b2cId: b2cId,
+                      c2bId: c2bId,
+                      finalAmount: finalAmount,
+                      clientName: c.clientName,
+                      jobTitle: c.jobTitle,
+                    ),
+                  ),
+                );
+              },
               child: Text(
-                'This job was auto-closed after 3 identical system checks. Same amount verified 3 times with C2B $c2bId / B2C $b2cId. Contact support if you still have issue.',
-                style: GoogleFonts.inter(fontSize: 11, color: Colors.white),
+                'CONTACT SUPPORT - STILL WRONG?',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
+                ),
               ),
             ),
-          ],
+          ),
+          SizedBox(height: 8),
+          Text(
+            'If still wrong, contact support with M-Pesa statement and screenshots.',
+            style: GoogleFonts.inter(fontSize: 10, color: Colors.black54),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -796,103 +870,5 @@ void _openNotReceivedDispute(BuildContext context, FundiTimelineContext c) {
         },
       );
     },
-  );
-}
-
-void _openFollowUpDispute(
-  BuildContext context,
-  FundiTimelineContext c,
-  String parentId,
-  int currentCount,
-) {
-  final reasonCtrl = TextEditingController();
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(
-        'Follow-up ticket ${currentCount + 1}/3',
-        style: GoogleFonts.montserrat(
-          fontWeight: FontWeight.w700,
-          fontSize: 14,
-        ),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'Previous was auto-resolved with B2C ${c.job['lastB2CId'] ?? ''}. What is still wrong?',
-            style: GoogleFonts.inter(fontSize: 11),
-          ),
-          SizedBox(height: 12),
-          TextField(
-            controller: reasonCtrl,
-            maxLines: 3,
-            decoration: InputDecoration(
-              labelText: 'Explain issue',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel')),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: FundipapColors.redAlert,
-          ),
-          onPressed: () async {
-            if (reasonCtrl.text.trim().isEmpty) return;
-            Navigator.pop(ctx);
-            try {
-              final newDoc = await FirebaseFirestore.instance
-                  .collection('disputes')
-                  .add({
-                    'jobId': c.jobId,
-                    'fundiId': FirebaseFirestore.instance
-                        .collection('users')
-                        .doc()
-                        .id, // will be overwritten by auth uid in rules? use actual uid
-                    'clientId': c.clientId,
-                    'parentDisputeId': parentId,
-                    'threadIndex': currentCount + 1,
-                    'disputeCount': currentCount + 1,
-                    'reason': 'follow_up_payment',
-                    'description': reasonCtrl.text.trim(),
-                    'status': 'open',
-                    'createdAt': FieldValue.serverTimestamp(),
-                    'isFollowUp': true,
-                  });
-              await FirebaseFirestore.instance
-                  .collection('jobs')
-                  .doc(c.jobId)
-                  .update({
-                    'lastDisputeId': newDoc.id,
-                    'lastDisputeStatus': 'follow_up_open',
-                    'disputeCount': FieldValue.increment(1),
-                    'autoResolveCount': FieldValue.increment(1),
-                    'lastFollowUpAt': FieldValue.serverTimestamp(),
-                  });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Follow-up ticket ${currentCount + 1}/3 created',
-                  ),
-                ),
-              );
-            } catch (e) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('Error: $e')));
-            }
-          },
-          child: Text(
-            'CREATE TICKET ${currentCount + 1}/3',
-            style: TextStyle(color: Colors.white),
-          ),
-        ),
-      ],
-    ),
   );
 }

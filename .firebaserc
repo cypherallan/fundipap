@@ -1,5 +1,13 @@
 {
   "projects": {
     "default": "fundipap-global"
+  },
+  "targets": {},
+  "etags": {
+    "fundipap-global": {
+      "extensionInstances": {
+        "firestore-send-email": "864b2ddc1901ab6b68d1484a2ed15f790d06041745095ec432ad795a5e136c42"
+      }
+    }
   }
 }
