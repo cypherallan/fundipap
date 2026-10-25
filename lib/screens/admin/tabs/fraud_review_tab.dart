@@ -16,8 +16,9 @@ class FraudReviewTab extends StatelessWidget {
           .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (_, snap) {
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         if (snap.data!.docs.isEmpty) {
           return Center(
             child: Text(

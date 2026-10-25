@@ -142,8 +142,9 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
           .doc(widget.disputeId)
           .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
         var d = snap.data!.data() as Map<String, dynamic>;
         bool isRepeat = d['type'] == 'repeat_job';
         var redoOffer = d['redoOffer'] as Map?;

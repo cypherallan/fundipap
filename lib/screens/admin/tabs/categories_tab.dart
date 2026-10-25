@@ -13,8 +13,9 @@ class CategoriesTab extends StatelessWidget {
     if (b == 'silver') return 1;
     if (b == 'bronze') return 2;
     if (b == 'none' || b == '' || b == 'null') return 3;
-    if (b.contains('gold') && (b.contains('trial') || b.contains('test')))
+    if (b.contains('gold') && (b.contains('trial') || b.contains('test'))) {
       return 4;
+    }
     return 3;
   }
 
@@ -324,8 +325,9 @@ class CategoriesTab extends StatelessWidget {
                 .orderBy('name')
                 .snapshots(),
             builder: (_, snap) {
-              if (!snap.hasData)
+              if (!snap.hasData) {
                 return Center(child: CircularProgressIndicator());
+              }
               if (snap.data!.docs.isEmpty) {
                 return Container(
                   width: double.infinity,

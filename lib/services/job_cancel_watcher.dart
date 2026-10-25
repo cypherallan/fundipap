@@ -103,10 +103,11 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
     int payout = 0;
     try {
       var raw = data['fundiPayout'] ?? data['transportReleasedAmount'] ?? 0;
-      if (raw is int)
+      if (raw is int) {
         payout = raw;
-      else
+      } else {
         payout = int.tryParse('$raw') ?? 0;
+      }
     } catch (_) {}
     bool isAfterArrival = status.contains('cancelled_after_arrival');
     bool transportReleased = data['transportReleased'] == true || payout > 0;

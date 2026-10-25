@@ -240,7 +240,7 @@ class ProfileUploads extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Uploading ${title}... ${(uploadProgress * 100).toStringAsFixed(0)}%',
+              'Uploading $title... ${(uploadProgress * 100).toStringAsFixed(0)}%',
               style: GoogleFonts.inter(fontSize: 10, color: Colors.black54),
             ),
           ],
@@ -271,7 +271,7 @@ class ProfileUploads extends StatelessWidget {
             if (entry is String) {
               url = entry;
               name = entry.split('/').last.split('?').first;
-              if (name.length > 25) name = name.substring(0, 25) + '...';
+              if (name.length > 25) name = '${name.substring(0, 25)}...';
               if (name.isEmpty) name = 'File ${items.indexOf(entry) + 1}';
               ext = name.split('.').last;
             } else {

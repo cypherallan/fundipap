@@ -57,7 +57,9 @@ class FundiProfileService {
       'locksmith': 'locksmith',
       'key': 'locksmith',
     };
-    for (final e in keywords.entries) if (lower.contains(e.key)) return e.value;
+    for (final e in keywords.entries) {
+      if (lower.contains(e.key)) return e.value;
+    }
     return 'plumbing_waterworks';
   }
 
@@ -79,8 +81,9 @@ class FundiProfileService {
     if ((combined['name'] ?? '').toString().length > 2) pct += 10;
     if ((combined['profession'] ?? combined['primaryCategoryId'] ?? '')
         .toString()
-        .isNotEmpty)
+        .isNotEmpty) {
       pct += 15;
+    }
     if ((combined['bio'] ?? '').toString().length > 20) pct += 50;
     if (combined['photoUrl'] != null) pct += 15;
     if ((combined['phone'] ?? '').toString().length > 5) pct += 5;

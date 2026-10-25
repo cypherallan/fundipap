@@ -323,10 +323,11 @@ class DisputeService {
     );
     if (ok != true) return;
     if (reasonCtrl.text.trim().length < 10) {
-      if (context.mounted)
+      if (context.mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Explain at least 10 chars')));
+      }
       return;
     }
 
@@ -533,10 +534,11 @@ class DisputeService {
     );
     if (ok != true) return;
     if (reasonCtrl.text.trim().length < 10) {
-      if (context.mounted)
+      if (context.mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Explain at least 10 chars')));
+      }
       return;
     }
     var uid = FirebaseAuth.instance.currentUser!.uid;

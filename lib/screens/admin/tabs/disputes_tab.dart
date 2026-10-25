@@ -12,8 +12,9 @@ class DisputesTab extends StatelessWidget {
     if (b == 'silver') return 1;
     if (b == 'bronze') return 2;
     if (b == 'none' || b == '' || b == 'null') return 3;
-    if (b.contains('gold') && (b.contains('trial') || b.contains('test')))
+    if (b.contains('gold') && (b.contains('trial') || b.contains('test'))) {
       return 4;
+    }
     return 3;
   }
 
@@ -68,10 +69,12 @@ class DisputesTab extends StatelessWidget {
               )
               .snapshots(),
           builder: (_, snap) {
-            if (!snap.hasData)
+            if (!snap.hasData) {
               return Center(child: CircularProgressIndicator());
-            if (snap.data!.docs.isEmpty)
+            }
+            if (snap.data!.docs.isEmpty) {
               return Center(child: Text('No open disputes ✓'));
+            }
 
             var raw = snap.data!.docs.map((doc) {
               var d = doc.data() as Map<String, dynamic>;

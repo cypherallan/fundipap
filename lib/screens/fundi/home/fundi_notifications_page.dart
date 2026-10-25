@@ -122,7 +122,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
               int amt = 0;
               int prev = 0;
               if (bid['priceHistory'] is List &&
-                  (bid['priceHistory'] as List).length >= 1) {
+                  (bid['priceHistory'] as List).isNotEmpty) {
                 var h = bid['priceHistory'] as List;
                 amt = _toInt(h.last['price']);
                 if (h.length >= 2) prev = _toInt(h[h.length - 2]['price']);

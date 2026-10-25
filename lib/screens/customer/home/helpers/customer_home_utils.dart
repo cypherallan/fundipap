@@ -81,8 +81,9 @@ Future<List<BidWithFundi>> enrichBids(
 ) async {
   int extractYes(Map<String, dynamic>? d) {
     if (d == null) return -1;
-    if (d.containsKey('referralYesCount'))
+    if (d.containsKey('referralYesCount')) {
       return toInt(d['referralYesCount'], -1);
+    }
     if (d.containsKey('referralCount')) return toInt(d['referralCount'], -1);
     if (d.containsKey('referrals')) return toInt(d['referrals'], -1);
     if (d.containsKey('totalReferrals')) return toInt(d['totalReferrals'], -1);

@@ -40,9 +40,9 @@ class TimelineActions {
           .doc(fundiId)
           .get();
       var fd = fundiSnap.data() ?? {};
-      if (fd['badgeLevel'] == 'gold' || fd['isTrialGold'] == true)
+      if (fd['badgeLevel'] == 'gold' || fd['isTrialGold'] == true) {
         fundiPct = 5;
-      else if (fd['badgeLevel'] == 'silver')
+      } else if (fd['badgeLevel'] == 'silver')
         fundiPct = 8;
       else if (fd['badgeLevel'] == 'bronze')
         fundiPct = 10;
@@ -258,9 +258,9 @@ class TimelineActions {
           .get();
       var fundiData = fundiSnap.data() ?? {};
       int fundiPct = 5;
-      if (fundiData['isTrialGold'] == true)
+      if (fundiData['isTrialGold'] == true) {
         fundiPct = 5;
-      else if (fundiData['badgeLevel'] == 'gold')
+      } else if (fundiData['badgeLevel'] == 'gold')
         fundiPct = 5;
       else if (fundiData['badgeLevel'] == 'silver')
         fundiPct = 8;

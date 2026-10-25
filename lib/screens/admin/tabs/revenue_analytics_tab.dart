@@ -175,7 +175,7 @@ class _RevenueAnalyticsTabState extends State<RevenueAnalyticsTab> {
                               child: _card(
                                 'GRAND TOTAL',
                                 'KES ${grandTotal.toStringAsFixed(0)}',
-                                '${grandCount} jobs',
+                                '$grandCount jobs',
                                 true,
                               ),
                             ),
@@ -245,10 +245,10 @@ class _RevenueAnalyticsTabState extends State<RevenueAnalyticsTab> {
                         child: SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: DataTable(
-                            headingRowColor: MaterialStateProperty.all(
+                            headingRowColor: WidgetStateProperty.all(
                               Color(0xFF1A1A1A),
                             ),
-                            dataRowColor: MaterialStateProperty.all(
+                            dataRowColor: WidgetStateProperty.all(
                               Colors.white,
                             ),
                             dataRowMinHeight: 62,

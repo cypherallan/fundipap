@@ -138,8 +138,9 @@ class _UploadEvidenceScreenState extends State<UploadEvidenceScreen> {
           .doc(widget.disputeId)
           .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
         var d = snap.data!.data() as Map<String, dynamic>;
         var cfg = d['evidenceConfig'] as Map? ?? {};
         String hint = cfg['hint'] ?? 'Describe what happened';

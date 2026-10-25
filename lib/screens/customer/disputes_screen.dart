@@ -42,8 +42,9 @@ class _DisputesScreenState extends State<DisputesScreen>
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snap) {
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         var allDocs = snap.data!.docs.toList();
 
         var docs = allDocs.where((doc) {

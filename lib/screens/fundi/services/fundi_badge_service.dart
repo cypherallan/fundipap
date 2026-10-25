@@ -361,8 +361,9 @@ class FundiBadgeService {
     int yes = 0;
     for (var d in revSnap.docs) {
       if ((d.data()['wouldRefer'] ?? d.data()['wouldRecommend'] ?? false) ==
-          true)
+          true) {
         yes++;
+      }
     }
     statsData['completedJobs'] = total;
     statsData['jobsCompleted'] = total;

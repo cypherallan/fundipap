@@ -608,7 +608,7 @@ class _FundiRequestNewPriceScreenState
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: _clientOriginalPhotos.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 6),
+                        separatorBuilder: (_, _) => const SizedBox(width: 6),
                         itemBuilder: (_, i) => ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: Image.network(
@@ -616,7 +616,7 @@ class _FundiRequestNewPriceScreenState
                             width: 60,
                             height: 60,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
+                            errorBuilder: (_, _, _) => Container(
                               width: 60,
                               height: 60,
                               color: Colors.grey,
@@ -678,8 +678,9 @@ class _FundiRequestNewPriceScreenState
                         source: ImageSource.camera,
                         imageQuality: 70,
                       );
-                      if (img != null)
+                      if (img != null) {
                         setState(() => verificationPhotos.add(img));
+                      }
                     },
                     icon: const Icon(
                       Icons.camera_alt,
@@ -786,8 +787,9 @@ class _FundiRequestNewPriceScreenState
                   OutlinedButton.icon(
                     onPressed: () async {
                       var imgs = await picker.pickMultiImage(imageQuality: 60);
-                      if (imgs.isNotEmpty)
+                      if (imgs.isNotEmpty) {
                         setState(() => evidencePhotos.addAll(imgs));
+                      }
                     },
                     icon: const Icon(Icons.photo, size: 16),
                     label: const Text(

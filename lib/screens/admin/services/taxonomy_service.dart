@@ -68,8 +68,8 @@ class TaxonomyService {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Clear'),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text('Clear'),
           ),
         ],
       ),
@@ -79,11 +79,15 @@ class TaxonomyService {
     var cats = await db.collection('jobCategories').get();
     for (var d in cats.docs) {
       var subs = await d.reference.collection('subcategories').get();
-      for (var s in subs.docs) await s.reference.delete();
+      for (var s in subs.docs) {
+        await s.reference.delete();
+      }
       await d.reference.delete();
     }
     var pricing = await db.collection('pricingRules').get();
-    for (var p in pricing.docs) await p.reference.delete();
+    for (var p in pricing.docs) {
+      await p.reference.delete();
+    }
   }
 
   static Future<String> seedCategoriesOnly() async {
