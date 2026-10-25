@@ -161,6 +161,23 @@ FundiWaitingState? getFundiWaitingState({
       .toString()
       .toLowerCase();
 
+  // AUTO-RESOLVED DISPUTE - show receipt, not waiting
+  if ((job['lastDisputeStatus'] ?? '').toString() == 'resolved_explained') {
+    int finalAmount = _toInt(
+      job['fundiPayoutAmount'] ??
+          job['fundiPayoutAfterDeduction'] ??
+          job['baseFundiPayoutBeforeDeduction'] ??
+          fundiReceives,
+    );
+    return FundiWaitingState(
+      type: FundiWaitingType.jobCompleted,
+      title: 'Dispute auto-resolved - KES $finalAmount - Tap to view receipt',
+      message:
+          'Tap to see breakdown with C2B ${job['lastC2BId'] ?? ''} / B2C ${job['lastB2CId'] ?? ''}',
+      price: finalAmount,
+    );
+  }
+
   bool isCompletedLike =
       jobStatus.contains('complet') ||
       jobStatus.contains('closed') ||
@@ -175,12 +192,18 @@ FundiWaitingState? getFundiWaitingState({
       _toBool(job['isCompleted']);
 
   if (isCompletedLike) {
+    // Use server payout if available
+    int serverFinal = _toInt(
+      job['fundiPayoutAmount'] ?? job['fundiPayoutAfterDeduction'] ?? 0,
+    );
+    int displayReceives = serverFinal > 0 ? serverFinal : fundiReceives;
+
     if (escrowStatus == 'released' || _toBool(job['escrowReleased'])) {
       return FundiWaitingState(
         type: FundiWaitingType.jobCompleted,
-        title: 'Client released KES $fundiReceives - Tap to view receipt',
-        message: 'Client released KES $fundiReceives to you',
-        price: fundiReceives,
+        title: 'Client released KES $displayReceives - Tap to view receipt',
+        message: 'Client released KES $displayReceives to you',
+        price: displayReceives,
       );
     }
     return FundiWaitingState(

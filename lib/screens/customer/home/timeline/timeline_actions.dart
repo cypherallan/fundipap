@@ -162,8 +162,26 @@ class TimelineActions {
     int transport = toInt(
       job['transportFee'] ?? bidData['transportFee'] ?? 100,
     );
+    int fundiPctLocal = 10;
+    try {
+      var fundiSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(fundiId)
+          .get();
+      var fd = fundiSnap.data() ?? {};
+      if (fd['isTrialGold'] == true)
+        fundiPctLocal = 5;
+      else if (fd['badgeLevel'] == 'gold')
+        fundiPctLocal = 5;
+      else if (fd['badgeLevel'] == 'silver')
+        fundiPctLocal = 8;
+      else if (fd['badgeLevel'] == 'bronze')
+        fundiPctLocal = 10;
+      else
+        fundiPctLocal = 15;
+    } catch (_) {}
     int clientFee = (labour * 0.05).round();
-    int fundiFee = (labour * 0.05).round();
+    int fundiFee = (labour * fundiPctLocal / 100).round();
     int totalClient = labour + transport + clientFee;
     int fundiRec = labour - fundiFee + transport;
     final batch = FirebaseFirestore.instance.batch();

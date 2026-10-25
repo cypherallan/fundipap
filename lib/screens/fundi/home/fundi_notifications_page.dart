@@ -23,6 +23,8 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
   List<DocumentSnapshot> _assignedJobs = [];
   StreamSubscription? _jobsSub;
   StreamSubscription? _jobsSub2;
+  StreamSubscription? _autoResolvedSub;
+  final List<Map<String, dynamic>> _autoResolved = [];
   final Set<String> _excludedJobIds = {};
   final Map<String, DocumentSnapshot> _jobsMap = {};
 
@@ -62,6 +64,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     _bidsSub?.cancel();
     _jobsSub?.cancel();
     _jobsSub2?.cancel();
+    _autoResolvedSub?.cancel();
     _jobsMap.clear();
     _excludedJobIds.clear();
     _assignedJobs = [];
@@ -69,6 +72,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     _clientCounters.clear();
     _sentBids.clear();
     _acceptedCounters.clear();
+    _autoResolved.clear();
     if (mounted) setState(() {});
 
     var uid = FirebaseAuth.instance.currentUser!.uid;
@@ -214,6 +218,33 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         .where('fundiId', isEqualTo: uid)
         .snapshots()
         .listen((snap) => _mergeIntoMap(snap.docs));
+
+    _autoResolvedSub = FirebaseFirestore.instance
+        .collection('fundis')
+        .doc(uid)
+        .collection('notifications')
+        .where('type', isEqualTo: 'payment_dispute_auto_resolved')
+        .snapshots()
+        .listen((snap) {
+          _autoResolved.clear();
+          for (var d in snap.docs) {
+            var n = d.data();
+            _autoResolved.add({
+              'jobId': n['jobId'],
+              'title': n['title'],
+              'body': n['body'],
+              'finalAmount': n['finalAmount'],
+              'b2cId': n['b2cId'],
+              'createdAt': n['createdAt'],
+              'isRead': n['isRead'] == true,
+              'type': 'auto_resolved',
+              'waitingType': FundiWaitingType.jobCompleted,
+              'jobData': n,
+              'docId': d.id,
+            });
+          }
+          if (mounted) setState(() {});
+        });
   }
 
   Future<void> _onRefresh() async {
@@ -291,6 +322,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
     _bidsSub?.cancel();
     _jobsSub?.cancel();
     _jobsSub2?.cancel();
+    _autoResolvedSub?.cancel();
     super.dispose();
   }
 
@@ -487,6 +519,26 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
         'isRead': b['isRead'] == true,
         'type': 'bid_sent',
         'waitingType': FundiWaitingType.bidSent,
+      };
+    }
+
+    for (var r in _autoResolved) {
+      String key = "auto_${r['jobId']}_${r['b2cId']}";
+      grouped[key] = {
+        'jobId': r['jobId'],
+        'clientName': 'System - Dispute resolved',
+        'clientId': 'system',
+        'category':
+            'Dispute resolved KES ${r['finalAmount']} - ${r['b2cId']} - Tap to see receipt',
+        'jobData': r['jobData'],
+        'latestAt': (r['createdAt'] is Timestamp)
+            ? (r['createdAt'] as Timestamp).toDate()
+            : DateTime.now(),
+        'isRead': r['isRead'],
+        'type': 'auto_resolved',
+        'waitingType': FundiWaitingType.jobCompleted,
+        'isAutoResolved': true,
+        'docId': r['docId'],
       };
     }
 

@@ -34,11 +34,21 @@ export const confirmCompletionSecure = onCall({ region: "europe-west1" }, async 
         const fundiId = (j.assignedFundiId || j.assignedFundi || "").toString();
         if (!fundiId) throw new HttpsError("failed-precondition", "No fundi assigned");
 
-        const escrowAmount = toInt(j.escrowAmount ?? j.totalCost ?? j.agreedPrice ?? j.budgetMax ?? 0);
+        // CORRECT LABOUR - never use escrowAmount (includes client fee)
+        const labourBase = toInt(j.laborCost ?? j.agreedPrice ?? j.acceptedBidAmount ?? j.lastCounterAmount ?? j.budgetMax ?? 0);
         const extraLabor = toInt(j.extraLaborAmount ?? j.renegotiation?.extraLabor ?? 0);
         const newLaborTotal = toInt(j.renegotiation?.newLaborTotal ?? 0);
-        const totalRelease = newLaborTotal > 0 ? newLaborTotal : escrowAmount + extraLabor;
-        if (totalRelease <= 0) throw new HttpsError("failed-precondition", "Invalid amount");
+        const labour = newLaborTotal > 0 ? newLaborTotal : labourBase + extraLabor;
+        if (labour <= 0) throw new HttpsError("failed-precondition", "Invalid labour amount");
+
+        const transport = toInt(j.transportFee ?? 100);
+        const clientFeeLocked = toInt(j.clientAppFee ?? Math.round(labour * 0.05));
+        const totalLocked = labour + transport + clientFeeLocked;
+        const escrowAmount = toInt(j.escrowAmount ?? j.totalCost ?? 0);
+        // Validate client locked enough, but don't use escrowAmount for payout math
+        if (escrowAmount > 0 && escrowAmount < totalLocked - 50) {
+            console.warn(`Escrow ${escrowAmount} less than expected ${totalLocked} for job ${jobId}`);
+        }
 
         // Badge - server truth
         let fundiPct = 15;
@@ -53,10 +63,9 @@ export const confirmCompletionSecure = onCall({ region: "europe-west1" }, async 
             }
         } catch { }
 
-        const transport = toInt(j.transportFee ?? 183);
-        const labour = totalRelease - transport > 0 ? totalRelease - transport : totalRelease;
         const platformFee = Math.round(labour * fundiPct / 100);
-        const baseFundiPayout = totalRelease - platformFee;
+        const baseFundiPayout = labour - platformFee + transport;
+        const totalRelease = totalLocked; // for ledger C2B = totalLocked
 
         // Deduction - server truth from fundiPenalties collection
         let finalPayout = baseFundiPayout;
@@ -166,21 +175,58 @@ export const confirmCompletionSecure = onCall({ region: "europe-west1" }, async 
     });
 });
 
-// 2. AUTO-CHECK ON DISPUTE CREATED
+// 2. AUTO-CHECK ON DISPUTE CREATED - 3 MAX THREAD
 export const onDisputeCreatedSecure = onDocumentCreated({ document: "disputes/{disputeId}", region: "europe-west1" }, async (event) => {
     const snap = event.data;
     if (!snap) return;
-    const d = snap.data() as any;
+    const dispute = snap.data() as any;
     const disputeId = event.params.disputeId;
-    const jobId = d.jobId;
-
+    const jobId = dispute.jobId as string;
+    const fundiId = dispute.fundiId as string;
     if (!jobId) return;
+    const jobSnap = await db.collection("jobs").doc(jobId).get();
+    const job = jobSnap.data() as any;
+    if (!job) return;
+
+    // --- 3 MAX DISPUTES LOGIC - START ---
+    const existingDisputes = await db.collection("disputes").where("jobId", "==", jobId).where("fundiId", "==", fundiId).get();
+    const disputeCount = existingDisputes.size;
+
+    if (disputeCount > 3) {
+        await snap.ref.update({ status: "auto_closed_max_3", autoClosedReason: "Max 3 disputes reached", resolvedAt: admin.firestore.FieldValue.serverTimestamp() });
+        await db.collection("jobs").doc(jobId).update({
+            lastDisputeId: disputeId,
+            lastDisputeStatus: "auto_closed_max_3",
+            disputeCount,
+            autoResolveCount: disputeCount,
+            status: "completed",
+        });
+        return;
+    }
+
+    let sameResolutionCount = 0;
+    existingDisputes.forEach((d) => {
+        const s = (d.data().status || "").toString();
+        if (s === "resolved_explained" || s === "auto_resolved" || s === "resolved" || s === "auto_closed_same_resolution_3x") sameResolutionCount++;
+    });
+
+    if (sameResolutionCount >= 2 && disputeCount >= 3) {
+        await snap.ref.update({ status: "auto_closed_same_resolution_3x", autoClosedReason: "Same amount verified 3 times", resolvedAt: admin.firestore.FieldValue.serverTimestamp() });
+        await db.collection("jobs").doc(jobId).update({
+            lastDisputeId: disputeId,
+            lastDisputeStatus: "auto_closed_max_3",
+            lastDisputeMessage: `System verified same payout 3 times. B2C ${job.lastB2CId || ""} / C2B ${job.lastC2BId || ""} - job auto-closed after ${disputeCount} attempts.`,
+            disputeCount,
+        });
+        return;
+    }
+    // --- 3 MAX DISPUTES LOGIC - END ---
 
     try {
         const payoutSnap = await db.collection("mpesaPayouts").doc(jobId).get();
-        const jobSnap = await db.collection("jobs").doc(jobId).get();
-        if (!jobSnap.exists) return;
-        const j = jobSnap.data()!;
+        const jSnap = await db.collection("jobs").doc(jobId).get();
+        if (!jSnap.exists) return;
+        const j = jSnap.data()!;
 
         let result = "needs_admin";
         let tier = 3;
@@ -199,7 +245,7 @@ export const onDisputeCreatedSecure = onDocumentCreated({ document: "disputes/{d
             result = "deduction_explained";
             tier = 1;
             msg = `KES ${j.deductionThisJob} deducted due to repeat job penalty from dispute ${j.deductionDisputeId}. Original payout KES ${j.baseFundiPayoutBeforeDeduction}, after deduction KES ${j.fundiPayoutAfterDeduction}. Remaining penalty: ${j.deductionRemainingAfter}`;
-        } else if ((j.platformFee ?? 0) > 0 && d.reason?.toLowerCase().includes("not full")) {
+        } else if ((j.platformFee ?? 0) > 0 && (dispute.reason || "").toLowerCase().includes("not full")) {
             result = "platform_fee_explained";
             tier = 1;
             msg = `Platform fee KES ${j.platformFee} (${j.fundiCommissionPct}% for badge) deducted. Labour KES ${j.labourCost ?? ''} + Transport KES ${j.transportFee ?? ''} - Fee = KES ${j.fundiPayoutAmount}. Not missing, it's commission.`;
@@ -213,13 +259,60 @@ export const onDisputeCreatedSecure = onDocumentCreated({ document: "disputes/{d
             autoExplain: msg,
             checkedAt: admin.firestore.FieldValue.serverTimestamp(),
             mpesaPayoutRef: `mpesaPayouts/${jobId}`,
+            finalAmount: j.fundiPayoutAmount,
+            baseAmount: j.baseFundiPayoutBeforeDeduction,
+            b2cId: j.b2cTransactionId,
+            c2bId: j.c2bTransactionId,
         });
 
         if (tier === 1) {
             await db.collection("jobs").doc(jobId).update({
+                lastDisputeId: disputeId,
                 lastAutoCheck: msg,
                 lastAutoCheckResult: result,
+                lastDisputeStatus: 'resolved_explained',
+                lastDisputeMessage: msg,
+                lastB2CId: j.b2cTransactionId,
+                lastC2BId: j.c2bTransactionId,
+                lastAutoResolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+                disputeCount: disputeCount,
+                autoResolveCount: disputeCount,
             });
+
+            const fId = (j.assignedFundiId || (j as any).assignedFundi || (j as any).fundiId || fundiId || '').toString();
+            if (fId) {
+                const payoutSnap2 = await db.collection("mpesaPayouts").doc(jobId).get();
+                const p = payoutSnap2.exists ? payoutSnap2.data()! : null;
+                await db.collection('fundis').doc(fId).collection('notifications').add({
+                    jobId,
+                    type: 'payment_dispute_auto_resolved',
+                    title: 'Dispute auto-resolved - tap to see receipt',
+                    body: msg,
+                    finalAmount: j.fundiPayoutAmount,
+                    baseAmount: j.baseFundiPayoutBeforeDeduction,
+                    feePct: j.fundiCommissionPct,
+                    feeAmount: j.platformFee,
+                    deduction: j.deductionThisJob || 0,
+                    transport: j.transportFee || 0,
+                    b2cId: j.b2cTransactionId || (p as any)?.b2cTransactionId || '',
+                    c2bId: j.c2bTransactionId || (p as any)?.c2bTransactionId || '',
+                    isRead: false,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    disputeId,
+                    disputeCount,
+                });
+                await db.collection('notifications').add({
+                    toUserId: fId,
+                    toRole: 'fundi',
+                    type: 'payment_dispute_auto_resolved',
+                    jobId,
+                    title: 'Payment dispute resolved',
+                    body: msg,
+                    isRead: false,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    disputeId,
+                });
+            }
         }
     } catch (e) {
         await snap.ref.update({ autoCheckResult: "error", autoCheckMessage: `Auto-check error: ${e}`, checkedAt: admin.firestore.FieldValue.serverTimestamp() });
@@ -227,7 +320,7 @@ export const onDisputeCreatedSecure = onDocumentCreated({ document: "disputes/{d
 });
 
 // 3. RETRY B2C - ONLY ADMIN, ONLY IF FAILED, IDEMPOTENT
-export const retryFundiPayoutSecure = onCall({ region: "europe-west1" }, async (request) => {
+export const retryFundiPayoutSecure = onCall({ memory: "256MiB", cpu: 1, concurrency: 80, minInstances: 0, maxInstances: 10, region: "europe-west1" }, async (request) => {
     const uid = request.auth?.uid;
     const jobId = (request.data?.jobId as string)?.trim();
     if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");

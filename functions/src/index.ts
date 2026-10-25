@@ -3,6 +3,16 @@ import { getFirestore, FieldValue, Firestore } from "firebase-admin/firestore";
 import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onDocumentWritten, onDocumentCreated } from "firebase-functions/v2/firestore";
+import { setGlobalOptions } from "firebase-functions/v2/options";
+
+setGlobalOptions({
+    memory: "256MiB",
+    cpu: 1,
+    concurrency: 80,
+    minInstances: 0,
+    maxInstances: 10,
+    timeoutSeconds: 60,
+});
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -150,7 +160,7 @@ async function updateFundiBadge(uid: string, data: any) {
     }, { merge: true });
 }
 
-export const recalcBadgesNightly = onSchedule({ schedule: "0 23 * * *", timeZone: "UTC", region: "europe-west1" }, async () => {
+export const recalcBadgesNightly = onSchedule({ schedule: "0 23 * * *", timeZone: "UTC", region: "europe-west1", memory: "256MiB", cpu: 1, concurrency: 80, minInstances: 0, maxInstances: 10 }, async () => {
     const snap = await db().collection("users").where("role", "==", "fundi").limit(500).get();
     for (const doc of snap.docs) await updateFundiBadge(doc.id, doc.data());
 });

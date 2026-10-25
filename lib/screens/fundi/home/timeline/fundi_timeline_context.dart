@@ -131,6 +131,16 @@ class FundiTimelineContext {
     );
     int labour = newLabour;
 
+    // --- SERVER TRUTH FIRST ---
+    int serverPlatformFee = toInt(job['platformFee'] ?? 0);
+    int serverCommissionPct = toInt(job['fundiCommissionPct'] ?? 0);
+    int serverPayout = toInt(job['fundiPayoutAmount'] ?? 0);
+    int baseFromServer = toInt(
+      job['baseFundiPayoutBeforeDeduction'] ??
+          job['originalReleasedAmount'] ??
+          0,
+    );
+
     String badgeLevel =
         (job['fundiBadgeLevel'] ??
                 job['badgeLevel'] ??
@@ -144,7 +154,9 @@ class FundiTimelineContext {
         job['isTrial'] == true;
 
     int fundiPct;
-    if (isTrialGold) {
+    if (serverCommissionPct > 0) {
+      fundiPct = serverCommissionPct; // use server-calculated bronze 10%
+    } else if (isTrialGold) {
       fundiPct = 5;
     } else if (badgeLevel == 'gold')
       fundiPct = 5;
@@ -155,21 +167,22 @@ class FundiTimelineContext {
     else
       fundiPct = 15;
 
-    int fundiAppFee = (labour * fundiPct / 100).round();
-    int baseFundiReceives = labour - fundiAppFee + transport;
-    // --- SERVER TRUTH (from confirmCompletionSecure) ---
-    int serverPayout = toInt(job['fundiPayoutAmount'] ?? 0);
-    int baseFromServer = toInt(
-      job['baseFundiPayoutBeforeDeduction'] ??
-          job['originalReleasedAmount'] ??
-          0,
-    );
-    if (baseFromServer > 0) {
-      baseFundiReceives =
-          baseFromServer; // 100% accurate, prevents client faking badge
-      fundiAppFee = (labour - baseFundiReceives + transport)
-          .abs(); // recalc fee for UI
+    int fundiAppFee;
+    if (serverPlatformFee > 0) {
+      fundiAppFee = serverPlatformFee; // 1000 for bronze
+    } else {
+      fundiAppFee = (labour * fundiPct / 100).round();
     }
+
+    int baseFundiReceives = labour - fundiAppFee + transport;
+    if (baseFromServer > 0) {
+      baseFundiReceives = baseFromServer;
+      // keep fee from server if available
+      if (serverPlatformFee == 0) {
+        fundiAppFee = (labour - baseFundiReceives + transport).abs();
+      }
+    }
+    // ---------------------------------------------------
     // ---------------------------------------------------
     int fundiSeesWaiting = labour + transport;
     int newTotalFundiLocked = newLabour + transport;
