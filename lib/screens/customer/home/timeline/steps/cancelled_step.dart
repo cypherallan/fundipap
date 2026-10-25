@@ -38,7 +38,6 @@ class CancelledSteps {
       TimelineCard(title: title, body: body, icon: Icons.cancel, isDone: false),
     );
 
-    // --- NEW: second card + matches your second push notification ---
     if (c.status == 'cancelled_after_arrival' && transportReleased) {
       timeline.add(
         TimelineCard(

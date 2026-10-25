@@ -181,7 +181,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                 'type': 'accepted_counter',
               });
             } else if (status == 'rejected') {
-              continue; // don't show in this page, already in Jobs Near You
+              continue;
             } else if (status == 'pending') {
               _sentBids.add({
                 'jobId': jId,

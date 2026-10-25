@@ -101,7 +101,6 @@ FundiWaitingState? getFundiWaitingState({
   if (oldLaborTop > 0) {
     baseLabourTop = oldLaborTop;
   } else {
-    // FIXED: lastCounterAmount first
     baseLabourTop = _toInt(
       job['lastCounterAmount'] ??
           job['lastCounterPrice'] ??
@@ -137,7 +136,7 @@ FundiWaitingState? getFundiWaitingState({
   int labour = totalLabourTop > 0
       ? totalLabourTop
       : _toInt(
-          job['lastCounterAmount'] ?? // FIXED FIRST
+          job['lastCounterAmount'] ??
               job['lastCounterPrice'] ??
               job['laborCost'] ??
               job['agreedPrice'] ??

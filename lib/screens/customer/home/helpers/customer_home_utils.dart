@@ -157,7 +157,6 @@ Future<List<BidWithFundi>> enrichBids(
             0,
       );
 
-      // collect candidates and take max > -1, so 0 in fundis doesn't hide 10 in users
       var yesCandidates = [
         extractYes(fundiLive),
         extractYes(f),

@@ -13,17 +13,21 @@ class _RevenueAnalyticsTabState extends State<RevenueAnalyticsTab> {
   String _filterCat = 'All';
 
   double _getAgreed(Map<String, dynamic> d) {
-    if (d['lastCounterAmount'] != null)
+    if (d['lastCounterAmount'] != null) {
       return (d['lastCounterAmount'] as num).toDouble();
+    }
     if (d['laborCost'] != null) return (d['laborCost'] as num).toDouble();
     if (d['agreedAmount'] != null) return (d['agreedAmount'] as num).toDouble();
-    if (d['acceptedBidAmount'] != null)
+    if (d['acceptedBidAmount'] != null) {
       return (d['acceptedBidAmount'] as num).toDouble();
+    }
     if (d['finalAmount'] != null) return (d['finalAmount'] as num).toDouble();
-    if (d['totalClientPays'] != null)
+    if (d['totalClientPays'] != null) {
       return (d['totalClientPays'] as num).toDouble() / 1.05;
-    if (d['escrowAmount'] != null)
+    }
+    if (d['escrowAmount'] != null) {
       return (d['escrowAmount'] as num).toDouble() / 1.05;
+    }
     if (d['budget'] != null) return (d['budget'] as num).toDouble();
     if (d['budgetMax'] != null) return (d['budgetMax'] as num).toDouble();
     if (d['agreedPrice'] != null) return (d['agreedPrice'] as num).toDouble();
@@ -58,7 +62,6 @@ class _RevenueAnalyticsTabState extends State<RevenueAnalyticsTab> {
     if (b.isNotEmpty) return b;
     if (c.isNotEmpty) return c;
     if (d1.isNotEmpty) return d1.length > 30 ? d1.substring(0, 30) : d1;
-    // FALLBACK - so column is NEVER empty
     return '$cat • $sub';
   }
 
@@ -85,8 +88,9 @@ class _RevenueAnalyticsTabState extends State<RevenueAnalyticsTab> {
                 )
                 .snapshots(),
             builder: (context, jobSnap) {
-              if (!jobSnap.hasData)
+              if (!jobSnap.hasData) {
                 return Center(child: CircularProgressIndicator());
+              }
               double grandTotal = 0,
                   grandClient = 0,
                   grandFundi = 0,
@@ -149,8 +153,9 @@ class _RevenueAnalyticsTabState extends State<RevenueAnalyticsTab> {
               }
               var rows = agg.values.toList()
                 ..sort((a, b) => b['total'].compareTo(a['total']));
-              if (_filterCat != 'All')
+              if (_filterCat != 'All') {
                 rows = rows.where((e) => e['cat'] == _filterCat).toList();
+              }
               double filteredTotal = rows.fold(0.0, (s, e) => s + e['total']);
 
               return SingleChildScrollView(

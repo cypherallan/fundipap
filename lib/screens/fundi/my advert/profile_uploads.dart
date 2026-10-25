@@ -50,19 +50,15 @@ class ProfileUploads extends StatelessWidget {
           ),
         );
       }
-      // download to temp folder
       final tempDir = await getTemporaryDirectory();
       final filePath = '${tempDir.path}/$fileName';
       final localFile = File(filePath);
       if (!await localFile.exists()) {
-        // download from Firebase Storage
         final ref = FirebaseStorage.instance.refFromURL(url);
         await ref.writeToFile(localFile);
       }
-      // This triggers Android chooser: "Open with Adobe / Drive / Photos"
       final result = await OpenFilex.open(filePath);
       if (result.type != ResultType.done && context.mounted) {
-        // fallback to Chrome if no app can open it
         await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       }
     } catch (e) {
@@ -70,7 +66,6 @@ class ProfileUploads extends StatelessWidget {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Open failed: $e')));
-        // last fallback
         await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       }
     }
@@ -91,7 +86,6 @@ class ProfileUploads extends StatelessWidget {
     return Column(
       children: [
         const SizedBox(height: 24),
-        // NEW ATTACHMENTS CARD - TAP TO EXPAND
         Card(
           elevation: 0,
           color: Colors.white,

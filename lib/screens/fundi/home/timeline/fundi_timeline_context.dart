@@ -28,7 +28,6 @@ class FundiTimelineContext {
   final int newFundiReceivesVal;
   final bool isCounterAccepted;
   final int releasedAmount;
-
   final bool escrowDone;
   final bool escrowReleased;
   final bool siteDone;
@@ -41,8 +40,6 @@ class FundiTimelineContext {
   final bool fundiRatedClient;
   final String clientId;
   final bool isBidSent;
-
-  // NEW: deduction from repeat job dispute
   final double? deductionThisJob;
   final double? originalReleasedAmount;
   final double? deductionRemaining;
@@ -162,8 +159,6 @@ class FundiTimelineContext {
     int newFundiReceivesVal =
         newLabour - (newLabour * fundiPct / 100).round() + transport;
     bool isCounterAccepted = counterExtra > 0;
-
-    // DEDUCTION LOGIC - check if this payout has 50% deduction from repeat job
     double deduction = (job['deductionThisJob'] ?? 0).toDouble();
     double originalAmount = (job['originalReleasedAmount'] ?? baseFundiReceives)
         .toDouble();

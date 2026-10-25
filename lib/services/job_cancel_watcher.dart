@@ -100,8 +100,6 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
             cancelledBy != 'system' &&
             !autoCancelled &&
             status.contains('cancel'));
-
-    // --- ADDED: transport release check (no platformFee here, so no leak) ---
     int payout = 0;
     try {
       var raw = data['fundiPayout'] ?? data['transportReleasedAmount'] ?? 0;
@@ -112,7 +110,6 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
     } catch (_) {}
     bool isAfterArrival = status.contains('cancelled_after_arrival');
     bool transportReleased = data['transportReleased'] == true || payout > 0;
-    // --- END ADDED ---
 
     String title;
     String msg;
@@ -207,4 +204,3 @@ mixin JobCancelWatcher<T extends StatefulWidget> on State<T> {
     super.dispose();
   }
 }
-/////////////////////////////////////////////%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

@@ -15,7 +15,7 @@ class CategoriesTab extends StatelessWidget {
     if (b == 'none' || b == '' || b == 'null') return 3;
     if (b.contains('gold') && (b.contains('trial') || b.contains('test')))
       return 4;
-    return 3; // anything else treated as none
+    return 3;
   }
 
   String _timeAgo(Timestamp? ts) {
@@ -36,7 +36,6 @@ class CategoriesTab extends StatelessWidget {
           TaxonomySeedCard(),
           SizedBox(height: 16),
 
-          // ===== NOTIFICATIONS SECTION =====
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance.collection('fundis').snapshots(),
             builder: (context, fundiSnap) {
@@ -79,7 +78,6 @@ class CategoriesTab extends StatelessWidget {
 
                   var raw = dispSnap.data!.docs.map((doc) {
                     var d = doc.data() as Map<String, dynamic>;
-                    // badge can be stored in dispute as reporterBadge, or lookup from fundis
                     String badge =
                         (d['reporterBadge'] ??
                                 d['fundiBadge'] ??
@@ -97,7 +95,6 @@ class CategoriesTab extends StatelessWidget {
                     };
                   }).toList();
 
-                  // SORT: gold -> silver -> bronze -> none -> gold_trial, then oldest first
                   raw.sort((a, b) {
                     int r = (a['rank'] as int).compareTo(b['rank'] as int);
                     if (r != 0) return r;
@@ -105,7 +102,7 @@ class CategoriesTab extends StatelessWidget {
                         a['createdAt'] as Timestamp? ?? Timestamp.now();
                     Timestamp tb =
                         b['createdAt'] as Timestamp? ?? Timestamp.now();
-                    return ta.compareTo(tb); // oldest first
+                    return ta.compareTo(tb);
                   });
 
                   int openCount = raw.length;
@@ -149,7 +146,6 @@ class CategoriesTab extends StatelessWidget {
                     ),
                     child: Column(
                       children: [
-                        // Header with counter like fundi/client
                         InkWell(
                           onTap: onOpenDisputes,
                           borderRadius: BorderRadius.only(
@@ -212,7 +208,6 @@ class CategoriesTab extends StatelessWidget {
                             ),
                           ),
                         ),
-                        // List - show top 5 in sorted order
                         ...raw.take(5).map((item) {
                           var d = item['data'] as Map<String, dynamic>;
                           String badge = item['badge'].toString();

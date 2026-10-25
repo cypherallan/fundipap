@@ -1,6 +1,6 @@
 class FundiTaxonomy {
-  static const int siteVisitFeeStandard = 500; // KES - mandatory for all
-  static const int siteVisitFeeOther = 700; // For Other / custom jobs
+  static const int siteVisitFeeStandard = 500;
+  static const int siteVisitFeeOther = 700;
   static const int diagnosticFeeAppliance = 800;
 
   static final List<Map<String, dynamic>> categories = [
@@ -1556,8 +1556,5 @@ class FundiTaxonomy {
     },
   ];
 
-  // For seeding to Firestore
-  static Future<void> seedToFirestore() async {
-    // Implementation in service - kept here for reference
-  }
+  static Future<void> seedToFirestore() async {}
 }

@@ -193,7 +193,6 @@ class AuthService {
         try {
           token = await FirebaseMessaging.instance.getToken();
         } catch (_) {}
-        // Only update fundis if role is fundi
         var userDoc = await _db.collection('users').doc(uid).get();
         var role = userDoc.data()?['role'];
         if (role == 'fundi') {

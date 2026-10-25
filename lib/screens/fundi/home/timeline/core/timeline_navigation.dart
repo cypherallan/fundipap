@@ -76,13 +76,12 @@ Future<void> counterAsFundi(
     'at': FieldValue.serverTimestamp(),
   });
 
-  // FIXED: keep status = countered, add lastCounterByRole
   await bidRef.update({
     'status': 'countered',
     'lastCounterPrice': newPrice,
     'lastCounterAmount': newPrice,
     'lastCounterBy': uid,
-    'lastCounterByRole': 'fundi', // <-- FIX
+    'lastCounterByRole': 'fundi',
     'counterBy': 'fundi',
     'counterById': uid,
     'lastCounterAt': FieldValue.serverTimestamp(),
@@ -103,10 +102,10 @@ Future<void> counterAsFundi(
   });
 
   await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
-    'status': 'countered', // <-- FIX was 'negotiating'
+    'status': 'countered',
     'lastCounterAmount': newPrice,
     'lastCounterBy': uid,
-    'lastCounterByRole': 'fundi', // <-- FIX
+    'lastCounterByRole': 'fundi',
     'counterBy': 'fundi',
     'priceHistory': FieldValue.arrayUnion([
       {
@@ -121,7 +120,6 @@ Future<void> counterAsFundi(
     'clientHasUnread': true,
   });
 
-  // notify client
   var jobSnap = await FirebaseFirestore.instance
       .collection('jobs')
       .doc(jobId)
@@ -130,7 +128,7 @@ Future<void> counterAsFundi(
       (jobSnap.data()?['customerId'] ?? jobSnap.data()?['clientId'] ?? '')
           .toString();
   if (clientId.isNotEmpty) {
-    int clientOffer = currentPrice.toInt(); // your 4000
+    int clientOffer = currentPrice.toInt();
     await FirebaseFirestore.instance.collection('notifications').add({
       'toUserId': clientId,
       'type': 'fundi_counter',

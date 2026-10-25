@@ -65,7 +65,6 @@ class Fundi {
     }).toList();
   }
 
-  // PASTE HERE - Inside class, after skillNames
   String get levelLabel {
     switch (fundiLevel) {
       case 'L1_NEW':

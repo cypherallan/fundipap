@@ -238,7 +238,7 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
             'lastCounterPrice': amount,
             'counterPrice': amount,
             'lastCounterBy': 'client',
-            'lastCounterByRole': 'client', // <-- ADD
+            'lastCounterByRole': 'client',
             'counterBy': 'client',
             'counterById': uid,
             'counterAt': FieldValue.serverTimestamp(),
@@ -263,13 +263,13 @@ class _ConfirmFundiPageState extends State<ConfirmFundiPage>
             'lastCounterAmount': amount,
             'lastCounterPrice': amount,
             'lastCounterBy': 'client',
-            'lastCounterByRole': 'client', // <-- ADD - this fixes notifications
+            'lastCounterByRole': 'client',
             'counterBy': 'client',
             'status': 'countered',
             'updatedAt': FieldValue.serverTimestamp(),
             'fundiHasUnread': true,
             'clientActionAt': FieldValue.serverTimestamp(),
-            'clientCounterAmount': amount, // <-- ADD so prevAmt works
+            'clientCounterAmount': amount,
           });
       await FirebaseFirestore.instance.collection('notifications').add({
         'toUserId': fundiId,

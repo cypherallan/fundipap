@@ -13,7 +13,7 @@ class ConfirmFundiProfileCard extends StatelessWidget {
     var name = combined['name'] ?? combined['fundiName'] ?? 'Fundi';
     var photo = combined['photoUrl'];
     var profession = combined['profession'] ?? combined['skill'] ?? 'Fundi';
-    var bio = combined['bio'] ?? 'No bio yet';
+    var bio = (combined['bio'] ?? combined['about'] ?? 'No bio yet').toString();
 
     String badgeStr = (combined['badgeLevel'] ?? 'none').toString();
     BadgeLevel level = BadgeLevel.values.firstWhere(
@@ -88,21 +88,63 @@ class ConfirmFundiProfileCard extends StatelessWidget {
                       isVerified: isVerified,
                       referralCount: referrals,
                       jobsDone: jobsDone,
+                      hideCommission: true,
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            bio,
-            style: GoogleFonts.inter(fontSize: 11, color: Colors.black54),
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
+          const SizedBox(height: 10),
+          _ExpandableBio(bio: bio),
         ],
       ),
+    );
+  }
+}
+
+class _ExpandableBio extends StatefulWidget {
+  final String bio;
+  const _ExpandableBio({required this.bio});
+  @override
+  State<_ExpandableBio> createState() => _ExpandableBioState();
+}
+
+class _ExpandableBioState extends State<_ExpandableBio> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isLong = widget.bio.length > 120 || widget.bio.split('\n').length > 3;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.bio,
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            color: Colors.black54,
+            height: 1.4,
+          ),
+          maxLines: _expanded ? null : 3,
+          overflow: _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+        ),
+        if (isLong) ...[
+          const SizedBox(height: 4),
+          GestureDetector(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Text(
+              _expanded ? 'See less' : 'See more',
+              style: GoogleFonts.montserrat(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: FundipapColors.primaryYellow,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

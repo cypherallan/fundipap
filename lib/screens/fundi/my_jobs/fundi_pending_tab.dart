@@ -135,7 +135,6 @@ class FundiPendingTab extends StatelessWidget {
                         ),
                       ),
 
-                      // CLIENT COUNTERED -> ACTION NEEDED
                       if (isClientCounter) ...[
                         Padding(
                           padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
@@ -174,7 +173,6 @@ class FundiPendingTab extends StatelessWidget {
                                           'updatedAt':
                                               FieldValue.serverTimestamp(),
                                         });
-                                        // notify client
                                         await FirebaseFirestore.instance
                                             .collection('notifications')
                                             .add({

@@ -27,7 +27,7 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
   String categoryId = FundiTaxonomy.categories[0]['id'] as String;
   String? subcategoryId;
   String? faultId;
-  String serviceFilter = 'all'; // all, install, repair
+  String serviceFilter = 'all';
 
   List<File> photos = [];
   List<String> existingPhotos = [];
@@ -61,7 +61,6 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
         (s) => s['id'] == subcategoryId,
       );
     } catch (_) {
-      // fallback to all subcategories for edit mode
       try {
         return allSubcategories.cast<Map<String, dynamic>>().firstWhere(
           (s) => s['id'] == subcategoryId,
@@ -142,7 +141,6 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
       subcategoryId = j['subcategoryId'];
       faultId = j['faultId'];
       existingPhotos = List<String>.from(j['photos'] ?? j['images'] ?? []);
-      // auto-detect filter from existing subcategory
       if (subcategoryId != null) {
         var sid = subcategoryId!.toLowerCase();
         if (sid.contains('install')) {
@@ -164,7 +162,6 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
                 (cc) => cc['id'] == v,
               )['subcategories']
               as List;
-      // apply current filter
       var filtered = subs.where((s) {
         var id = (s['id'] as String).toLowerCase();
         var name = (s['name'] as String).toLowerCase();
@@ -177,7 +174,7 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
         subcategoryId = filtered[0]['id'] as String;
       } else {
         subcategoryId = subs.isNotEmpty ? subs[0]['id'] as String : null;
-        serviceFilter = 'all'; // reset if filter yields empty
+        serviceFilter = 'all';
       }
       faultId = null;
     });
@@ -188,7 +185,6 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
       serviceFilter = newFilter;
       var filtered = filteredSubcategories;
       if (filtered.isNotEmpty) {
-        // if current subcategory not in filtered, switch to first filtered
         if (!filtered.any((s) => (s['id'] == subcategoryId))) {
           subcategoryId = filtered[0]['id'] as String;
           faultId = null;
@@ -227,8 +223,6 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
           .doc(uid)
           .get();
       var uData = userDoc.data() ?? {};
-
-      // GET PRECISE LOCATION AT BUTTON PRESS - high accuracy
       var pos = await LocationService.determinePosition(context);
       if (pos == null) {
         if (mounted) {
@@ -243,9 +237,7 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
         }
         return;
       }
-
-      // Optional: check accuracy - if > 50m, warn but still save
-      double accuracy = pos.accuracy; // meters
+      double accuracy = pos.accuracy;
 
       List<String> newUrls = [];
       for (var f in photos) {
@@ -265,7 +257,6 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
         faultId: faultId,
       );
 
-      // CANONICAL REFERENCE LOCATION - saved at POST time, never changes
       final GeoPoint jobGeo = GeoPoint(pos.latitude, pos.longitude);
 
       Map<String, dynamic> jobPayload = {
@@ -286,8 +277,6 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
                 orElse: () => {"name": faultId},
               )['name'])
             : '',
-
-        // PRICING
         'pricingSource': priceInfo['source'],
         'systemPriceMin': priceInfo['min'],
         'systemPriceMax': priceInfo['max'],
@@ -492,7 +481,6 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
               },
             ),
             const SizedBox(height: 12),
-            // NEW: Installation / Repair Filter - critical for 180+ services
             Text(
               'Filter Services:',
               style: GoogleFonts.inter(
@@ -601,7 +589,6 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            // DYNAMIC MARKET PRICE CARD
             if (subcategoryId != null)
               StreamBuilder<DocumentSnapshot>(
                 stream: DynamicPricingService.statsStream(

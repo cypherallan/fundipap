@@ -58,7 +58,6 @@ class _UploadEvidenceScreenState extends State<UploadEvidenceScreen> {
   }
 
   Future<void> pickDocAsImage() async {
-    // M-Pesa screenshot is image - using image picker for now
     var img = await picker.pickImage(
       source: ImageSource.gallery,
       imageQuality: 80,

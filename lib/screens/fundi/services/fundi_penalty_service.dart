@@ -127,20 +127,16 @@ class FundiPenaltyService {
     }, SetOptions(merge: true));
   }
 
-  // ============= NEW: REPEAT JOB 14 DAYS + 50% TO CLIENT =============
-
   static Future<void> onRepeatJobNoRedo({
     required String fundiId,
     required String disputeId,
     required String clientId,
     required String clientName,
     required String jobId,
-    required double disputedJobAmount, // amount of job that was disputed
+    required double disputedJobAmount
   }) async {
     double refund50 = disputedJobAmount * 0.5;
     var db = FirebaseFirestore.instance;
-
-    // Add strike + pending deduction to fundi
     await db.collection('fundis').doc(fundiId).set({
       'strikes': FieldValue.increment(1),
       'pendingDeductionRemaining': FieldValue.increment(refund50),
@@ -152,7 +148,7 @@ class FundiPenaltyService {
       'lastStrikeReason':
           'repeat_job - no redo after 30h (24h + 6h reminder) - dispute $disputeId',
       'strikeUpdatedAt': FieldValue.serverTimestamp(),
-      'penaltyScore': FieldValue.increment(100), // heavier than cancel
+      'penaltyScore': FieldValue.increment(100),
     }, SetOptions(merge: true));
 
     await db.collection('fundiStats').doc(fundiId).set({
@@ -161,7 +157,6 @@ class FundiPenaltyService {
       'pendingDeductionRemaining': FieldValue.increment(refund50),
     }, SetOptions(merge: true));
 
-    // Update dispute
     await db.collection('disputes').doc(disputeId).update({
       'status': 'resolved_client_win_fundi_no_redo',
       'resolutionAction': 'deduct_50_next_job',
@@ -182,8 +177,6 @@ class FundiPenaltyService {
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
-
-  // Called when fundi's NEXT job is being released - deducts 50% of THIS job until 50% refund paid
   static Future<Map<String, dynamic>> applyPendingDeductionOnPayout({
     required String fundiId,
     required String jobId,
@@ -215,8 +208,6 @@ class FundiPenaltyService {
         : disputeId;
     String message =
         'KES ${deductThisJob.toStringAsFixed(0)} deducted from your pay as a result of dispute $shortId (repeat job within 14 days - you did not redo within 24h + 6h). ${newRemaining > 0 ? "KES ${newRemaining.toStringAsFixed(0)} still owed to client ${fundiData['pendingDeductionClientName'] ?? ''} - will be deducted from next jobs until 50% refund complete." : "Deduction complete - client refunded 50%."}';
-
-    // Credit original client
     if (deductThisJob > 0) {
       await db.collection('clients').doc(clientId).update({
         'walletBalance': FieldValue.increment(deductThisJob),
@@ -231,7 +222,6 @@ class FundiPenaltyService {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // Notify original client he got 50% refund
       String shortId = disputeId.length > 6
           ? disputeId.substring(0, 6)
           : disputeId;
@@ -250,7 +240,6 @@ class FundiPenaltyService {
       });
     }
 
-    // Update fundi
     await db.collection('fundis').doc(fundiId).update({
       'pendingDeductionRemaining': newRemaining,
       'pendingDeduction': newRemaining,
@@ -259,7 +248,6 @@ class FundiPenaltyService {
       if (newRemaining <= 0) 'pendingDeductionClientName': FieldValue.delete(),
     });
 
-    // Update dispute
     await db.collection('disputes').doc(disputeId).update({
       'deductionRemaining': newRemaining,
       if (newRemaining <= 0) 'deductionFullyPaid': true,
@@ -267,7 +255,6 @@ class FundiPenaltyService {
         'deductionCompletedAt': FieldValue.serverTimestamp(),
     });
 
-    // Update this job with deduction info
     await db.collection('jobs').doc(jobId).update({
       'deductionThisJob': deductThisJob,
       'deductionDisputeId': disputeId,

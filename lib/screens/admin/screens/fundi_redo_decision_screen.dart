@@ -24,13 +24,15 @@ class FundiRedoDecisionScreen extends StatelessWidget {
   }
 
   Future<void> declineRedo(BuildContext context, Map d) async {
-    await FirebaseFirestore.instance.collection('disputes').doc(disputeId).update({
-      'redoOffer.decision': 'declined',
-      'redoOffer.decidedAt': FieldValue.serverTimestamp(),
-      'fundiDeclinedRedo': true,
-      'status':
-          'resolved_client_win_fundi_declined_redo', // will then go to deduction after admin confirms
-    });
+    await FirebaseFirestore.instance
+        .collection('disputes')
+        .doc(disputeId)
+        .update({
+          'redoOffer.decision': 'declined',
+          'redoOffer.decidedAt': FieldValue.serverTimestamp(),
+          'fundiDeclinedRedo': true,
+          'status': 'resolved_client_win_fundi_declined_redo',
+        });
     if (context.mounted) Navigator.pop(context);
   }
 
@@ -42,8 +44,9 @@ class FundiRedoDecisionScreen extends StatelessWidget {
           .doc(disputeId)
           .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
         var d = snap.data!.data() as Map<String, dynamic>;
         var offer = d['redoOffer'] as Map?;
         DateTime? deadline = (offer?['deadline'] as Timestamp?)?.toDate();

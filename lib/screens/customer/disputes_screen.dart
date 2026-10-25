@@ -59,7 +59,7 @@ class _DisputesScreenState extends State<DisputesScreen>
           if (ad == null || bd == null) return 0;
           return (bd as Timestamp).compareTo(
             ad as Timestamp,
-          ); // newest first for client
+          );
         });
 
         if (docs.isEmpty) {

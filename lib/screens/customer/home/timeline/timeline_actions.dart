@@ -298,7 +298,6 @@ class TimelineActions {
 
       int alreadyLocked = toInt(j['escrowAmount'] ?? totalClient);
 
-      // ===== 50% DEDUCTION CHECK - repeat job within 14 days no redo =====
       int finalFundiPayout = baseFundiReceives;
       double deductedThisJob = 0;
       String? deductionDisputeId;

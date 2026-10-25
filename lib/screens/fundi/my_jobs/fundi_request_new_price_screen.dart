@@ -37,9 +37,9 @@ class _FundiRequestNewPriceScreenState
   final extraLaborCtrl = TextEditingController(text: '0');
   final tillCtrl = TextEditingController();
   List<Map<String, TextEditingController>> partsNeeded = [];
-  List<XFile> evidencePhotos = []; // SET 2 - Evidence why extra needed
+  List<XFile> evidencePhotos = [];
   List<XFile> verificationPhotos =
-      []; // SET 1 - Verification proof at site - generic, not hardcoded
+      [];
   List<XFile> oldPartPhotos = [];
   final picker = ImagePicker();
   bool uploading = false;
@@ -47,7 +47,6 @@ class _FundiRequestNewPriceScreenState
   int fundiFeePct = 10;
   int clientFeePct = 5;
 
-  // Generic - get client original photos for re-capture challenge, works for all 140 jobs
   List<String> get _clientOriginalPhotos {
     try {
       var photos =
@@ -201,7 +200,7 @@ class _FundiRequestNewPriceScreenState
       var verificationUrls = await _uploadPhotos(
         verificationPhotos,
         'verification',
-      ); // SET 1 generic
+      );
       var oldPartUrls = await _uploadPhotos(oldPartPhotos, 'old_parts');
 
       List<Map> partsNeededData = hasParts
@@ -246,9 +245,9 @@ class _FundiRequestNewPriceScreenState
           'partsEstimateTotal': finalPartsTotal,
           'partsPaymentDestination': 'shop_direct',
           'tillNumber': finalTill,
-          'evidencePhotoUrls': evidenceUrls, // SET 2 generic
+          'evidencePhotoUrls': evidenceUrls,
           'verificationPhotoUrls':
-              verificationUrls, // SET 1 generic - re-capture client anchor
+              verificationUrls,
           'oldPartPhotoUrls': oldPartUrls,
           'hasVerificationPhotos': verificationUrls.isNotEmpty,
           'hasEvidencePhotos': evidenceUrls.isNotEmpty,
@@ -558,7 +557,6 @@ class _FundiRequestNewPriceScreenState
               ),
             ),
             const SizedBox(height: 16),
-            // SET 1 - VERIFICATION - Generic for all 140 jobs
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -708,7 +706,6 @@ class _FundiRequestNewPriceScreenState
               ),
             ),
             const SizedBox(height: 16),
-            // SET 2 - EVIDENCE
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(

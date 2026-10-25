@@ -31,7 +31,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
         .doc(widget.disputeId)
         .update({
           'status':
-              'resolved_client_win_pending_redo', // not fully resolved yet
+              'resolved_client_win_pending_redo',
           'winner': 'client',
           'adminReason': reasonCtrl.text.trim(),
           'redoOffer': {
@@ -39,7 +39,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
             'deadline': Timestamp.fromDate(now.add(Duration(hours: 24))),
             'extendedDeadline': Timestamp.fromDate(
               now.add(Duration(hours: 30)),
-            ), // 24+6
+            ),
             'decision': null,
             'reminderSent': false,
           },
@@ -47,7 +47,6 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
           'resolvedBy': 'admin',
           'nextStep': 'awaiting_fundi_redo_decision',
         });
-    // job stays refunded but waiting for redo decision
     await FirebaseFirestore.instance.collection('jobs').doc(d['jobId']).update({
       'status': 'awaiting_fundi_redo_decision',
       'escrowStatus': 'held_pending_redo_decision',

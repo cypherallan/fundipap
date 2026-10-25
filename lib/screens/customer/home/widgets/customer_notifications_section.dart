@@ -233,7 +233,6 @@ class CustomerNotificationsSection extends StatelessWidget {
                 ),
               );
             }
-            // FIX: check fundi counter FIRST, and read clientCounterExtraLabor not counterExtraLabor
             if (isRenegFundiCountered) {
               int clientPrev = _toInt(reneg['clientCounterExtraLabor'] ?? 0);
               int fundiNew = _toInt(
@@ -540,7 +539,6 @@ class CustomerNotificationsSection extends StatelessWidget {
               );
             }
 
-            // COUNTERS - both directions
             final String lastRole =
                 (job['lastCounterByRole'] ??
                         g['lastCounterByRole'] ??

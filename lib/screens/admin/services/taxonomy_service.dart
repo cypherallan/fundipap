@@ -98,9 +98,9 @@ class TaxonomyService {
         'name': cat['name'],
         'slug': cat['slug'],
         'icon': cat['icon'],
-        'subcategories': cat['subcategories'], // just names/ids, no prices
+        'subcategories': cat['subcategories'],
         'isActive': true,
-        'pricingMode': 'market', // important - market not system
+        'pricingMode': 'market',
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
       count++;

@@ -591,7 +591,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                             compact: true,
                             showLevel: true,
                             hideCommission:
-                                false, // shows BRONZE 10% fee inside badge
+                                false,
                           ),
                         if (badgeResult != null) const SizedBox(height: 6),
                         if (badgeResult != null)

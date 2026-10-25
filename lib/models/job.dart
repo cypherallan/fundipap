@@ -148,7 +148,6 @@ class Job {
     int resolvedOffered =
         (d['offeredPrice'] as num?)?.toInt() ?? resolvedBudget;
 
-    // Counter takes priority - this fixes 12000 bug
     int effectiveBudget = resolvedLastCounter != 0
         ? resolvedLastCounter
         : resolvedLabor != 0

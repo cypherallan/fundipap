@@ -213,7 +213,6 @@ mixin FooterSectionMixin
             ),
         ],
         const SizedBox(height: 10),
-        // AGREED: No Reject - Counter only, 0 allowed but tracked, generic for 140 jobs
         Builder(
           builder: (context) {
             int currentRound = 0;

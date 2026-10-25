@@ -40,19 +40,20 @@ class _FundiDisputesScreenState extends State<FundiDisputesScreen>
             ),
           );
         }
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
         var allDocs = snap.data!.docs.toList();
 
-        // Filter by who raised it
         var docs = allDocs.where((doc) {
           var data = doc.data() as Map<String, dynamic>;
           String role = (data['reporterRole'] ?? 'fundi').toString();
-          if (filter == 'my')
+          if (filter == 'my') {
             return role ==
-                'fundi'; // fundi raised - client didn't do agreed / payment not received
-          return role == 'client'; // against fundi
+                'fundi';
+          } 
+          return role == 'client';
         }).toList();
 
         docs.sort((a, b) {
@@ -149,8 +150,8 @@ class _FundiDisputesScreenState extends State<FundiDisputesScreen>
             fontSize: 11,
           ),
           tabs: const [
-            Tab(text: 'MY DISPUTES'), // fundi raised
-            Tab(text: 'AGAINST ME'), // client raised against fundi
+            Tab(text: 'MY DISPUTES'),
+            Tab(text: 'AGAINST ME'),
           ],
         ),
       ),

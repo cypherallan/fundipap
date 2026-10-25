@@ -280,7 +280,6 @@ class HomeStatusWidget extends StatelessWidget {
             reneg?['extraToLock'] ??
             0,
       );
-      // FIXED: never use buggy newTotalClientPays
       if (extraToLock == 0) {
         extraToLock = extraLaborShow + (extraLaborShow * 0.05).round();
       }

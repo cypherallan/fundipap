@@ -347,7 +347,6 @@ class FundiCancelService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
-      // inside _performFundiWithdraw, after var jobData = ...
       String clientId = (jobData['customerId'] ?? jobData['clientId'] ?? '')
           .toString();
       if (clientId.isNotEmpty) {

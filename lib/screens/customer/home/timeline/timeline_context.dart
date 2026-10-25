@@ -128,7 +128,6 @@ class TimelineContext {
 
     double agreed = totalToPay.toDouble();
 
-    // FIXED: alreadyLocked is ONLY real locked amount, never fallback to totalToPay
     int alreadyLocked = toInt(
       job['escrowAmount'] ??
           job['lockedEscrow'] ??
@@ -139,7 +138,6 @@ class TimelineContext {
     bool escrowHeldFlag =
         toBool(job['escrowHeld']) || job['escrowPaidAt'] != null;
 
-    // FIXED: escrowDone ONLY based on escrow status, NOT alreadyLocked > 0
     bool escrowDone =
         ['held', 'paid', 'released'].contains(escrow) ||
         escrowHeldFlag ||

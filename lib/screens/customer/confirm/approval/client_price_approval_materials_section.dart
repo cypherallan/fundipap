@@ -371,7 +371,6 @@ mixin MaterialsSectionMixin
     );
   }
 
-  // FIXED: Generic evidence + verification for all 140 jobs
   Widget buildEvidenceSection(List<String> evidence) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

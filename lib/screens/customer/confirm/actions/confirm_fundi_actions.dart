@@ -59,7 +59,6 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
     int? transportFee,
     int? labor,
   }) async {
-    // --- FIXED: Priority is lastCounterAmount (5000) not budgetMax (12000) ---
     int finalPrice =
         labor ??
         (jobData['lastCounterAmount'] ??
@@ -76,7 +75,6 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
                 0)
             .toInt();
 
-    // Only fallback to budgetMax if REALLY nothing else
     if (finalPrice == 0) {
       finalPrice = (jobData['budgetMax'] ?? 1000).toInt();
     }
@@ -101,7 +99,7 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
       'assignedFundiName': bidData['fundiName'],
       'assignedFundiId': bidData['fundiId'],
       'agreedPrice': finalPrice,
-      'laborCost': finalPrice, // will be 5000 now
+      'laborCost': finalPrice,
       'transportFee': transFee,
       'transportDistanceKm': km,
       'transportMode': mode,
@@ -109,7 +107,7 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
       'fundiAppFee': fAppFee,
       'adminCommission': adminComm,
       'totalCost': totalLocked,
-      'totalClientPays': totalLocked, // will be 5000+100+250 = 5350, not 0
+      'totalClientPays': totalLocked,
       'fundiReceives': fundiPayout,
       'fundiReceivesBreakdown': {
         'labour': finalPrice,
@@ -117,11 +115,11 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
         'appFee': -fAppFee,
         'total': fundiPayout,
       },
-      'escrowAmount': totalLocked, // FIXED: was 0, now totalLocked
+      'escrowAmount': totalLocked,
       'escrowStatus': 'pending',
       'acceptedBidAmount': finalPrice,
       'acceptedBidId': bidId,
-      'lastCounterAmount': finalPrice, // keep in sync
+      'lastCounterAmount': finalPrice,
       'updatedAt': FieldValue.serverTimestamp(),
       'fundiHasUnread': true,
     });
@@ -231,7 +229,6 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
     );
     if (ok != true) return;
 
-    // FIX 1: Use Y not X after counter
     final int originalBid =
         ((bidData['amount'] ?? bidData['bidAmount'] ?? bidData['price'] ?? 0)
                 as num)
@@ -277,7 +274,6 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
           'wasCounterAccepted': wasCounter,
         });
 
-    // 1b. Re-open job so it shows in Near You
     await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
       'status': 'open',
       'lastCounterAmount': FieldValue.delete(),
@@ -286,10 +282,9 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // 2. Create Bid rejected notification for fundi
     await FirebaseFirestore.instance.collection('notifications').add({
       'toUserId': fundiId,
-      'userId': fundiId, // for compatibility
+      'userId': fundiId,
       'toRole': 'fundi',
       'fromUserId': clientId,
       'fromRole': 'client',
@@ -386,7 +381,7 @@ mixin ConfirmFundiActionsMixin<T extends StatefulWidget> on State<T> {
       'bidId': bidId,
       'type': selectedType,
       'reason': reasonCtrl.text.trim(),
-      'status': 'pending', // <-- admin must approve
+      'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
       'reporterRole': 'client',
       'fundiName': bidData['fundiName'],

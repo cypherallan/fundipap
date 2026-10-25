@@ -36,6 +36,7 @@ class _PendingBidCardState extends State<PendingBidCard> {
   double? _lastKm;
   int? _liveReferrals;
   int? _liveJobsDone;
+  String? _livePhotoUrl;
 
   @override
   void initState() {
@@ -47,12 +48,30 @@ class _PendingBidCardState extends State<PendingBidCard> {
     try {
       final fid = (widget.bid.bid['fundiId'] ?? widget.bid.bidDoc.id)
           .toString();
-      // read fundis doc
+
+      _livePhotoUrl =
+          (widget.bid.bid['fundiPhoto'] ??
+                  widget.bid.bid['photoUrl'] ??
+                  widget.bid.bid['profileImage'] ??
+                  widget.bid.bid['fundiPhotoUrl'])
+              ?.toString();
+
       var snap = await FirebaseFirestore.instance
           .collection('fundis')
           .doc(fid)
           .get();
       var d = snap.data() ?? {};
+
+      var photo =
+          d['photoUrl'] ??
+          d['profileImage'] ??
+          d['avatarUrl'] ??
+          d['profilePhoto'] ??
+          d['photo'];
+      if (photo != null && photo.toString().isNotEmpty) {
+        _livePhotoUrl = photo.toString();
+      }
+
       int jobs =
           (d['completedJobs'] ?? d['jobsCompleted'] ?? widget.bid.jobsDone ?? 0)
               as int;
@@ -62,7 +81,7 @@ class _PendingBidCardState extends State<PendingBidCard> {
                   widget.bid.referrals ??
                   0)
               as int;
-      // override from fundis/{id}/reviews subcollection = source of truth
+
       try {
         var rSnap = await FirebaseFirestore.instance
             .collection('fundis')
@@ -76,11 +95,14 @@ class _PendingBidCardState extends State<PendingBidCard> {
               .length;
         }
       } catch (_) {}
-      if (mounted)
+
+      if (mounted) {
         setState(() {
           _liveJobsDone = jobs;
           _liveReferrals = refs;
         });
+      }
+      if (_livePhotoUrl != null && mounted) setState(() {});
     } catch (_) {}
   }
 
@@ -292,13 +314,19 @@ class _PendingBidCardState extends State<PendingBidCard> {
                 CircleAvatar(
                   radius: 20,
                   backgroundColor: Colors.black,
-                  child: Text(
-                    (fundiName)[0],
-                    style: GoogleFonts.montserrat(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  backgroundImage:
+                      _livePhotoUrl != null && _livePhotoUrl!.isNotEmpty
+                      ? NetworkImage(_livePhotoUrl!)
+                      : null,
+                  child: _livePhotoUrl == null || _livePhotoUrl!.isEmpty
+                      ? Text(
+                          (fundiName)[0],
+                          style: GoogleFonts.montserrat(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        )
+                      : null,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -448,7 +476,7 @@ class _PendingBidCardState extends State<PendingBidCard> {
                   jobsDone: displayJobs,
                   commissionPct: widget.bid.fundiCommissionPct,
                   compact: true,
-                  hideCommission: false,
+                  hideCommission: true,
                 ),
               ],
             ),

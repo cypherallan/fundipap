@@ -18,12 +18,11 @@ class _AdminScreenState extends State<AdminScreen> {
   int _current = 0;
 
   void _openDisputes() {
-    setState(() => _current = 3); // index of DisputesTab
+    setState(() => _current = 3);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Pages can't be const anymore because CategoriesTab needs the callback
     final pages = [
       CategoriesTab(onOpenDisputes: _openDisputes),
       const RevenueAnalyticsTab(),
@@ -55,12 +54,13 @@ class _AdminScreenState extends State<AdminScreen> {
               onSelected: (v) async {
                 if (v == 'logout') {
                   await FirebaseAuth.instance.signOut();
-                  if (context.mounted)
+                  if (context.mounted) {
                     Navigator.pushAndRemoveUntil(
                       context,
                       MaterialPageRoute(builder: (_) => RoleSelectScreen()),
                       (r) => false,
                     );
+                  }
                 }
               },
               itemBuilder: (_) => [

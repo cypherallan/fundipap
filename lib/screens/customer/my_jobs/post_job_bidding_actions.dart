@@ -111,7 +111,7 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
     await bidRef.update({
       'status': 'countered',
       'lastCounterPrice': newPrice,
-      'lastCounterAmount': newPrice, // FIXED: save both names
+      'lastCounterAmount': newPrice,
       'lastCounterBy': uid,
       'lastCounterAt': FieldValue.serverTimestamp(),
     });
@@ -130,14 +130,13 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
     if (transportFee < 100) transportFee = 100;
 
     var jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
-    // FIXED: Also save counter to job, not just bid
     await jobRef.update({
       'transportFee': transportFee,
       'transportDistanceKm': transport['km'],
       'transportMode': transport['mode'],
       'transportLocked': true,
-      'lastCounterAmount': newPrice, // FIXED
-      'lastCounterPrice': newPrice, // FIXED
+      'lastCounterAmount': newPrice,
+      'lastCounterPrice': newPrice,
       'lastCounterBy': uid,
       'clientCounterAmount': newPrice,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -187,7 +186,6 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
     var jobSnap = await jobRef.get();
     var jobData = jobSnap.data() ?? {};
 
-    // FIXED: Priority is lastCounterAmount (5000) from job, not old bid price
     double finalPrice =
         (jobData['lastCounterAmount'] ??
                 jobData['lastCounterPrice'] ??
@@ -224,7 +222,7 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
       'agreedPrice': labour,
       'laborCost': labour,
       'acceptedBidAmount': labour,
-      'lastCounterAmount': labour, // keep in sync
+      'lastCounterAmount': labour,
       'transportFee': transportFee,
       'transportDistanceKm': km,
       'transportMode': mode,
@@ -240,7 +238,7 @@ mixin PostJobBiddingActionsMixin<T extends StatefulWidget> on State<T> {
         'appFee': -fundiAppFee,
         'total': fundiPayout,
       },
-      'escrowAmount': totalLocked, // FIXED: was 0, now totalLocked
+      'escrowAmount': totalLocked,
       'escrowStatus': 'pending',
       'escrowJob': labour,
       'escrowTransport': transportFee,

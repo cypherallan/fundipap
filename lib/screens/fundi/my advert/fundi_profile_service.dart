@@ -103,8 +103,6 @@ class FundiProfileService {
     }, SetOptions(merge: true));
     return url;
   }
-
-  // NOW SAVES REAL FILE NAME FROM DEVICE
   static Future<Map<String, dynamic>> uploadDocFile(
     PlatformFile file,
     String field,

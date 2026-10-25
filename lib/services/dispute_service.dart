@@ -25,10 +25,8 @@ class DisputeService {
     return 'none';
   }
 
-  // ---- EVIDENCE CONFIG - DYNAMIC PER TYPE ----
   static Map<String, dynamic> getEvidenceConfig(String type) {
     const configs = {
-      // FUNDI vs CLIENT (10)
       'payment_not_received': {
         'requiresPhoto': false,
         'requiresVideo': false,
@@ -92,7 +90,6 @@ class DisputeService {
         'hint':
             'No photo needed. Describe what was said/done, time and place. Chat screenshot if available.',
       },
-      // CLIENT vs FUNDI (6 - your list)
       'unprofessional_work': {
         'requiresPhoto': false,
         'requiresVideo': false,

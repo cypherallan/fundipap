@@ -336,8 +336,6 @@ class ClientCancelService {
             'cancelledAt': now,
             'updatedAt': now,
           }, SetOptions(merge: true));
-
-          // notification for fundi - removed before escrow, no transport
           var notifRef = db.collection('notifications').doc();
           batch.set(notifRef, {
             'userId': fundiId,

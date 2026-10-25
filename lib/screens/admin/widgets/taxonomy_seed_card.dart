@@ -130,7 +130,6 @@ class _TaxonomySeedCardState extends State<TaxonomySeedCard> {
                           log = 'Seeding 24 categories (no prices)...';
                         });
                         try {
-                          // This now seeds ONLY id, name, slug, subcategories - NO priceMin/max, NO siteVisitFee
                           var res = await TaxonomyService.seedCategoriesOnly();
                           setState(() {
                             log = res;

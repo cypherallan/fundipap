@@ -149,7 +149,6 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
       int platformFee = (totalRelease * commissionPct / 100).round();
       int baseFundiPayout = totalRelease - platformFee;
 
-      // ===== NEW: CHECK FOR 50% DEDUCTION FROM REPEAT JOB DISPUTE =====
       int finalFundiPayout = baseFundiPayout;
       double deductedThisJob = 0;
       String? deductionDisputeId;
@@ -198,7 +197,6 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
                 'completedJobs': FieldValue.increment(1),
               });
         } catch (_) {}
-        // Also update fundis collection balance
         try {
           await FirebaseFirestore.instance
               .collection('fundis')

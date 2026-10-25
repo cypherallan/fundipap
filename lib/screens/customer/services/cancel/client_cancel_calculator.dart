@@ -89,7 +89,7 @@ class ClientCancelCalculator {
 
     int oldLabour = _toInt(
       reneg?['oldLabor'] ??
-          job['lastCounterAmount'] ?? // 5000 FIRST!
+          job['lastCounterAmount'] ??
           job['laborCost'] ??
           job['agreedPrice'] ??
           job['acceptedBidAmount'] ??
@@ -113,9 +113,8 @@ class ClientCancelCalculator {
     int totalLabour = _toInt(
       reneg?['newLaborTotal'] ?? reneg?['counterLabor'] ?? 0,
     );
-    // ALWAYS recalc from old + counter when extra locked, don't trust laborCost
     if (extraLabour > 0) {
-      totalLabour = oldLabour + extraLabour; // 5000+1000=6000
+      totalLabour = oldLabour + extraLabour;
     }
     if (totalLabour == 0) {
       totalLabour = _toInt(
@@ -180,7 +179,6 @@ class ClientCancelCalculator {
     ].contains(status);
     bool arrived = travelling || siteDone;
 
-    // FIX: if fundi is already travelling, escrow must be considered locked
     bool escrowLocked =
         actualEscrowInDb > 0 ||
         escrowStatusStr == 'held' ||
@@ -276,10 +274,10 @@ class ClientCancelCalculator {
       );
     } else if (extraLocked) {
       stage = ClientCancelStage.extraLocked;
-      labourForCalc = oldLabour + extraLabour; // 6000 not 7000
-      feeForCalc = (labourForCalc * feeRate).round(); // 300
+      labourForCalc = oldLabour + extraLabour;
+      feeForCalc = (labourForCalc * feeRate).round();
       totalLockedDisplay =
-          labourForCalc + feeForCalc + transport; // 6300+transport
+          labourForCalc + feeForCalc + transport;
       logs.add(
         'CANCEL 4: EXTRA LOCKED -> use NEW totals $totalLockedDisplay/$labourForCalc',
       );

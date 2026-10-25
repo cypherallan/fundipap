@@ -130,13 +130,11 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
                 '${jobGeo.latitude.toStringAsFixed(4)}, ${jobGeo.longitude.toStringAsFixed(4)}';
           }
 
-          // ADD THIS CHECK AT TOP - before building timeline
           bool isCancelledNow =
               (job['cancelled'] == true) ||
               (job['status'] ?? '').toString().toLowerCase().contains('cancel');
 
           if (isCancelledNow) {
-            // Don't build normal timeline, show cancelled state
             return TimelineCancelWrapper(
               canCancel: false,
               jobId: widget.jobId,
@@ -497,7 +495,6 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
                       ),
                       onPressed: () async {
                         try {
-                          // FIXED: lastCounterAmount first, oldLabor from reneg first
                           var reneg =
                               job['renegotiation'] as Map<String, dynamic>?;
                           int oldLabour = _toInt(

@@ -59,8 +59,6 @@ Widget? buildCurrentWaiting({
   int oldLaborRenego = toInt(renego?['oldLabor'] ?? renego?['oldLabour'] ?? 0);
   int currentLaborCost = toInt(job['laborCost'] ?? job['agreedPrice'] ?? 0);
   int agreed = toInt(job['agreedPrice'] ?? 0);
-
-  // labour = final 8000, no double add
   int labour;
   if (currentLaborCost > 0) {
     labour = currentLaborCost;
@@ -387,9 +385,6 @@ Widget? buildCurrentWaiting({
                               (approvedExtra +
                                   (approvedExtra * clientPct / 100).round()),
                         );
-
-                        // DO NOT update laborCost/agreedPrice/totalClientPays on accept
-                        // Keep old 5000 until client locks extra
                         await FirebaseFirestore.instance
                             .collection('jobs')
                             .doc(jobId)
@@ -409,10 +404,10 @@ Widget? buildCurrentWaiting({
                                   (approvedExtra * clientPct / 100).round(),
                               'renegotiation.requested': false,
                               'renegotiation.oldLabor':
-                                  currentAgreed, // 5000 original
+                                  currentAgreed,
                               'renegotiation.newLaborTotal':
                                   currentAgreed +
-                                  approvedExtra, // 6000 for display only
+                                  approvedExtra,
                               'extraTopupAmount': approvedExtra,
                               'extraTopupToLock': approvedExtraToLock,
                               'status': 'awaiting_extra_escrow',

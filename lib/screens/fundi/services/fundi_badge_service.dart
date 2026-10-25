@@ -394,7 +394,7 @@ class FundiBadgeService {
       'isTrialGold': result.isTrialGold,
       'trialExpiresAt': result.trialExpiresAt,
       'fundiCommissionPct': result.fundiCommissionPct,
-      'clientCommissionPct': result.clientCommissionPct, // ADD THIS
+      'clientCommissionPct': result.clientCommissionPct,
     }, SetOptions(merge: true));
     return result;
   }

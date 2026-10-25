@@ -6,8 +6,6 @@ import '../fundi_timeline_utils.dart';
 import '../../../my_jobs/fundi_request_new_price_screen.dart';
 
 bool handleCounterStep(List<Widget> timeline, FundiTimelineContext c) {
-  // DEADLOCK after 3 low counters - fundi choice: continue old price OR withdraw with diagnostic fee
-  // Generic, no hardcoding - works for all 140 jobs
   if (c.renegStatus.contains('deadlock')) {
     int oldLab = toInt(c.reneg?['oldLabor'] ?? c.labour);
     int transport = c.transport;

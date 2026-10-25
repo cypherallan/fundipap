@@ -200,7 +200,6 @@ mixin ActionsMixin
     }
   }
 
-  // FIXED: Counter only, 0 allowed but tracked, generic for 140 jobs
   Future<void> _counter(
     int oldLabor,
     int alreadyLockedCorrect,
@@ -227,7 +226,6 @@ mixin ActionsMixin
     setState(() => loading = true);
     try {
       int counterExtraLabor = int.tryParse(counterPriceCtrl.text.trim()) ?? 0;
-      // Allow 0 now - as agreed, no Reject
       bool hasEvidence = false;
       int currentRound = 0;
       int previousLowCounters = 0;
@@ -402,7 +400,7 @@ mixin ActionsMixin
           ),
         ),
       );
-      Navigator.pop(context); // ONLY ONE POP - back to timeline
+      Navigator.pop(context);
       if (shouldDeadlock) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

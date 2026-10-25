@@ -76,7 +76,6 @@ class _FundiLevelProgressWidgetState extends State<FundiLevelProgressWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // HEADER - always visible
           InkWell(
             onTap: () => setState(() => expanded = !expanded),
             child: Row(
@@ -131,7 +130,6 @@ class _FundiLevelProgressWidgetState extends State<FundiLevelProgressWidget> {
             ),
           ),
 
-          // collapsed preview bar
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
@@ -143,7 +141,6 @@ class _FundiLevelProgressWidgetState extends State<FundiLevelProgressWidget> {
             ),
           ),
 
-          // EXPANDED CONTENT
           if (expanded) ...[
             const SizedBox(height: 16),
             const Divider(height: 1),
