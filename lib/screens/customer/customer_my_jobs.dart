@@ -88,6 +88,8 @@ class CustomerMyJobs extends StatelessWidget {
       'clientConfirmedCompletion': true,
       'escrowReleased': true,
       'completedAt': FieldValue.serverTimestamp(),
+      'paymentReleasedAt': FieldValue.serverTimestamp(),
+      'releasedAt': FieldValue.serverTimestamp(),
       'totalReleasedAmount': totalRelease,
       'totalClientPays': totalClientPays,
       'fundiPayoutAmount': fundiReceives,

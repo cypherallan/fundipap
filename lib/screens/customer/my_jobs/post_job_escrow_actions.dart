@@ -171,6 +171,8 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
         'escrowStatus': 'released',
         'extraEscrowStatus': 'released',
         'completedAt': FieldValue.serverTimestamp(),
+        'paymentReleasedAt': FieldValue.serverTimestamp(),
+        'releasedAt': FieldValue.serverTimestamp(),
         'totalReleasedAmount': totalRelease,
         'fundiPayoutAmount': finalFundiPayout,
         'baseFundiPayoutBeforeDeduction': baseFundiPayout,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'fundi_timeline_utils.dart';
 
 class FundiTimelineContext {
@@ -45,6 +46,7 @@ class FundiTimelineContext {
   final double? deductionRemaining;
   final String? deductionDisputeId;
   final String? deductionReason;
+  final DateTime? releasedAt; // NEW for 2hr dispute delay
 
   FundiTimelineContext({
     required this.context,
@@ -88,6 +90,7 @@ class FundiTimelineContext {
     this.deductionRemaining,
     this.deductionDisputeId,
     this.deductionReason,
+    this.releasedAt,
   });
 
   factory FundiTimelineContext.fromSnapshot({
@@ -217,6 +220,23 @@ class FundiTimelineContext {
           'KES ${deduction.toStringAsFixed(0)} deducted from your pay as a result of dispute $shortId, it will be deducted until client gets a refund of 50% of what was paid to you. Reason: repeat job within 14 days - no redo after 24h + 6h reminder.';
     }
 
+    // NEW: parse releasedAt for 2hr dispute rule
+    DateTime? releasedAt;
+    try {
+      var ts =
+          job['paymentReleasedAt'] ??
+          job['releasedAt'] ??
+          job['fundiPaymentReleasedAt'] ??
+          job['escrowReleasedAt'] ??
+          job['completedAt'];
+      if (ts is Timestamp) {
+        releasedAt = ts.toDate();
+      } else if (ts is DateTime)
+        releasedAt = ts;
+      else if (ts is String)
+        releasedAt = DateTime.tryParse(ts);
+    } catch (_) {}
+
     return FundiTimelineContext(
       context: context,
       jobId: jobId,
@@ -259,6 +279,7 @@ class FundiTimelineContext {
       deductionRemaining: finalRemaining,
       deductionDisputeId: disputeId,
       deductionReason: deductionReason,
+      releasedAt: releasedAt,
     );
   }
 }

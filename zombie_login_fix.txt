@@ -1,0 +1,76 @@
+That zombie-login bug is classic for fundi side - `FirebaseAuth.currentUser != null` but token expired / Firestore can't reach backend, so UI shows empty profile like logged out but `signOut()` never called. Client doesn't see it because fundi home does 4 heavy reads at once (fundis doc + reviews + RTDB live_locations + bids).
+
+Here's the fix pattern - add this to your `fundi_home.dart` / `fundi_profile_service.dart`:
+
+**1. Force token refresh + kill zombie session on init:**
+
+```dart
+@override
+void initState() {
+  super.initState();
+  _checkZombie();
+  _rtdb.goOnline(); // important - RTDB goes offline after Doze
+}
+
+Future<void> _checkZombie() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) {
+    _goToLogin();
+    return;
+  }
+  try {
+    await user.getIdToken(true); // force refresh - throws if zombie
+    // test firestore reachability
+    await FirebaseFirestore.instance.collection('fundis').doc(user.uid).get(
+      const GetOptions(source: Source.server).copyWith()
+    ).timeout(const Duration(seconds: 8));
+  } catch (e) {
+    debugPrint('Zombie session: $e');
+    // if permission-denied or network timeout -> sign out
+    if (e.toString().contains('permission-denied') || 
+        e.toString().contains('unavailable') ||
+        e is TimeoutException) {
+      await FirebaseAuth.instance.signOut();
+      if (mounted) _goToLogin();
+    }
+  }
+}
+```
+
+**2. Change your fundi profile load from `get()` once to `Stream` with error UI:**
+
+```dart
+// instead of Future in initState, use this in build:
+StreamBuilder<DocumentSnapshot>(
+  stream: FirebaseFirestore.instance.collection('fundis').doc(uid).snapshots(),
+  builder: (context, snap) {
+    if (snap.connectionState == ConnectionState.waiting) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (snap.hasError) {
+      return Column(children: [
+        Text('Offline: ${snap.error}'),
+        ElevatedButton(onPressed: () => setState((){}), child: Text('Retry')),
+        TextButton(onPressed: () async { await FirebaseAuth.instance.signOut(); _goToLogin(); }, child: Text('Re-login'))
+      ]);
+    }
+    if (!snap.hasData || !snap.data!.exists) {
+      return Text('Profile not found - re-login');
+    }
+    // render profile
+  },
+)
+```
+
+**3. Why only fundi feels offline:**
+
+* You call `FirebaseDatabase.instanceFor(databaseURL: ...)` + `Geolocator.distanceBetween` in every `PendingBidCard`. If location permission is denied or RTDB is `goOffline()` after Android Doze, that stream never emits and whole list feels stuck.
+* Add in `AndroidManifest.xml`:
+```xml
+<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+```
+* And in fundi home `dispose()` do `_rtdb.goOffline()` else you leak listeners.
+
+Check `adb logcat | grep -i "Firestore"` next time it happens - you will see `Could not reach Cloud Firestore backend` or `PERMISSION_DENIED`. That confirms zombie.
+
+Want me to patch your `fundi_profile_service.dart` and `fundi_home.dart` with this logic directly?

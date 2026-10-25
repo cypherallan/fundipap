@@ -308,4 +308,76 @@ class FundiTimelineActions {
       } catch (_) {}
     }
   }
+
+  static Future<void> openDispute(
+    BuildContext context,
+    String jobId,
+    String clientId, {
+    required String reason,
+    required String description,
+  }) async {
+    try {
+      final fundiId = FirebaseAuth.instance.currentUser?.uid ?? '';
+      final fundiEmail = FirebaseAuth.instance.currentUser?.email ?? '';
+
+      final disputeRef = FirebaseFirestore.instance
+          .collection('disputes')
+          .doc();
+
+      final batch = FirebaseFirestore.instance.batch();
+
+      // 1. Create dispute doc
+      batch.set(disputeRef, {
+        'jobId': jobId,
+        'clientId': clientId,
+        'fundiId': fundiId,
+        'fundiEmail': fundiEmail,
+        'reason': reason,
+        'description': description, // <-- "I did not receive money..."
+        'status': 'open',
+        'openedBy': 'fundi',
+        'openedByRole': 'fundi',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // 2. Mark job as disputed
+      batch.update(FirebaseFirestore.instance.collection('jobs').doc(jobId), {
+        'status': 'payment_disputed_by_fundi',
+        'disputeId': disputeRef.id,
+        'disputeReason': reason,
+        'disputeDescription': description,
+        'disputedBy': fundiId,
+        'disputedAt': FieldValue.serverTimestamp(),
+        'customerHasUnread': true,
+        'fundiHasUnread': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // 3. Notify client
+      batch.set(FirebaseFirestore.instance.collection('notifications').doc(), {
+        'toUserId': clientId,
+        'toRole': 'client',
+        'type': 'payment_disputed',
+        'jobId': jobId,
+        'title': 'Payment disputed by fundi',
+        'body': description,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      await batch.commit();
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Dispute opened: $reason')));
+      goBackToMyJobs(context, tab: 2);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to open dispute: $e')));
+    }
+  }
 }

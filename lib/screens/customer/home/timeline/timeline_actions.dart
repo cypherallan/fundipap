@@ -323,6 +323,8 @@ class TimelineActions {
         'clientConfirmedCompletion': true,
         'escrowReleased': true,
         'completedAt': FieldValue.serverTimestamp(),
+        'paymentReleasedAt': FieldValue.serverTimestamp(),
+        'releasedAt': FieldValue.serverTimestamp(),
         'totalReleasedAmount': totalClient,
         'totalClientPays': totalClient,
         'fundiPayoutAmount': finalFundiPayout,
