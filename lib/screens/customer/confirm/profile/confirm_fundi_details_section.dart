@@ -1,11 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:io';
 import 'dart:math';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../../theme/app_theme.dart';
 
 class ConfirmFundiDetailsSection extends StatelessWidget {
   final Map<String, dynamic> combined;
   const ConfirmFundiDetailsSection({super.key, required this.combined});
+
+  String _getUrl(dynamic e) {
+    if (e is String) return e;
+    return (e['url'] ?? '').toString();
+  }
+
+  String _getName(dynamic e) {
+    if (e is String) {
+      var n = e.split('/').last.split('?').first;
+      return n.isEmpty ? 'File' : n;
+    }
+    return (e['name'] ?? 'File').toString();
+  }
+
+  Future<void> _openFile(String url, String name, BuildContext context) async {
+    if (url.isEmpty) return;
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final filePath = '${tempDir.path}/$name';
+      final localFile = File(filePath);
+      if (!await localFile.exists()) {
+        final ref = FirebaseStorage.instance.refFromURL(url);
+        await ref.writeToFile(localFile);
+      }
+      final result = await OpenFilex.open(filePath);
+      if (result.type != ResultType.done && context.mounted) {
+        showDialog(
+          context: context,
+          builder: (_) => Dialog(child: Image.network(url)),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (_) => Dialog(child: Image.network(url)),
+        );
+      }
+    }
+  }
 
   Widget statCard(String value, String label, Color color) {
     return Expanded(
@@ -60,9 +104,9 @@ class ConfirmFundiDetailsSection extends StatelessWidget {
       jobsDone = reviewsLen.toInt();
     }
     var fraudCount = combined['fraudCount'] ?? combined['fraudCases'] ?? 0;
-    var resumes = List.from(combined['resumes'] ?? []);
-    var certs = List.from(combined['certificates'] ?? []);
-    var portfolio = List.from(combined['portfolio'] ?? []);
+    var resumes = List<dynamic>.from(combined['resumes'] ?? []);
+    var certs = List<dynamic>.from(combined['certificates'] ?? []);
+    var portfolio = List<dynamic>.from(combined['portfolio'] ?? []);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -74,7 +118,7 @@ class ConfirmFundiDetailsSection extends StatelessWidget {
             statCard(
               '${rating.toStringAsFixed(1)}★',
               '${combined['ratingCount'] ?? 0} Ratings',
-              Colors.amber.shade700,
+              const Color.fromARGB(255, 197, 194, 189),
             ),
             const SizedBox(width: 8),
             statCard(
@@ -143,17 +187,24 @@ class ConfirmFundiDetailsSection extends StatelessWidget {
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: portfolio.length,
-              itemBuilder: (_, i) => Container(
-                margin: const EdgeInsets.only(right: 8),
-                width: 90,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  image: DecorationImage(
-                    image: NetworkImage(portfolio[i]),
-                    fit: BoxFit.cover,
+              itemBuilder: (_, i) {
+                final url = _getUrl(portfolio[i]);
+                final name = _getName(portfolio[i]);
+                return GestureDetector(
+                  onTap: () => _openFile(url, name, context),
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    width: 90,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      image: DecorationImage(
+                        image: NetworkImage(url),
+                        fit: BoxFit.cover,
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
           const SizedBox(height: 16),
@@ -169,17 +220,14 @@ class ConfirmFundiDetailsSection extends StatelessWidget {
           const SizedBox(height: 6),
           Wrap(
             spacing: 6,
-            children: certs
-                .map<Widget>(
-                  (u) => ActionChip(
-                    label: Text('Certificate ${certs.indexOf(u) + 1}'),
-                    onPressed: () => showDialog(
-                      context: context,
-                      builder: (_) => Dialog(child: Image.network(u)),
-                    ),
-                  ),
-                )
-                .toList(),
+            children: certs.map<Widget>((u) {
+              final url = _getUrl(u);
+              final name = _getName(u);
+              return ActionChip(
+                label: Text(name, style: GoogleFonts.inter(fontSize: 11)),
+                onPressed: () => _openFile(url, name, context),
+              );
+            }).toList(),
           ),
           const SizedBox(height: 16),
         ],
@@ -192,21 +240,17 @@ class ConfirmFundiDetailsSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          ...resumes.map(
-            (u) => ListTile(
+          ...resumes.map((u) {
+            final url = _getUrl(u);
+            final name = _getName(u);
+            return ListTile(
               dense: true,
               leading: const Icon(Icons.description),
-              title: Text(
-                'Resume ${resumes.indexOf(u) + 1}',
-                style: GoogleFonts.inter(fontSize: 12),
-              ),
+              title: Text(name, style: GoogleFonts.inter(fontSize: 12)),
               trailing: const Icon(Icons.open_in_new, size: 16),
-              onTap: () => showDialog(
-                context: context,
-                builder: (_) => Dialog(child: Image.network(u)),
-              ),
-            ),
-          ),
+              onTap: () => _openFile(url, name, context),
+            );
+          }),
           const SizedBox(height: 16),
         ],
       ],
