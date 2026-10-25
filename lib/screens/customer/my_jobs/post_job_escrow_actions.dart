@@ -3,8 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../../fundi/services/fundi_badge_service.dart';
-import '../../fundi/services/fundi_penalty_service.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
   Future<void> payEscrowSimulated(
@@ -91,144 +90,34 @@ mixin PostJobEscrowActionsMixin<T extends StatefulWidget> on State<T> {
   Future<void> confirmCompletionClient(String jobId) async {
     var jobRef = FirebaseFirestore.instance.collection('jobs').doc(jobId);
     var snap = await jobRef.get();
+    if (!snap.exists) return;
     var j = snap.data() as Map<String, dynamic>;
     var reneg = j['renegotiation'] as Map<String, dynamic>?;
-
-    int initialAmount =
-        (j['escrowAmount'] ??
-                j['lastCounterAmount'] ??
-                j['laborCost'] ??
-                j['agreedPrice'] ??
-                j['acceptedBidAmount'] ??
-                j['budgetMax'] ??
-                j['budget'] ??
-                0)
-            .toInt();
-    int extraAmount =
-        (j['extraLaborAmount'] ??
-                reneg?['extraLabor'] ??
-                reneg?['pendingLabor'] ??
-                0)
-            .toInt();
-    int newLaborTotal = (reneg?['newLaborTotal'] ?? 0).toInt();
-
-    int totalRelease = newLaborTotal > 0
-        ? newLaborTotal
-        : initialAmount + extraAmount;
-    if (totalRelease == 0) totalRelease = initialAmount;
 
     bool fundiDone =
         (j['fundiConfirmedComplete'] ?? false) ||
         j['status'] == 'job_completed' ||
         reneg?['currentPhase'] == 'completed_by_fundi';
 
-    await jobRef.update({
-      'clientConfirmedComplete': true,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-
-    if (fundiDone) {
-      String fundiId = (j['assignedFundiId'] ?? j['assignedFundi'] ?? '')
-          .toString();
-      int commissionPct = 10;
-      if (fundiId.isNotEmpty) {
-        try {
-          var fundiDoc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(fundiId)
-              .get();
-          if (fundiDoc.exists) {
-            var badge = FundiBadgeService.calculate(
-              fundiDoc.data()!,
-              fundiDoc.data()!,
-            );
-            commissionPct = badge.fundiCommissionPct;
-          }
-        } catch (_) {}
-      }
-      int platformFee = (totalRelease * commissionPct / 100).round();
-      int baseFundiPayout = totalRelease - platformFee;
-
-      int finalFundiPayout = baseFundiPayout;
-      double deductedThisJob = 0;
-      String? deductionDisputeId;
-      double? deductionRemainingAfter;
-
-      if (fundiId.isNotEmpty) {
-        var result = await FundiPenaltyService.applyPendingDeductionOnPayout(
-          fundiId: fundiId,
-          jobId: jobId,
-          currentJobAmount: baseFundiPayout.toDouble(),
-        );
-        finalFundiPayout = (result['fundiPayout'] as double).round();
-        deductedThisJob = result['deducted'] as double;
-        deductionDisputeId = result['disputeId'] as String?;
-        deductionRemainingAfter = result['remaining'] as double?;
-      }
-
+    if (!fundiDone) {
       await jobRef.update({
-        'status': 'completed',
-        'escrowStatus': 'released',
-        'extraEscrowStatus': 'released',
-        'completedAt': FieldValue.serverTimestamp(),
-        'paymentReleasedAt': FieldValue.serverTimestamp(),
-        'releasedAt': FieldValue.serverTimestamp(),
-        'totalReleasedAmount': totalRelease,
-        'fundiPayoutAmount': finalFundiPayout,
-        'baseFundiPayoutBeforeDeduction': baseFundiPayout,
-        'deductionThisJob': deductedThisJob,
-        'deductionDisputeId': deductionDisputeId,
-        'deductionRemainingAfter': deductionRemainingAfter,
-        'originalReleasedAmount': baseFundiPayout,
-        'fundiPayoutAfterDeduction': finalFundiPayout,
-        'platformFee': platformFee,
-        'fundiCommissionPct': commissionPct,
-        'initialEscrowReleased': initialAmount,
-        'extraEscrowReleased': extraAmount,
-        'fundiHasUnread': true,
+        'clientConfirmedComplete': true,
+        'status': 'pending_completion',
+        'updatedAt': FieldValue.serverTimestamp(),
       });
+      return;
+    }
 
-      if (fundiId.isNotEmpty) {
-        try {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(fundiId)
-              .update({
-                'totalEarned': FieldValue.increment(finalFundiPayout),
-                'balance': FieldValue.increment(finalFundiPayout),
-                'completedJobs': FieldValue.increment(1),
-              });
-        } catch (_) {}
-        try {
-          await FirebaseFirestore.instance
-              .collection('fundis')
-              .doc(fundiId)
-              .set({
-                'totalEarned': FieldValue.increment(finalFundiPayout),
-                'balance': FieldValue.increment(finalFundiPayout),
-              }, SetOptions(merge: true));
-        } catch (_) {}
-      }
-
-      try {
-        await FirebaseFirestore.instance
-            .collection('escrowTransactions')
-            .doc(jobId)
-            .update({
-              'status': 'released',
-              'amount': totalRelease,
-              'platformFee': platformFee,
-              'fundiPayout': finalFundiPayout,
-              'baseFundiPayout': baseFundiPayout,
-              'deductionThisJob': deductedThisJob,
-              'commissionPct': commissionPct,
-              'initialAmount': initialAmount,
-              'extraAmount': extraAmount,
-              'releasedAt': FieldValue.serverTimestamp(),
-            });
-      } catch (_) {}
-    } else {
-      await jobRef.update({'status': 'pending_completion'});
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable(
+            'confirmCompletionSecure',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+          );
+      await callable.call({'jobId': jobId});
+    } on FirebaseFunctionsException catch (e) {
+      if (e.code == 'already-exists') return;
+      rethrow;
     }
   }
 

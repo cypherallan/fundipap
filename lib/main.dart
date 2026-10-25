@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_database/firebase_database.dart'; // ADD THIS
 import 'firebase_options.dart';
 import 'app.dart';
 
@@ -19,6 +20,13 @@ Future<void> _bgHandler(RemoteMessage msg) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // FIX FOR RTDB THREAD ERROR - MUST BE BEFORE runApp()
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    try {
+      FirebaseDatabase.instance.setPersistenceEnabled(false);
+    } catch (_) {}
+  }
 
   runApp(const FundiPapApp());
 
@@ -67,9 +75,7 @@ void main() async {
     });
 
     Future<void> saveToken(String? uid) async {
-      if (uid == null) {
-        return;
-      }
+      if (uid == null) return;
       try {
         final t = await messaging.getToken();
         if (t == null) return;

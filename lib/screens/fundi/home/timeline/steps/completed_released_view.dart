@@ -50,12 +50,38 @@ Widget buildCompletedReleasedView(
                   children: [
                     feeRow('Labour cost:', 'KES ${c.labour}'),
                     feeRow('Transport:', '+ KES ${c.transport}'),
+                    if ((c.deductionThisJob ?? 0) > 0) ...[
+                      feeRow(
+                        'Penalty deduction:',
+                        '- KES ${c.deductionThisJob!.toStringAsFixed(0)}',
+                        bold: true,
+                      ),
+                    ],
                     feeRow('App maintenance cost:', '- KES ${c.fundiAppFee}'),
                     const Divider(),
                     feeRow(
                       'Total to receive:',
                       'KES ${c.releasedAmount}',
                       bold: true,
+                    ),
+                    // Show ledger IDs for KRA proof
+                    const SizedBox(height: 8),
+                    FutureBuilder<DocumentSnapshot>(
+                      future: FirebaseFirestore.instance
+                          .collection('mpesaPayouts')
+                          .doc(c.jobId)
+                          .get(),
+                      builder: (_, snap) {
+                        if (!snap.hasData || !snap.data!.exists)
+                          return const SizedBox();
+                        var d = snap.data!.data() as Map<String, dynamic>;
+                        return Column(
+                          children: [
+                            feeRow('C2B ID:', '${d['c2bTransactionId'] ?? ''}'),
+                            feeRow('B2C ID:', '${d['b2cTransactionId'] ?? ''}'),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -92,7 +118,6 @@ Widget buildCompletedReleasedView(
                 ),
               ),
               const SizedBox(height: 10),
-              // NEW: NO BUTTON
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -123,6 +148,7 @@ Widget buildCompletedReleasedView(
       ),
     );
   } else if (!c.fundiRatedClient) {
+    // ... keep your rating card same as before
     doneTimeline.add(
       fundiCard(
         color: Colors.green.shade50,
@@ -147,7 +173,11 @@ Widget buildCompletedReleasedView(
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              Icon(Icons.star_rate_rounded, size: 48, color: Colors.amber),
+              const Icon(
+                Icons.star_rate_rounded,
+                size: 48,
+                color: Colors.amber,
+              ),
               Text(
                 'Rate ${c.clientName} - Mandatory',
                 style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
@@ -234,8 +264,6 @@ void _openNotReceivedDispute(BuildContext context, FundiTimelineContext c) {
   String selected = 'not_received_any';
   final partialController = TextEditingController();
   final detailsController = TextEditingController();
-
-  // release time - use c.releasedAt if you have it, else fetch
   DateTime releaseTime = c.releasedAt ?? DateTime.now();
 
   Future<DateTime> getReleaseTime() async {
@@ -250,7 +278,7 @@ void _openNotReceivedDispute(BuildContext context, FundiTimelineContext c) {
           d['paymentReleasedAt'] ??
           d['releasedAt'] ??
           d['fundiPaymentReleasedAt'] ??
-          d['releasedAtTimestamp'];
+          d['completedAt'];
       if (ts is Timestamp) return ts.toDate();
       if (ts is String) return DateTime.tryParse(ts) ?? DateTime.now();
     } catch (_) {}
@@ -272,8 +300,6 @@ void _openNotReceivedDispute(BuildContext context, FundiTimelineContext c) {
                   .add(const Duration(hours: 2))
                   .difference(now);
               final isPast2Hours = elapsed.inHours >= 2;
-
-              // rule: partial = instant dispute, none = wait 2hrs
               final canDisputeNow = selected == 'partial' ? true : isPast2Hours;
 
               String buildDescription() {
@@ -282,7 +308,7 @@ void _openNotReceivedDispute(BuildContext context, FundiTimelineContext c) {
                     ? '\nAdditional: $extra'
                     : '';
                 if (selected == 'not_received_any') {
-                  return 'I did not receive any money. Client ${c.clientName} says KES ${c.releasedAmount} (I should receive KES ${c.fundiReceives}) was released for job ${c.jobTitle} (${c.jobId}) at $rt, but my M-Pesa has not received anything. Waited ${elapsed.inMinutes} mins.$extraPart';
+                  return 'I did not receive any money. Client ${c.clientName} says KES ${c.releasedAmount} (I should receive KES ${c.fundiReceives}) was released for job ${c.jobTitle} (${c.jobId}) at $rt, but my M-Pesa has not received anything. Waited ${elapsed.inMinutes} mins. payoutDoc: mpesaPayouts/${c.jobId} $extraPart';
                 } else {
                   final rec = partialController.text.trim();
                   return 'I received but not full. Expected KES ${c.fundiReceives}, received KES ${rec.isEmpty ? 'UNKNOWN' : rec} from ${c.clientName} for job ${c.jobTitle} (${c.jobId}).$extraPart';
@@ -329,8 +355,6 @@ void _openNotReceivedDispute(BuildContext context, FundiTimelineContext c) {
                         onChanged: (v) => setSt(() => selected = v!),
                       ),
                       const SizedBox(height: 12),
-
-                      // DELAY MESSAGE for none
                       if (selected == 'not_received_any') ...[
                         Container(
                           padding: const EdgeInsets.all(10),
@@ -361,7 +385,7 @@ void _openNotReceivedDispute(BuildContext context, FundiTimelineContext c) {
                                 child: Text(
                                   isPast2Hours
                                       ? '2 hours passed since release. You can now raise dispute.'
-                                      : 'M-Pesa can delay up to 2 hours. Released ${elapsed.inMinutes} mins ago.\nPlease wait ${remaining.inMinutes > 0 ? '${remaining.inMinutes} mins' : 'a bit more'} before disputing.\nIf after 2 hours still nothing, dispute will enable.',
+                                      : 'M-Pesa can delay up to 2 hours. Released ${elapsed.inMinutes} mins ago.\nPlease wait ${remaining.inMinutes > 0 ? '${remaining.inMinutes} mins' : 'a bit more'} before disputing.',
                                   style: GoogleFonts.inter(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
@@ -373,7 +397,6 @@ void _openNotReceivedDispute(BuildContext context, FundiTimelineContext c) {
                         ),
                         const SizedBox(height: 12),
                       ],
-
                       if (selected == 'partial') ...[
                         TextField(
                           controller: partialController,
@@ -403,7 +426,6 @@ void _openNotReceivedDispute(BuildContext context, FundiTimelineContext c) {
                         ),
                         const SizedBox(height: 12),
                       ],
-
                       TextField(
                         controller: detailsController,
                         maxLines: 2,
@@ -451,7 +473,7 @@ void _openNotReceivedDispute(BuildContext context, FundiTimelineContext c) {
                               description: buildDescription(),
                             );
                           }
-                        : null, // disabled for 2hrs
+                        : null,
                     child: Text(
                       canDisputeNow
                           ? 'OPEN DISPUTE'

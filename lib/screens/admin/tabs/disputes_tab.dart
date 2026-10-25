@@ -12,16 +12,15 @@ class DisputesTab extends StatelessWidget {
     if (b == 'silver') return 1;
     if (b == 'bronze') return 2;
     if (b == 'none' || b == '' || b == 'null') return 3;
-    if (b.contains('gold') && (b.contains('trial') || b.contains('test'))) {
+    if (b.contains('gold') && (b.contains('trial') || b.contains('test')))
       return 4;
-    }
     return 3;
   }
 
   Color _badgeColor(String b, int rank) {
-    if (rank == 0) return Color(0xFFFFD700);
-    if (rank == 1) return Color(0xFFC0C0C0);
-    if (rank == 2) return Color(0xFFCD7F32);
+    if (rank == 0) return const Color(0xFFFFD700);
+    if (rank == 1) return const Color(0xFFC0C0C0);
+    if (rank == 2) return const Color(0xFFCD7F32);
     if (rank == 4) return Colors.grey.shade300;
     return Colors.black12;
   }
@@ -36,8 +35,12 @@ class DisputesTab extends StatelessWidget {
 
   Color _statusColor(String status) {
     if (status == 'open') return Colors.orange;
+    if (status.contains('payment') || status.contains('disputed'))
+      return Colors.red;
     if (status == 'accepted_redo') return Colors.green;
-    if ((status).contains('evidence')) return Colors.blue;
+    if (status.contains('evidence')) return Colors.blue;
+    if (status.contains('auto_resolved')) return Colors.green;
+    if (status.contains('needs_admin')) return Colors.red;
     return Colors.grey;
   }
 
@@ -65,16 +68,16 @@ class DisputesTab extends StatelessWidget {
                   'accepted_redo',
                   'evidence_complete',
                   'awaiting_both',
+                  'auto_checking',
+                  'needs_admin',
                 ],
               )
               .snapshots(),
           builder: (_, snap) {
-            if (!snap.hasData) {
-              return Center(child: CircularProgressIndicator());
-            }
-            if (snap.data!.docs.isEmpty) {
-              return Center(child: Text('No open disputes ✓'));
-            }
+            if (!snap.hasData)
+              return const Center(child: CircularProgressIndicator());
+            if (snap.data!.docs.isEmpty)
+              return const Center(child: Text('No open disputes ✓'));
 
             var raw = snap.data!.docs.map((doc) {
               var d = doc.data() as Map<String, dynamic>;
@@ -84,16 +87,29 @@ class DisputesTab extends StatelessWidget {
                           badgeMap[d['fundiId']] ??
                           'none')
                       .toString();
+              bool isPaymentDispute =
+                  (d['reason'] ?? '').toString().toLowerCase().contains(
+                    'payment',
+                  ) ||
+                  (d['type'] ?? '').toString().contains('payment') ||
+                  d.containsKey('partialAmount') ||
+                  (d['description'] ?? '').toString().contains('mpesaPayouts');
               return {
                 'doc': doc,
                 'data': d,
                 'badge': badge,
                 'rank': _badgeRank(badge),
+                'isPayment': isPaymentDispute,
                 'createdAt': d['createdAt'] as Timestamp?,
               };
             }).toList();
 
+            // Payment disputes first, then gold, then oldest
             raw.sort((a, b) {
+              bool ap = a['isPayment'] as bool;
+              bool bp = b['isPayment'] as bool;
+              if (ap && !bp) return -1;
+              if (!ap && bp) return 1;
               int r = (a['rank'] as int).compareTo(b['rank'] as int);
               if (r != 0) return r;
               Timestamp ta =
@@ -106,30 +122,34 @@ class DisputesTab extends StatelessWidget {
             });
 
             return ListView(
-              padding: EdgeInsets.all(8),
+              padding: const EdgeInsets.all(8),
               children: raw.map((item) {
                 var doc = item['doc'] as DocumentSnapshot;
                 var d = item['data'] as Map<String, dynamic>;
                 String badge = item['badge'] as String;
                 int rank = item['rank'] as int;
+                bool isPayment = item['isPayment'] as bool;
                 Timestamp? ts = item['createdAt'] as Timestamp?;
                 String type = d['type'] ?? '';
                 String status = d['status'] ?? 'open';
-                bool hasEvidence =
-                    (d['reporterEvidenceSubmitted'] == true) ||
-                    (d['reportedEvidenceSubmitted'] == true);
-                bool bothEvidence =
-                    (d['reporterEvidenceSubmitted'] == true) &&
-                    (d['reportedEvidenceSubmitted'] == true);
-                bool acceptedRedo = d['fundiAcceptedRedo'] == true;
+                String autoResult =
+                    d['autoCheckResult'] ?? d['autoCheckStatus'] ?? '';
+                String autoTier = (d['autoCheckTier'] ?? '').toString();
 
                 return Card(
-                  elevation: rank == 0 ? 3 : 1,
-                  color: rank == 0
-                      ? Colors.amber.shade50
-                      : acceptedRedo
-                      ? Colors.green.shade50
-                      : Colors.white,
+                  elevation: isPayment ? 4 : (rank == 0 ? 3 : 1),
+                  color: isPayment
+                      ? Colors.red.shade50
+                      : (rank == 0 ? Colors.amber.shade50 : Colors.white),
+                  shape: RoundedRectangleBorder(
+                    side: BorderSide(
+                      color: isPayment
+                          ? Colors.red
+                          : (rank == 0 ? Colors.amber : Colors.grey.shade300),
+                      width: isPayment ? 2 : 1,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   child: ListTile(
                     onTap: () => Navigator.push(
                       context,
@@ -142,7 +162,7 @@ class DisputesTab extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Container(
-                          padding: EdgeInsets.symmetric(
+                          padding: const EdgeInsets.symmetric(
                             horizontal: 6,
                             vertical: 2,
                           ),
@@ -158,7 +178,7 @@ class DisputesTab extends StatelessWidget {
                             ),
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Text(
                           _timeAgo(ts),
                           style: GoogleFonts.inter(
@@ -169,10 +189,11 @@ class DisputesTab extends StatelessWidget {
                       ],
                     ),
                     title: Text(
-                      '${d['jobTitle'] ?? ''} • ${type.toUpperCase()} ${acceptedRedo ? "[ACCEPTED REDO]" : ""}',
+                      '${isPayment ? '💰 PAYMENT DISPUTE • ' : ''}${d['jobTitle'] ?? ''} • ${type.toUpperCase()}',
                       style: GoogleFonts.montserrat(
                         fontWeight: FontWeight.w700,
                         fontSize: 11,
+                        color: isPayment ? Colors.red.shade800 : Colors.black,
                       ),
                     ),
                     subtitle: Column(
@@ -184,11 +205,11 @@ class DisputesTab extends StatelessWidget {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Row(
                           children: [
                             Container(
-                              padding: EdgeInsets.symmetric(
+                              padding: const EdgeInsets.symmetric(
                                 horizontal: 6,
                                 vertical: 2,
                               ),
@@ -205,65 +226,80 @@ class DisputesTab extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            SizedBox(width: 6),
-                            if (bothEvidence)
+                            const SizedBox(width: 6),
+                            if (autoResult.isNotEmpty)
                               Container(
-                                padding: EdgeInsets.symmetric(
+                                padding: const EdgeInsets.symmetric(
                                   horizontal: 6,
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.blue.shade100,
+                                  color:
+                                      autoResult.contains('success') ||
+                                          autoResult.contains('explained')
+                                      ? Colors.green.shade100
+                                      : Colors.orange.shade100,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  'BOTH EVIDENCE ✓',
+                                  'AUTO: ${autoResult.toUpperCase()} T$autoTier',
                                   style: GoogleFonts.inter(
-                                    fontSize: 8,
+                                    fontSize: 7,
                                     fontWeight: FontWeight.w700,
                                   ),
-                                ),
-                              ),
-                            if (!bothEvidence && hasEvidence)
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  '1 SIDE EVIDENCE',
-                                  style: GoogleFonts.inter(fontSize: 8),
-                                ),
-                              ),
-                            if (!hasEvidence)
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  'NO EVIDENCE YET',
-                                  style: GoogleFonts.inter(fontSize: 8),
                                 ),
                               ),
                           ],
                         ),
                         Text(
-                          'Job ${d['jobId']?.toString().substring(0, 6) ?? ''} • Client: ${d['clientName'] ?? ''} • Fundi: ${d['fundiName'] ?? ''} • KES ${d['escrowAmount'] ?? ''}',
+                          'Job ${d['jobId']?.toString().substring(0, 6) ?? ''} • Client: ${d['clientName'] ?? ''} • Fundi: ${d['fundiName'] ?? ''} • KES ${d['escrowAmount'] ?? d['amount'] ?? ''}',
                           style: GoogleFonts.inter(fontSize: 9),
                         ),
+                        if (isPayment) ...[
+                          const SizedBox(height: 4),
+                          FutureBuilder<DocumentSnapshot>(
+                            future: FirebaseFirestore.instance
+                                .collection('mpesaPayouts')
+                                .doc(d['jobId'])
+                                .get(),
+                            builder: (_, pSnap) {
+                              if (!pSnap.hasData || !pSnap.data!.exists)
+                                return Text(
+                                  'Ledger: mpesaPayouts/${d['jobId']} not found',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 8,
+                                    color: Colors.red,
+                                  ),
+                                );
+                              var pd =
+                                  pSnap.data!.data() as Map<String, dynamic>;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'C2B: ${pd['c2bTransactionId'] ?? ''} • B2C: ${pd['b2cTransactionId'] ?? ''}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Payout: KES ${pd['amount'] ?? ''} • Fee: ${pd['platformFee'] ?? ''} • Status: ${pd['b2cStatus'] ?? pd['status'] ?? ''}',
+                                    style: GoogleFonts.inter(fontSize: 8),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ],
                       ],
                     ),
                     isThreeLine: true,
-                    trailing: Icon(Icons.arrow_forward_ios, size: 14),
+                    trailing: Icon(
+                      isPayment ? Icons.warning : Icons.arrow_forward_ios,
+                      size: 14,
+                      color: isPayment ? Colors.red : null,
+                    ),
                   ),
                 );
               }).toList(),

@@ -616,4 +616,4 @@ export const onDisputePush = onDocumentWritten({ document: "disputes/{disputeId}
         await sendPush(clientTokens, newS === 'resolved_client_win' ? "Dispute won" : "Dispute lost", `Dispute ${disputeId.substring(0, 6)}`, { disputeId, type: newS });
         return;
     }
-});
+}); export * from "./escrow";

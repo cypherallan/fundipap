@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../theme/app_theme.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class CustomerMyJobs extends StatelessWidget {
   const CustomerMyJobs({super.key});
@@ -37,98 +38,20 @@ class CustomerMyJobs extends StatelessWidget {
   }
 
   Future<void> _confirmCompletion(String jobId) async {
-    var doc = await FirebaseFirestore.instance
-        .collection('jobs')
-        .doc(jobId)
-        .get();
-    var j = doc.data() as Map<String, dynamic>;
-    var reneg = j['renegotiation'] as Map<String, dynamic>?;
-    String fundiId = (j['assignedFundiId'] ?? j['fundiId'] ?? '').toString();
-    String clientName = (j['customerName'] ?? j['clientName'] ?? 'Client')
-        .toString();
-
-    int initialAmount =
-        (j['escrowAmount'] ??
-                j['lastCounterAmount'] ??
-                j['laborCost'] ??
-                j['agreedPrice'] ??
-                j['acceptedBidAmount'] ??
-                j['budgetMax'] ??
-                0)
-            .toInt();
-    int extraAmount =
-        (j['extraLaborAmount'] ??
-                reneg?['extraLabor'] ??
-                reneg?['pendingLabor'] ??
-                0)
-            .toInt();
-    int transport = (j['transportFee'] ?? j['escrowTransport'] ?? 0).toInt();
-    int newLaborTotal = (reneg?['newLaborTotal'] ?? 0).toInt();
-    int totalRelease = newLaborTotal > 0
-        ? newLaborTotal
-        : initialAmount + extraAmount;
-    if (totalRelease == 0) totalRelease = initialAmount;
-
-    int labourForCalc = newLaborTotal > 0
-        ? newLaborTotal
-        : (j['laborCost'] ?? j['agreedPrice'] ?? initialAmount).toInt();
-    int clientFee = (labourForCalc * 0.05).round();
-    int totalClientPays = labourForCalc + transport + clientFee;
-    int fundiReceives =
-        labourForCalc - (labourForCalc * 0.05).round() + transport;
-    if (newLaborTotal > 0) {
-      totalRelease = totalClientPays;
-    }
-
-    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
-      'status': 'completed',
-      'escrowStatus': 'released',
-      'extraEscrowStatus': 'released',
-      'clientConfirmedComplete': true,
-      'clientConfirmedCompletion': true,
-      'escrowReleased': true,
-      'completedAt': FieldValue.serverTimestamp(),
-      'paymentReleasedAt': FieldValue.serverTimestamp(),
-      'releasedAt': FieldValue.serverTimestamp(),
-      'totalReleasedAmount': totalRelease,
-      'totalClientPays': totalClientPays,
-      'fundiPayoutAmount': fundiReceives,
-      'fundiReceives': fundiReceives,
-      'totalClientPaid': totalClientPays,
-      'initialEscrowReleased': initialAmount,
-      'extraEscrowReleased': extraAmount,
-      'fundiHasUnread': true,
-      'customerHasUnread': false,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-
-    if (fundiId.isNotEmpty) {
-      try {
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'toUserId': fundiId,
-          'toRole': 'fundi',
-          'type': 'escrow_released',
-          'jobId': jobId,
-          'title': 'Client released KES $totalClientPays',
-          'body':
-              '$clientName released KES $totalClientPays - Tap to view receipt',
-          'isRead': false,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-        await FirebaseFirestore.instance
-            .collection('fundis')
-            .doc(fundiId)
-            .collection('notifications')
-            .add({
-              'jobId': jobId,
-              'type': 'escrow_released',
-              'title':
-                  'Client released KES $totalClientPays - Tap to view receipt',
-              'amount': totalClientPays,
-              'isRead': false,
-              'createdAt': FieldValue.serverTimestamp(),
-            });
-      } catch (_) {}
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable(
+            'confirmCompletionSecure',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+          );
+      final result = await callable.call({'jobId': jobId});
+      debugPrint('Released: ${result.data}');
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('Release failed ${e.code}: ${e.message}');
+      if (e.code == 'already-exists') {
+        return;
+      }
+      rethrow;
     }
   }
 

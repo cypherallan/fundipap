@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../fundi/services/fundi_penalty_service.dart';
@@ -30,15 +31,14 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
         .collection('disputes')
         .doc(widget.disputeId)
         .update({
-          'status':
-              'resolved_client_win_pending_redo',
+          'status': 'resolved_client_win_pending_redo',
           'winner': 'client',
           'adminReason': reasonCtrl.text.trim(),
           'redoOffer': {
             'createdAt': FieldValue.serverTimestamp(),
-            'deadline': Timestamp.fromDate(now.add(Duration(hours: 24))),
+            'deadline': Timestamp.fromDate(now.add(const Duration(hours: 24))),
             'extendedDeadline': Timestamp.fromDate(
-              now.add(Duration(hours: 30)),
+              now.add(const Duration(hours: 30)),
             ),
             'decision': null,
             'reminderSent': false,
@@ -82,11 +82,50 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
     if (mounted) Navigator.pop(context);
   }
 
+  // NEW: Payment dispute admin actions
+  Future<void> markMpesaSuccess(Map<String, dynamic> d) async {
+    setState(() => resolving = true);
+    await FirebaseFirestore.instance
+        .collection('disputes')
+        .doc(widget.disputeId)
+        .update({
+          'status': 'auto_resolved_mpesa_success',
+          'adminAction': 'mpesa_proven_success',
+          'adminNote': reasonCtrl.text.trim().isEmpty
+              ? 'M-Pesa B2C shows SUCCESS - fundi received'
+              : reasonCtrl.text.trim(),
+          'resolvedAt': FieldValue.serverTimestamp(),
+          'resolvedBy': 'admin',
+        });
+    setState(() => resolving = false);
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> retryPayout(Map<String, dynamic> d) async {
+    setState(() => resolving = true);
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'retryFundiPayoutSecure',
+      );
+      await callable.call({'jobId': d['jobId'], 'disputeId': widget.disputeId});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('B2C Retry triggered - check mpesaPayouts'),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Retry failed: $e')));
+    }
+    setState(() => resolving = false);
+  }
+
   Widget evidenceBox(String title, Map? evidence) {
     if (evidence == null) {
       return Card(
         child: Padding(
-          padding: EdgeInsets.all(12),
+          padding: const EdgeInsets.all(12),
           child: Text(
             '$title: Not yet submitted',
             style: GoogleFonts.inter(fontSize: 11, color: Colors.red),
@@ -99,7 +138,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
           ? Colors.blue.shade50
           : Colors.orange.shade50,
       child: Padding(
-        padding: EdgeInsets.all(12),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -110,7 +149,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
                 fontSize: 12,
               ),
             ),
-            SizedBox(height: 6),
+            const SizedBox(height: 6),
             Text(
               evidence['statement'] ?? '',
               style: GoogleFonts.inter(fontSize: 11),
@@ -119,11 +158,14 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
               Wrap(
                 children: (evidence['photos'] as List)
                     .map(
-                      (u) => Image.network(
-                        u,
-                        width: 60,
-                        height: 60,
-                        fit: BoxFit.cover,
+                      (u) => Padding(
+                        padding: const EdgeInsets.all(2),
+                        child: Image.network(
+                          u,
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     )
                     .toList(),
@@ -142,11 +184,16 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
           .doc(widget.disputeId)
           .snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData) {
-          return Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
+        if (!snap.hasData)
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         var d = snap.data!.data() as Map<String, dynamic>;
         bool isRepeat = d['type'] == 'repeat_job';
+        bool isPayment =
+            (d['reason'] ?? '').toString().toLowerCase().contains('payment') ||
+            d.containsKey('partialAmount') ||
+            (d['description'] ?? '').toString().contains('mpesaPayouts');
         var redoOffer = d['redoOffer'] as Map?;
         DateTime? deadline = (redoOffer?['deadline'] as Timestamp?)?.toDate();
         bool overdue = deadline != null && DateTime.now().isAfter(deadline);
@@ -155,10 +202,16 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
         bool extOverdue =
             extDeadline != null && DateTime.now().isAfter(extDeadline);
 
+        String autoResult = (d['autoCheckResult'] ?? d['autoCheckStatus'] ?? '')
+            .toString();
+        String autoTier = (d['autoCheckTier'] ?? '').toString();
+        String autoMsg = (d['autoCheckMessage'] ?? d['autoExplain'] ?? '')
+            .toString();
+
         return Scaffold(
           appBar: AppBar(
             title: Text(
-              'Admin - ${d['type']}',
+              'Admin - ${d['type']} ${isPayment ? '💰 PAYMENT' : ''}',
               style: GoogleFonts.montserrat(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
@@ -166,12 +219,12 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
             ),
           ),
           body: SingleChildScrollView(
-            padding: EdgeInsets.all(12),
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Job: ${d['jobTitle']} | KES ${d['escrowAmount']}',
+                  'Job: ${d['jobTitle']} | KES ${d['escrowAmount'] ?? d['amount']}',
                   style: GoogleFonts.montserrat(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
@@ -181,23 +234,271 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
                   'Reason: ${d['reason']}',
                   style: GoogleFonts.inter(fontSize: 11),
                 ),
-                Divider(),
+                const Divider(),
+
+                // PAYMENT DISPUTE LEDGER - KRA SAFE
+                if (isPayment) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      border: Border.all(color: Colors.red, width: 2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '💰 PAYMENT DISPUTE - MPESA LEDGER',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: Colors.red.shade800,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Dispute: ${d['description'] ?? ''}',
+                          style: GoogleFonts.inter(fontSize: 10),
+                        ),
+                        const Divider(),
+                        FutureBuilder<DocumentSnapshot>(
+                          future: FirebaseFirestore.instance
+                              .collection('mpesaPayouts')
+                              .doc(d['jobId'])
+                              .get(),
+                          builder: (_, pSnap) {
+                            if (!pSnap.hasData)
+                              return const CircularProgressIndicator();
+                            if (!pSnap.data!.exists)
+                              return Text(
+                                '❌ mpesaPayouts/${d['jobId']} NOT FOUND - escrow.ts did not run!',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              );
+                            var pd = pSnap.data!.data() as Map<String, dynamic>;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'C2B (Client→Business): ${pd['c2bTransactionId']}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  'B2C (Business→Fundi): ${pd['b2cTransactionId']}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  'Amount: KES ${pd['amount']} | Fee: ${pd['platformFee']} | Labour: ${pd['labourCost']} | Transport: ${pd['transportFee']}',
+                                  style: GoogleFonts.inter(fontSize: 10),
+                                ),
+                                Text(
+                                  'Status: ${pd['b2cStatus'] ?? pd['status']} | IdempotencyKey: ${pd['idempotencyKey'] ?? d['jobId']}',
+                                  style: GoogleFonts.inter(fontSize: 10),
+                                ),
+                                Text(
+                                  'C2B vs B2C different? ${pd['c2bTransactionId'] != pd['b2cTransactionId'] ? 'YES ✓ KRA SAFE' : 'NO ❌ SAME ID - BUG'}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color:
+                                        pd['c2bTransactionId'] !=
+                                            pd['b2cTransactionId']
+                                        ? Colors.green
+                                        : Colors.red,
+                                  ),
+                                ),
+                                if (pd['deductionThisJob'] != null &&
+                                    (pd['deductionThisJob'] as num) > 0)
+                                  Text(
+                                    'Deduction: KES ${pd['deductionThisJob']} | Original: ${pd['baseFundiPayoutBeforeDeduction']}',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      color: Colors.orange.shade800,
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                        const Divider(),
+                        FutureBuilder<DocumentSnapshot>(
+                          future: FirebaseFirestore.instance
+                              .collection('jobs')
+                              .doc(d['jobId'])
+                              .get(),
+                          builder: (_, jSnap) {
+                            if (!jSnap.hasData || !jSnap.data!.exists)
+                              return const SizedBox();
+                            var jd = jSnap.data!.data() as Map<String, dynamic>;
+                            var rel =
+                                jd['paymentReleasedAt'] ?? jd['releasedAt'];
+                            String relStr = rel is Timestamp
+                                ? rel.toDate().toString()
+                                : rel.toString();
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Job Status: ${jd['status']} | Escrow: ${jd['escrowStatus']}',
+                                  style: GoogleFonts.inter(fontSize: 10),
+                                ),
+                                Text(
+                                  'ReleasedAt: $relStr | FundiPayoutApplied: ${jd['fundiPayoutApplied']}',
+                                  style: GoogleFonts.inter(fontSize: 10),
+                                ),
+                                Text(
+                                  'FundiPayoutAmount (server truth): KES ${jd['fundiPayoutAmount']}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        if (autoResult.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: autoResult.contains('success')
+                                  ? Colors.green.shade100
+                                  : autoResult.contains('explained')
+                                  ? Colors.blue.shade100
+                                  : Colors.orange.shade100,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: autoResult.contains('success')
+                                    ? Colors.green
+                                    : Colors.orange,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'AUTO-CHECK T$autoTier: ${autoResult.toUpperCase()}',
+                                  style: GoogleFonts.montserrat(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  autoMsg,
+                                  style: GoogleFonts.inter(fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: reasonCtrl,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            labelText: 'Admin note / explanation to fundi',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green.shade700,
+                                ),
+                                onPressed: resolving
+                                    ? null
+                                    : () => markMpesaSuccess(d),
+                                child: const Text(
+                                  'M-Pesa Success - Fundi Lying',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange.shade700,
+                                ),
+                                onPressed: resolving
+                                    ? null
+                                    : () => retryPayout(d),
+                                child: const Text(
+                                  'Retry B2C (if FAILED)',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                            ),
+                            onPressed: () async {
+                              await FirebaseFirestore.instance
+                                  .collection('disputes')
+                                  .doc(widget.disputeId)
+                                  .update({
+                                    'status': 'resolved_explained',
+                                    'adminNote': reasonCtrl.text.trim(),
+                                    'resolvedAt': FieldValue.serverTimestamp(),
+                                  });
+                              if (mounted) Navigator.pop(context);
+                            },
+                            child: const Text(
+                              'Explain Deduction/Fee & Close',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(),
+                ],
+
+                // REPEAT JOB EVIDENCE (existing)
                 evidenceBox(
                   'Reporter (${d['reporterRole']})',
                   d['reporterEvidence'],
                 ),
                 evidenceBox('Reported', d['reportedEvidence']),
-                Divider(),
-                if (!isRepeat) ...[
+                const Divider(),
+
+                if (!isRepeat && !isPayment) ...[
                   TextField(
                     controller: reasonCtrl,
                     maxLines: 3,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Admin reason (optional for non-repeat)',
                       border: OutlineInputBorder(),
                     ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   ElevatedButton(
                     onPressed: () async {
                       await FirebaseFirestore.instance
@@ -208,7 +509,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
                             'winner': 'fundi',
                           });
                     },
-                    child: Text('Fundi Won - Release'),
+                    child: const Text('Fundi Won - Release'),
                   ),
                 ],
                 if (isRepeat) ...[
@@ -219,7 +520,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
                       fontSize: 13,
                     ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   if (d['status'] == 'open' ||
                       d['status'] == 'evidence_complete') ...[
                     Text(
@@ -229,13 +530,13 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
                     TextField(
                       controller: reasonCtrl,
                       maxLines: 4,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         hintText:
-                            'e.g. Video shows socket still not working after your fix on 10 Oct... client within 14 days...',
+                            'e.g. Video shows socket still not working after your fix...',
                         border: OutlineInputBorder(),
                       ),
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -245,7 +546,7 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
                         onPressed: resolving
                             ? null
                             : () => resolveClientWinWithRedoOffer(d),
-                        child: Text(
+                        child: const Text(
                           'Resolve Client Won + Offer Redo (24h)',
                           style: TextStyle(color: Colors.white),
                         ),
@@ -256,18 +557,18 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
                     Card(
                       color: Colors.blue.shade50,
                       child: Padding(
-                        padding: EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(12),
                         child: Text(
-                          'Offer sent to fundi. Deadline: $deadline. Fundi sees reason: ${d['adminReason']}\nHe has 24h to accept redo. Do NOT mention 50% deduction in his message.',
+                          'Offer sent to fundi. Deadline: $deadline. Fundi sees reason: ${d['adminReason']}\nHe has 24h to accept redo. Do NOT mention 50% deduction.',
                           style: GoogleFonts.inter(fontSize: 11),
                         ),
                       ),
                     ),
                     if (overdue && redoOffer?['reminderSent'] != true) ...[
-                      SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       ElevatedButton(
                         onPressed: () => sendReminder(d),
-                        child: Text('24h passed - Send 6h reminder'),
+                        child: const Text('24h passed - Send 6h reminder'),
                       ),
                     ],
                     if (redoOffer?['reminderSent'] == true)
@@ -283,11 +584,9 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red.shade700,
                         ),
-                        onPressed: () {
-                          applyDeductionAfterNoResponse(d);
-                        },
-                        child: Text(
-                          '30h passed - Apply 50% Deduction (Fundi no response)',
+                        onPressed: () => applyDeductionAfterNoResponse(d),
+                        child: const Text(
+                          '30h passed - Apply 50% Deduction',
                           style: TextStyle(color: Colors.white),
                         ),
                       ),

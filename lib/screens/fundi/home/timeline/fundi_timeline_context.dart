@@ -157,6 +157,20 @@ class FundiTimelineContext {
 
     int fundiAppFee = (labour * fundiPct / 100).round();
     int baseFundiReceives = labour - fundiAppFee + transport;
+    // --- SERVER TRUTH (from confirmCompletionSecure) ---
+    int serverPayout = toInt(job['fundiPayoutAmount'] ?? 0);
+    int baseFromServer = toInt(
+      job['baseFundiPayoutBeforeDeduction'] ??
+          job['originalReleasedAmount'] ??
+          0,
+    );
+    if (baseFromServer > 0) {
+      baseFundiReceives =
+          baseFromServer; // 100% accurate, prevents client faking badge
+      fundiAppFee = (labour - baseFundiReceives + transport)
+          .abs(); // recalc fee for UI
+    }
+    // ---------------------------------------------------
     int fundiSeesWaiting = labour + transport;
     int newTotalFundiLocked = newLabour + transport;
     int newFundiReceivesVal =
@@ -182,8 +196,8 @@ class FundiTimelineContext {
       finalOriginal = originalAmount;
       finalRemaining = remainingAfter;
     } else {
-      finalFundiReceives = baseFundiReceives;
-      finalReleasedAmount = baseFundiReceives;
+      finalFundiReceives = serverPayout > 0 ? serverPayout : baseFundiReceives;
+      finalReleasedAmount = serverPayout > 0 ? serverPayout : baseFundiReceives;
       finalOriginal = null;
       finalRemaining = null;
     }
