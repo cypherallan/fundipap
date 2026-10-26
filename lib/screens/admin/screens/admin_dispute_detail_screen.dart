@@ -241,6 +241,79 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
     setState(() => resolving = false);
   }
 
+  Future<void> resolveGate1GrantExtra(Map<String, dynamic> d) async {
+    setState(() => resolving = true);
+    await FirebaseFirestore.instance.collection('jobs').doc(d['jobId']).update({
+      'status': 'awaiting_extra_escrow',
+      'renegotiation.status': 'approved_pending_extra_escrow',
+      'escrowStatus': 'pending_topup',
+      'adminDecision': 'grant_extra',
+      'adminReason': reasonCtrl.text.trim(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await FirebaseFirestore.instance
+        .collection('disputes')
+        .doc(widget.disputeId)
+        .update({
+          'status': 'resolved_grant_extra',
+          'winner': 'fundi',
+          'adminReason': reasonCtrl.text.trim(),
+          'resolvedAt': FieldValue.serverTimestamp(),
+        });
+    setState(() => resolving = false);
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> resolveGate1DenyExtra(Map<String, dynamic> d) async {
+    setState(() => resolving = true);
+    await FirebaseFirestore.instance.collection('jobs').doc(d['jobId']).update({
+      'status': 'in_progress',
+      'renegotiation.status': 'fundi_continued_old_price',
+      'renegotiation.chose': 'continue_old_price_admin',
+      'adminDecision': 'deny_extra',
+      'adminReason': reasonCtrl.text.trim(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await FirebaseFirestore.instance
+        .collection('disputes')
+        .doc(widget.disputeId)
+        .update({
+          'status': 'resolved_deny_extra',
+          'winner': 'client',
+          'adminReason': reasonCtrl.text.trim(),
+          'resolvedAt': FieldValue.serverTimestamp(),
+        });
+    setState(() => resolving = false);
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> resolveGate1Withdraw(Map<String, dynamic> d) async {
+    setState(() => resolving = true);
+    try {
+      final callable = FirebaseFunctions.instanceFor(
+        region: 'europe-west1',
+      ).httpsCallable('resolveExtraRefusedDeadlock');
+      await callable.call({
+        'jobId': d['jobId'],
+        'action': 'withdraw_with_compensation',
+      });
+      await FirebaseFirestore.instance
+          .collection('disputes')
+          .doc(widget.disputeId)
+          .update({
+            'status': 'resolved_withdraw_comp',
+            'adminReason': reasonCtrl.text.trim(),
+            'resolvedAt': FieldValue.serverTimestamp(),
+          });
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Withdraw failed: $e')));
+    }
+    setState(() => resolving = false);
+    if (mounted) Navigator.pop(context);
+  }
+
   Widget evidenceBox(String title, Map? evidence) {
     if (evidence == null) {
       return Card(
@@ -314,6 +387,12 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
             (d['reason'] ?? '').toString().toLowerCase().contains('payment') ||
             d.containsKey('partialAmount') ||
             (d['description'] ?? '').toString().contains('mpesaPayouts');
+        bool isGate1 =
+            (d['type'] ?? '').toString().toLowerCase().contains('extra') ||
+            (d['disputeType'] ?? '').toString().contains('extra') ||
+            (d['reason'] ?? '').toString().toLowerCase().contains('extra') ||
+            (d['status'] ?? '').toString().contains('deadlock') ||
+            d.containsKey('extraRequested');
         var redoOffer = d['redoOffer'] as Map?;
         DateTime? deadline = (redoOffer?['deadline'] as Timestamp?)?.toDate();
         bool overdue = deadline != null && DateTime.now().isAfter(deadline);
@@ -621,6 +700,236 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
                         ),
                       ],
                     ),
+                  ),
+                  const Divider(),
+                ],
+
+                // GATE 1 - EXTRA REFUSED - DYNAMIC (no hardcoded example)
+                if (isGate1) ...[
+                  Builder(
+                    builder: (_) {
+                      int oldL =
+                          ((d['oldLabor'] ??
+                                      d['oldLabour'] ??
+                                      d['calculated']?['oldLabor'] ??
+                                      0)
+                                  as num)
+                              .toInt();
+                      int transp =
+                          ((d['oldTransportFee'] ??
+                                      d['transportFee'] ??
+                                      d['calculated']?['oldTransport'] ??
+                                      0)
+                                  as num)
+                              .toInt();
+                      int extraReq =
+                          ((d['extraRequested'] ?? d['extraLabor'] ?? 0) as num)
+                              .toInt();
+                      int locked =
+                          ((d['alreadyLocked'] ?? d['escrowAmount'] ?? 0)
+                                  as num)
+                              .toInt();
+                      int diag =
+                          ((d['calculated']?['diagnosticLabor'] ??
+                                      (oldL * 0.25).round())
+                                  as num)
+                              .toInt();
+                      String bdg =
+                          (d['fundiBadge'] ??
+                                  d['badge'] ??
+                                  d['calculated']?['badge'] ??
+                                  'bronze')
+                              .toString()
+                              .toLowerCase();
+                      int bPct = bdg == 'gold'
+                          ? 5
+                          : bdg == 'silver'
+                          ? 8
+                          : 10;
+                      int bFee =
+                          ((d['calculated']?['badgeFee'] ??
+                                      (diag * bPct / 100).round())
+                                  as num)
+                              .toInt();
+                      int fGets = transp + diag - bFee;
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          border: Border.all(color: Colors.orange, width: 2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'GATE 1 - EXTRA LABOUR REFUSED',
+                              style: GoogleFonts.montserrat(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                color: Colors.orange.shade800,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Old: KES $oldL | Extra Req: KES $extraReq | Transport: $transp | Locked: $locked',
+                              style: GoogleFonts.inter(fontSize: 10),
+                            ),
+                            Text(
+                              'Rounds: ${d['counterRound'] ?? '—'} | Low counters: ${d['clientLowCounterCount'] ?? '—'} | Badge: $bdg ($bPct%)',
+                              style: GoogleFonts.inter(fontSize: 10),
+                            ),
+                            const Divider(),
+                            Text(
+                              'Diag = 25% of old = KES $diag | BadgeFee = $bPct% of diag = KES $bFee | FundiGets = transport + diag - badgeFee = $transp + $diag - $bFee = KES $fGets',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            if ((d['counterHistory'] as List? ?? [])
+                                .isNotEmpty) ...[
+                              Text(
+                                'Counter history (<30% or 0):',
+                                style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              ...((d['counterHistory'] as List).map(
+                                (c) => Text(
+                                  '- $c',
+                                  style: GoogleFonts.inter(fontSize: 10),
+                                ),
+                              )),
+                            ],
+                            const SizedBox(height: 8),
+                            if ((d['evidencePhotoUrls'] as List? ??
+                                    d['evidencePhotos'] as List? ??
+                                    [])
+                                .isNotEmpty)
+                              Wrap(
+                                children:
+                                    ((d['evidencePhotoUrls'] ??
+                                                d['evidencePhotos'])
+                                            as List)
+                                        .map(
+                                          (u) => Padding(
+                                            padding: const EdgeInsets.all(2),
+                                            child: Image.network(
+                                              u,
+                                              width: 70,
+                                              height: 70,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                              ),
+                            if ((d['verificationPhotoUrls'] as List? ??
+                                    d['verificationPhotos'] as List? ??
+                                    [])
+                                .isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                'Blur-reveal verification:',
+                                style: GoogleFonts.montserrat(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              Wrap(
+                                children:
+                                    ((d['verificationPhotoUrls'] ??
+                                                d['verificationPhotos'])
+                                            as List)
+                                        .map(
+                                          (u) => Padding(
+                                            padding: const EdgeInsets.all(2),
+                                            child: Image.network(
+                                              u,
+                                              width: 70,
+                                              height: 70,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                              ),
+                            ],
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: reasonCtrl,
+                              maxLines: 3,
+                              decoration: const InputDecoration(
+                                labelText: 'Admin reason',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.black,
+                                    ),
+                                    onPressed: resolving
+                                        ? null
+                                        : () => resolveGate1DenyExtra(d),
+                                    child: const Text(
+                                      'Deny Extra - Force Old',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green.shade700,
+                                    ),
+                                    onPressed: resolving
+                                        ? null
+                                        : () => resolveGate1GrantExtra(d),
+                                    child: const Text(
+                                      'Grant Extra - Top Up',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange.shade800,
+                                ),
+                                onPressed: resolving
+                                    ? null
+                                    : () => resolveGate1Withdraw(d),
+                                child: Text(
+                                  'Withdraw + Comp KES $fGets = $transp + $diag - $bFee',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                   const Divider(),
                 ],

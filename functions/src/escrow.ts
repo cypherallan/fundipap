@@ -369,3 +369,215 @@ export const dailyReconciliation = onSchedule({ schedule: "every day 02:00", reg
     });
     console.log(`KRA Reconciliation ${today}: ${count} jobs, C2B ${totalC2B}, B2C ${totalB2C}, Fees ${totalFees}, Match: ${totalC2B - totalB2C === totalFees}`);
 });
+// 5. GATE 1 - EXTRA WORK REFUSED DEADLOCK RESOLVE
+export const resolveExtraRefusedDeadlock = onCall({ region: "europe-west1" }, async (request) => {
+    const uid = request.auth?.uid;
+    const jobId = (request.data?.jobId as string)?.trim();
+    const action = (request.data?.action as string)?.trim(); // 'withdraw_with_compensation' or 'dispute_to_admin'
+    if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
+    if (!jobId) throw new HttpsError("invalid-argument", "jobId required");
+
+    return await db.runTransaction(async (tx) => {
+        const jobRef = db.collection("jobs").doc(jobId);
+        const jobSnap = await tx.get(jobRef);
+        if (!jobSnap.exists) throw new HttpsError("not-found", "Job not found");
+        const j = jobSnap.data()!;
+
+        const fundiId = (j.assignedFundiId || j.assignedFundi || j.fundiId || "").toString();
+        if (fundiId !== uid) throw new HttpsError("permission-denied", "Only assigned fundi");
+
+        const renego = j.renegotiation as any || {};
+        const renegoStatus = (renego.status || "").toString().toLowerCase();
+        const jobStatus = (j.status || "").toString().toLowerCase();
+        if (jobStatus !== "price_review_deadlock" && !renegoStatus.includes("deadlock")) {
+            throw new HttpsError("failed-precondition", "Not in deadlock - status is " + j.status);
+        }
+        if (j.fundiPayoutApplied === true || j.escrowStatus === "released") throw new HttpsError("already-exists", "Already resolved");
+
+        const oldLabor = toInt(renego.oldLabor ?? j.agreedPrice ?? j.laborCost ?? 0);
+        const oldTransport = toInt(renego.oldTransportFee ?? j.transportFee ?? 100);
+        const alreadyLocked = toInt(j.escrowAmount ?? j.totalClientPays ?? j.totalCost ?? 0);
+        const extraRequested = toInt(renego.extraLabor ?? renego.counteredExtraRequested ?? 0);
+        const counterRound = toInt(renego.counterRound ?? 3);
+
+        // badge fee = % of diagnostic: bronze 10% of 2500 = 250
+        let badge = "bronze";
+        let badgePct = 10;
+        try {
+            const fu = await db.collection("users").doc(fundiId).get();
+            const fd = fu.data();
+            if (fd) {
+                badge = (fd.badgeLevel || fd.badge || "bronze").toString().toLowerCase();
+                if (badge === "gold") badgePct = 5;
+                else if (badge === "silver") badgePct = 8;
+                else badgePct = 10;
+            }
+        } catch { }
+
+        const oldClientFee = Math.round(oldLabor * 0.05);
+        const diagnosticLabor = Math.round(oldLabor * 0.25); // 25% = 2500
+        const badgeFee = Math.round(diagnosticLabor * badgePct / 100); // 250 if bronze
+        const diagClientFee = Math.round(diagnosticLabor * 0.05);
+        const fundiGets = oldTransport + diagnosticLabor - badgeFee; // 100 + 2500 - 250 = 2350
+        const appGets = oldClientFee + diagClientFee + badgeFee;
+        let clientGets = alreadyLocked - fundiGets - appGets;
+        if (clientGets < 0) clientGets = 0;
+
+        // ledger - fundi B2C
+        const c2bId = `SIM_C2B_${jobId}_DEADLOCK_${Date.now()}`;
+        const b2cId = `SIM_B2C_${jobId}_DEADLOCK_${Date.now()}`;
+        const payoutRef = db.collection("mpesaPayouts").doc(jobId);
+
+        if (action === "dispute_to_admin") {
+            // goes to admin tab
+            const disputeRef = db.collection("disputes").doc();
+            tx.set(disputeRef, {
+                jobId,
+                type: "extra_work_refused_dispute",
+                stage: "gate1_extra_labour",
+                fundiId,
+                clientId: (j.customerId || j.clientId || "").toString(),
+                oldLabor,
+                extraRequested,
+                alreadyLocked,
+                diagnosticLabor,
+                transport: oldTransport,
+                badge,
+                badgeFee,
+                counterRound,
+                proposedResolution: { fundiGets, appGets, clientGets },
+                status: "pending_admin_review",
+                evidence: {
+                    verificationPhotoUrls: renego.verificationPhotoUrls || [],
+                    evidencePhotoUrls: renego.evidencePhotoUrls || [],
+                    hasVerification: renego.hasVerificationPhotos || false,
+                    counterRound,
+                },
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                c2bTransactionId: c2bId,
+                b2cTransactionId: b2cId,
+            });
+            tx.update(jobRef, {
+                status: "disputed_extra_refused",
+                disputedAt: admin.firestore.FieldValue.serverTimestamp(),
+                disputedBy: "fundi",
+                disputeType: "extra_work_refused",
+                lastDisputeId: disputeRef.id,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return { success: true, action: "disputed_to_admin", fundiGets, clientGets, appGets, disputeId: disputeRef.id };
+        }
+
+        // withdraw with compensation - auto-resolve
+        tx.set(payoutRef, {
+            jobId,
+            fundiId,
+            clientId: j.customerId || j.clientId,
+            amount: fundiGets,
+            baseFundiPayoutBeforeDeduction: diagnosticLabor + oldTransport,
+            platformFee: appGets,
+            labourCost: diagnosticLabor,
+            transportFee: oldTransport,
+            badgeFee,
+            badge,
+            commissionPct: 0,
+            deductionThisJob: 0,
+            c2bTransactionId: c2bId,
+            b2cTransactionId: b2cId,
+            c2bStatus: "SUCCESS",
+            b2cStatus: "SUCCESS",
+            idempotencyKey: jobId + "_deadlock",
+            status: "released_deadlock_compensation",
+            type: "extra_refused_compensation",
+            alreadyLocked,
+            clientRefund: clientGets,
+            simulated: true,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        const disputeRef2 = db.collection("disputes").doc();
+        tx.set(disputeRef2, {
+            jobId,
+            type: "extra_work_refused",
+            stage: "gate1_extra_labour",
+            fundiId,
+            clientId: (j.customerId || j.clientId || "").toString(),
+            oldLabor,
+            extraRequested,
+            alreadyLocked,
+            diagnosticLabor,
+            transport: oldTransport,
+            badge,
+            badgeFee,
+            resolution: { fundiGets, appGets, clientGets },
+            status: "auto_resolved_extra_refused",
+            c2bTransactionId: c2bId,
+            b2cTransactionId: b2cId,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        tx.update(jobRef, {
+            status: "cancelled_fundi_withdraw_extra_refused",
+            cancelledBy: "fundi",
+            cancelReason: `Client refused extra labour ${extraRequested} for ${counterRound} rounds, fundi withdrew with diagnostic fee`,
+            escrowStatus: "disputed_auto_resolved",
+            extraEscrowStatus: "released_compensation",
+            fundiReceives: fundiGets,
+            fundiPayoutAmount: fundiGets,
+            fundiPayoutAfterDeduction: fundiGets,
+            baseFundiPayoutBeforeDeduction: diagnosticLabor + oldTransport,
+            clientRefund: clientGets,
+            appFee: appGets,
+            platformFee: appGets,
+            c2bTransactionId: c2bId,
+            b2cTransactionId: b2cId,
+            fundiPayoutApplied: true,
+            lastDisputeId: disputeRef2.id,
+            lastDisputeStatus: "resolved_extra_refused",
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // fundi balance
+        const userRef = db.collection("users").doc(fundiId);
+        const fundiRef = db.collection("fundis").doc(fundiId);
+        tx.set(userRef, {
+            totalEarned: admin.firestore.FieldValue.increment(fundiGets),
+            balance: admin.firestore.FieldValue.increment(fundiGets),
+        }, { merge: true });
+        tx.set(fundiRef, {
+            totalEarned: admin.firestore.FieldValue.increment(fundiGets),
+            balance: admin.firestore.FieldValue.increment(fundiGets),
+        }, { merge: true });
+
+        // notifications both
+        const clientId = (j.customerId || j.clientId || "").toString();
+        if (clientId) {
+            const nRef = db.collection("notifications").doc();
+            tx.set(nRef, {
+                toUserId: clientId,
+                toRole: "client",
+                type: "extra_refused_auto_resolved",
+                jobId,
+                title: "Fundi withdrew - Extra work refused",
+                body: `Fundi requested extra KES ${extraRequested}, you countered low ${counterRound} times. Auto-resolved: Fundi gets KES ${fundiGets} (transport ${oldTransport} + diagnostic ${diagnosticLabor} - badge ${badgeFee}), you get KES ${clientGets} back, app fee KES ${appGets}. C2B ${c2bId} / B2C ${b2cId}`,
+                isRead: false,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                disputeId: disputeRef2.id,
+            });
+        }
+        const nRef2 = db.collection("notifications").doc();
+        tx.set(nRef2, {
+            toUserId: fundiId,
+            toRole: "fundi",
+            type: "extra_refused_auto_resolved",
+            jobId,
+            title: `Withdrawn with compensation KES ${fundiGets}`,
+            body: `You withdrew after client refused extra KES ${extraRequested}. You get KES ${fundiGets}, app KES ${appGets}, client refund KES ${clientGets}. B2C ${b2cId}`,
+            isRead: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            disputeId: disputeRef2.id,
+        });
+
+        return { success: true, fundiGets, clientGets, appGets, b2cId, c2bId, disputeId: disputeRef2.id };
+    });
+});

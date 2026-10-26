@@ -193,12 +193,55 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
     });
   }
 
+  void _showPhotoSourceSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: Text(
+                'Take photo with camera',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+              ),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final picker = ImagePicker();
+                final XFile? shot = await picker.pickImage(
+                  source: ImageSource.camera,
+                  imageQuality: 80,
+                );
+                if (shot != null) {
+                  setState(() => photos.add(File(shot.path)));
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: Text(
+                'Choose from gallery',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+              ),
+              onTap: () async {
+                Navigator.pop(ctx);
+                final picker = ImagePicker();
+                final picked = await picker.pickMultiImage(imageQuality: 80);
+                if (picked.isNotEmpty) {
+                  setState(
+                    () => photos.addAll(picked.map((e) => File(e.path))),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> pickPhotos() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickMultiImage();
-    if (picked.isNotEmpty) {
-      setState(() => photos.addAll(picked.map((e) => File(e.path))));
-    }
+    _showPhotoSourceSheet();
   }
 
   Future<void> submit() async {

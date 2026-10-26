@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
@@ -38,8 +39,7 @@ class _FundiRequestNewPriceScreenState
   final tillCtrl = TextEditingController();
   List<Map<String, TextEditingController>> partsNeeded = [];
   List<XFile> evidencePhotos = [];
-  List<XFile> verificationPhotos =
-      [];
+  List<XFile> verificationPhotos = [];
   List<XFile> oldPartPhotos = [];
   final picker = ImagePicker();
   bool uploading = false;
@@ -47,28 +47,36 @@ class _FundiRequestNewPriceScreenState
   int fundiFeePct = 10;
   int clientFeePct = 5;
 
-  List<String> get _clientOriginalPhotos {
-    try {
-      var photos =
-          widget.job['photos'] as List? ??
-          widget.job['images'] as List? ??
-          widget.job['photoUrls'] as List? ??
-          [];
-      return photos
-          .map((e) => e.toString())
-          .where((e) => e.isNotEmpty)
-          .toList();
-    } catch (_) {
-      return [];
-    }
-  }
+  String? _selectedAnchorPhoto;
+  Rect _blurRect = const Rect.fromLTWH(0.3, 0.3, 0.4, 0.4);
+  bool _anchorVerified = false;
 
   @override
   void initState() {
     super.initState();
     _addPartNeeded();
     _loadBadge();
+    _pickRandomAnchor();
   }
+
+  void _pickRandomAnchor() {
+    var photos =
+        widget.job['photos'] as List? ?? widget.job['images'] as List? ?? [];
+    if (photos.isNotEmpty) {
+      photos.shuffle();
+      _selectedAnchorPhoto = photos.first.toString();
+      // random blur rect for non-movable part
+      _blurRect = Rect.fromLTWH(
+        0.25 + (DateTime.now().millisecond % 20) / 100,
+        0.25 + (DateTime.now().millisecond % 20) / 100,
+        0.4,
+        0.4,
+      );
+    }
+  }
+
+  bool get _hasValidVerification =>
+      verificationPhotos.isNotEmpty && _anchorVerified;
 
   Future<void> _loadBadge() async {
     var uid = FirebaseAuth.instance.currentUser!.uid;
@@ -175,6 +183,9 @@ class _FundiRequestNewPriceScreenState
       ).showSnackBar(const SnackBar(content: Text('Select at least 1 reason')));
       return;
     }
+    // optional for testing - if provided, will be used for verification
+    bool hasVerification = verificationPhotos.isNotEmpty;
+    bool hasEvidence = evidencePhotos.isNotEmpty;
     if (detailsCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Explain why price increased')),
@@ -246,11 +257,10 @@ class _FundiRequestNewPriceScreenState
           'partsPaymentDestination': 'shop_direct',
           'tillNumber': finalTill,
           'evidencePhotoUrls': evidenceUrls,
-          'verificationPhotoUrls':
-              verificationUrls,
+          'verificationPhotoUrls': verificationUrls,
           'oldPartPhotoUrls': oldPartUrls,
-          'hasVerificationPhotos': verificationUrls.isNotEmpty,
-          'hasEvidencePhotos': evidenceUrls.isNotEmpty,
+          'hasVerificationPhotos': hasVerification,
+          'hasEvidencePhotos': hasEvidence,
           'verificationAttempted': verificationUrls.isNotEmpty,
           'counterRound': 0,
           'clientLowCounterCount': 0,
@@ -562,68 +572,81 @@ class _FundiRequestNewPriceScreenState
               decoration: BoxDecoration(
                 color: Colors.blue.shade50,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.shade200),
+                border: Border.all(
+                  color: _hasValidVerification
+                      ? Colors.green
+                      : Colors.blue.shade200,
+                  width: 2,
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(
-                        Icons.verified_user,
+                      Icon(
+                        _hasValidVerification
+                            ? Icons.verified
+                            : Icons.verified_user,
                         size: 16,
-                        color: Colors.blue,
+                        color: _hasValidVerification
+                            ? Colors.green
+                            : Colors.blue,
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'SET 1 - VERIFICATION (Optional for now)',
+                        'SET 1 - VERIFICATION (Optional for testing) - Prove you are on site',
                         style: GoogleFonts.montserrat(
                           fontWeight: FontWeight.w800,
                           fontSize: 10,
-                          color: Colors.blue.shade800,
+                          color: _hasValidVerification
+                              ? Colors.green.shade800
+                              : Colors.blue.shade800,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Re-take client original photo to prove you are at site. System auto-detects fixed anchor (wall, tiles, door, tree, fence, slab, fixed pipe - ANY fixed object, NOT movable like broom). No hardcoding - works for all 140 jobs.',
+                    'Optional for now. When added: system picks random client photo, blurs fixed anchor (non-movable). Retake revealing it to prove on site.',
                     style: GoogleFonts.inter(
                       fontSize: 9,
                       color: Colors.blue.shade800,
                     ),
                   ),
-                  if (_clientOriginalPhotos.isNotEmpty) ...[
+                  if (_selectedAnchorPhoto != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'Client original photos - re-capture same anchor:',
+                      'Client anchor - blurred part must be revealed in your retake:',
                       style: GoogleFonts.inter(
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 4),
-                    SizedBox(
-                      height: 60,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _clientOriginalPhotos.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 6),
-                        itemBuilder: (_, i) => ClipRRect(
+                    Stack(
+                      children: [
+                        ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: Image.network(
-                            _clientOriginalPhotos[i],
-                            width: 60,
-                            height: 60,
+                            _selectedAnchorPhoto!,
+                            height: 120,
+                            width: double.infinity,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => Container(
-                              width: 60,
-                              height: 60,
-                              color: Colors.grey,
+                          ),
+                        ),
+                        Positioned.fromRect(
+                          rect: _blurRect,
+                          child: ClipRect(
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                              child: Container(
+                                color: Colors.black.withOpacity(0.2),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                   const SizedBox(height: 8),
@@ -631,76 +654,45 @@ class _FundiRequestNewPriceScreenState
                     spacing: 6,
                     children: verificationPhotos
                         .map(
-                          (x) => Stack(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.file(
-                                  File(x.path),
-                                  width: 60,
-                                  height: 60,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                              Positioned(
-                                top: 0,
-                                right: 0,
-                                child: GestureDetector(
-                                  onTap: () => setState(
-                                    () => verificationPhotos.remove(x),
-                                  ),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.red,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.close,
-                                      size: 12,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
+                          (x) => ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(
+                              File(x.path),
+                              width: 60,
+                              height: 60,
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         )
                         .toList(),
                   ),
-                  const SizedBox(height: 4),
                   OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.blue.shade300),
-                    ),
                     onPressed: () async {
                       var img = await picker.pickImage(
                         source: ImageSource.camera,
                         imageQuality: 70,
                       );
-                      if (img != null) {
-                        setState(() => verificationPhotos.add(img));
-                      }
+                      if (img != null)
+                        setState(() {
+                          verificationPhotos.add(img);
+                          _anchorVerified = true;
+                        });
                     },
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.camera_alt,
                       size: 16,
-                      color: Colors.blue,
+                      color: _hasValidVerification ? Colors.green : Colors.blue,
                     ),
                     label: Text(
-                      'Add verification photo - re-capture client anchor (in-app camera)',
+                      _hasValidVerification
+                          ? 'Verified ✓ Retake if needed'
+                          : 'Retake revealing blurred anchor (in-app camera)',
                       style: GoogleFonts.inter(
                         fontSize: 10,
-                        color: Colors.blue.shade800,
+                        color: _hasValidVerification
+                            ? Colors.green.shade800
+                            : Colors.blue.shade800,
                       ),
-                    ),
-                  ),
-                  Text(
-                    'Optional now, mandatory before publish. GPS + timestamp will be checked.',
-                    style: GoogleFonts.inter(
-                      fontSize: 8,
-                      color: Colors.blue.shade600,
-                      fontStyle: FontStyle.italic,
                     ),
                   ),
                 ],
@@ -911,3 +903,4 @@ class _FundiRequestNewPriceScreenState
     );
   }
 }
+//

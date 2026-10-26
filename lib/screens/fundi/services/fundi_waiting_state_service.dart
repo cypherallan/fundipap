@@ -11,6 +11,7 @@ enum FundiWaitingType {
   waitingNewPriceApproval,
   working,
   jobCompleted,
+  priceReviewDeadlock,
 }
 
 class FundiWaitingState {
@@ -71,6 +72,30 @@ FundiWaitingState? getFundiWaitingState({
       .toString()
       .toLowerCase();
   bool escrowDone = ['held', 'paid', 'released'].contains(escrowStatus);
+
+  // === GATE 1 DEADLOCK ===
+  String deadlockStatus = (job['status'] ?? '').toString().toLowerCase();
+  var deadlockRenego = job['renegotiation'] as Map<String, dynamic>?;
+  String deadlockRenegoStatus = (deadlockRenego?['status'] ?? '')
+      .toString()
+      .toLowerCase();
+  if (deadlockStatus == 'price_review_deadlock' ||
+      deadlockRenegoStatus.contains('deadlock')) {
+    int extraReq = _toInt(
+      deadlockRenego?['extraLabor'] ??
+          deadlockRenego?['counteredExtraRequested'] ??
+          0,
+    );
+    int round = _toInt(deadlockRenego?['counterRound'] ?? 3);
+    int oldLab = _toInt(deadlockRenego?['oldLabor'] ?? job['agreedPrice'] ?? 0);
+    return FundiWaitingState(
+      type: FundiWaitingType.priceReviewDeadlock,
+      title: 'Deadlock - Client refused extra KES $extraReq ($round rounds)',
+      message:
+          'Client countered 0 or <30% for $round rounds. Choose continue old price KES $oldLab or withdraw with compensation',
+      price: extraReq,
+    );
+  }
 
   if (jobStatus.contains('cancel') ||
       _toBool(job['cancelled']) ||

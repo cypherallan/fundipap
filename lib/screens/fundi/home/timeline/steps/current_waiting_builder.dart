@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../../../../../theme/app_theme.dart';
 import '../../../../../widgets/animated_waiting_card.dart';
 import '../../../services/fundi_waiting_state_service.dart';
@@ -241,6 +242,146 @@ Widget? buildCurrentWaiting({
     );
   }
 
+  // === PRICE REVIEW DEADLOCK - Client countered 0 or <30% for 3 rounds ===
+  String renegoStatus = (renego?['status'] ?? '').toString().toLowerCase();
+  if (lowStat == 'price_review_deadlock' || renegoStatus.contains('deadlock')) {
+    int oldLabor = toInt(
+      renego?['oldLabor'] ?? job['agreedPrice'] ?? job['laborCost'] ?? 0,
+    );
+    int oldTransport = toInt(
+      renego?['oldTransportFee'] ?? job['transportFee'] ?? 0,
+    );
+    int alreadyLocked = toInt(
+      job['escrowAmount'] ?? job['totalClientPays'] ?? 0,
+    );
+    int extraRequested = toInt(
+      renego?['extraLabor'] ?? renego?['counteredExtraRequested'] ?? 0,
+    );
+    int counterRound = toInt(renego?['counterRound'] ?? 3);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.shade400, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red.shade700),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Price Review Deadlocked - Client refused extra',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    color: Colors.red.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Client countered 0 or <30% for $counterRound rounds. You requested extra KES $extraRequested. Old labour KES $oldLabor + transport $oldTransport already locked KES $alreadyLocked.',
+            style: GoogleFonts.inter(fontSize: 10, color: Colors.red.shade800),
+          ),
+          const SizedBox(height: 12),
+          // Option 1: Continue old price
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                minimumSize: const Size(double.infinity, 48),
+              ),
+              onPressed: () async {
+                await FirebaseFirestore.instance
+                    .collection('jobs')
+                    .doc(jobId)
+                    .update({
+                      'status': 'in_progress',
+                      'renegotiation.status': 'fundi_continued_old_price',
+                      'renegotiation.chose': 'continue_old_price',
+                      'renegotiation.choseAt': FieldValue.serverTimestamp(),
+                      'updatedAt': FieldValue.serverTimestamp(),
+                    });
+              },
+              child: Text(
+                'Continue with old price KES $oldLabor',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Option 2: Withdraw with compensation - SECURE via function
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 48),
+              ),
+              onPressed: () async {
+                var callable = FirebaseFunctions.instanceFor(
+                  region: 'europe-west1',
+                ).httpsCallable('resolveExtraRefusedDeadlock');
+                await callable.call({
+                  'jobId': jobId,
+                  'action': 'withdraw_with_compensation',
+                });
+              },
+              child: Text(
+                'WITHDRAW',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 9,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Option 3: DISPUTE button - SECURE via function
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+                minimumSize: const Size(double.infinity, 52),
+              ),
+              onPressed: () async {
+                var callable = FirebaseFunctions.instanceFor(
+                  region: 'europe-west1',
+                ).httpsCallable('resolveExtraRefusedDeadlock');
+                await callable.call({
+                  'jobId': jobId,
+                  'action': 'dispute_to_admin',
+                });
+              },
+              child: Text(
+                'DISPUTE - EXTRA WORK REFUSED\nClient refused KES $extraRequested',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 10,
+                  color: Colors.white,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   if (waitingState == null) return null;
   switch (waitingState.type) {
     case FundiWaitingType.clientCounter:
@@ -403,11 +544,9 @@ Widget? buildCurrentWaiting({
                               'renegotiation.acceptedCounterExtraAppFee':
                                   (approvedExtra * clientPct / 100).round(),
                               'renegotiation.requested': false,
-                              'renegotiation.oldLabor':
-                                  currentAgreed,
+                              'renegotiation.oldLabor': currentAgreed,
                               'renegotiation.newLaborTotal':
-                                  currentAgreed +
-                                  approvedExtra,
+                                  currentAgreed + approvedExtra,
                               'extraTopupAmount': approvedExtra,
                               'extraTopupToLock': approvedExtraToLock,
                               'status': 'awaiting_extra_escrow',
@@ -693,6 +832,14 @@ Widget? buildCurrentWaiting({
         title: 'Job Completed - Waiting for client',
         message:
             'Waiting for client to confirm and release KES $fundiReceives.',
+      );
+    case FundiWaitingType.priceReviewDeadlock:
+      // handled above via early return, but fallback
+      int oldLabor = toInt(job['agreedPrice'] ?? job['laborCost'] ?? 0);
+      return OrangeAnimatedWaitingCard(
+        title: 'Deadlock - Client refused extra',
+        message:
+            'Client refused extra. Choose to continue old price KES $oldLabor or withdraw',
       );
   }
 }
