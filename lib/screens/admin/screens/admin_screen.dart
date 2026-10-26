@@ -7,6 +7,7 @@ import '../tabs/categories_tab.dart';
 import '../tabs/fraud_review_tab.dart';
 import '../tabs/disputes_tab.dart';
 import '../tabs/revenue_analytics_tab.dart';
+import '../../support/admin_support_list_screen.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -28,6 +29,7 @@ class _AdminScreenState extends State<AdminScreen> {
       const RevenueAnalyticsTab(),
       const FraudReviewTab(),
       const DisputesTab(),
+      const AdminSupportListScreen(),
     ];
 
     return PopScope(
@@ -123,6 +125,11 @@ class _AdminScreenState extends State<AdminScreen> {
                 icon: Icon(Icons.gavel_outlined),
                 activeIcon: Icon(Icons.gavel),
                 label: 'Disputes',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.support_agent_outlined),
+                activeIcon: Icon(Icons.support_agent),
+                label: 'Support',
               ),
             ],
           ),

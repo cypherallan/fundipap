@@ -7,6 +7,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
 import 'dart:io';
 import '../../../theme/app_theme.dart';
 
@@ -100,47 +101,74 @@ class _ContactAdminScreenState extends State<ContactAdminScreen> {
         _uploadingField = field;
         _progress = 0;
       });
-      List<XFile> picked = [];
-      if (field == 'screenshots') {
-        var imgs = await _picker.pickMultiImage(imageQuality: 80);
-        if (imgs.isNotEmpty) picked = imgs;
-      } else {
-        var img = await _picker.pickImage(
-          source: ImageSource.gallery,
-          imageQuality: 80,
-        );
-        if (img != null) picked = [img];
-      }
-      if (picked.isEmpty) {
-        setState(() {
-          _uploading = false;
-          _uploadingField = '';
-        });
-        return;
-      }
-
       final uid = FirebaseAuth.instance.currentUser!.uid;
       List<Map<String, dynamic>> uploaded = [];
 
-      for (var f in picked) {
-        String name = f.name;
-        String ext = name.split('.').last;
-        String storageName =
-            '${field}_${DateTime.now().millisecondsSinceEpoch}_$name';
-        final ref = FirebaseStorage.instance.ref().child(
-          'supportEscalations/${widget.jobId}/$uid/$storageName',
-        );
-        UploadTask task = ref.putFile(File(f.path));
-        task.snapshotEvents.listen((s) {
-          if (mounted)
-            setState(
-              () => _progress =
-                  s.bytesTransferred / (s.totalBytes == 0 ? 1 : s.totalBytes),
+      if (field == 'screenshots') {
+        // screenshots stay multi-image like before
+        var imgs = await _picker.pickMultiImage(imageQuality: 80);
+        if (imgs.isEmpty) {
+          setState(() {
+            _uploading = false;
+            _uploadingField = '';
+          });
+          return;
+        }
+        for (var f in imgs) {
+          String name = f.name;
+          String ext = name.split('.').last;
+          String storageName =
+              '${field}_${DateTime.now().millisecondsSinceEpoch}_$name';
+          final ref = FirebaseStorage.instance.ref().child(
+            'supportEscalations/${widget.jobId}/$uid/$storageName',
+          );
+          UploadTask task = ref.putFile(File(f.path));
+          task.snapshotEvents.listen((s) {
+            if (mounted)
+              setState(
+                () => _progress =
+                    s.bytesTransferred / (s.totalBytes == 0 ? 1 : s.totalBytes),
+              );
+          });
+          await task;
+          String url = await ref.getDownloadURL();
+          uploaded.add({'url': url, 'name': name, 'ext': ext});
+        }
+      } else {
+        // EXACT same line as FundiProfile _pickAndUpload - shows PDF/DOCX/JPG
+        final List<PlatformFile> picked = await FilePickerPlatform.instance
+            .pickFiles(
+              type: FileType.custom,
+              allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
             );
-        });
-        await task;
-        String url = await ref.getDownloadURL();
-        uploaded.add({'url': url, 'name': name, 'ext': ext});
+        if (picked.isEmpty) {
+          setState(() {
+            _uploading = false;
+            _uploadingField = '';
+          });
+          return;
+        }
+        for (var pf in picked) {
+          if (pf.path == null) continue;
+          String name = pf.name;
+          String ext = name.split('.').last;
+          String storageName =
+              '${field}_${DateTime.now().millisecondsSinceEpoch}_$name';
+          final ref = FirebaseStorage.instance.ref().child(
+            'supportEscalations/${widget.jobId}/$uid/$storageName',
+          );
+          UploadTask task = ref.putFile(File(pf.path!));
+          task.snapshotEvents.listen((s) {
+            if (mounted)
+              setState(
+                () => _progress =
+                    s.bytesTransferred / (s.totalBytes == 0 ? 1 : s.totalBytes),
+              );
+          });
+          await task;
+          String url = await ref.getDownloadURL();
+          uploaded.add({'url': url, 'name': name, 'ext': ext});
+        }
       }
 
       var docRef = FirebaseFirestore.instance
@@ -173,19 +201,11 @@ class _ContactAdminScreenState extends State<ContactAdminScreen> {
         _uploadingField = '';
         _progress = 0;
       });
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${uploaded.length} file(s) uploaded')),
-        );
     } catch (e) {
       setState(() {
         _uploading = false;
         _uploadingField = '';
       });
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
     }
   }
 
@@ -200,7 +220,7 @@ class _ContactAdminScreenState extends State<ContactAdminScreen> {
     var shots = (_data['screenshots'] as List?) ?? [];
     if (mpesa.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Upload M-Pesa statement photo is mandatory')),
+        SnackBar(content: Text('Upload M-Pesa statement (pdf) is mandatory')),
       );
       return;
     }
@@ -457,7 +477,7 @@ class _ContactAdminScreenState extends State<ContactAdminScreen> {
           ),
           SizedBox(height: 16),
           _section(
-            'M-Pesa Statement Photo *',
+            'M-Pesa Statement (pdf) *',
             'mpesa_statement',
             Icons.receipt_long,
           ),
