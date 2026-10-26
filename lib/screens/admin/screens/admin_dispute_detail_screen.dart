@@ -16,6 +16,126 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
   bool resolving = false;
   final reasonCtrl = TextEditingController();
 
+  Widget _copyRow(String label, String? value) {
+    if (value == null || value.isEmpty) return const SizedBox();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Text(
+            '$label: ',
+            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.inter(fontSize: 10),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.copy, size: 14),
+            onPressed: () {},
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _traceCard(
+    Map<String, dynamic> d,
+    Map<String, dynamic>? job,
+    Map<String, dynamic>? fundi,
+    Map<String, dynamic>? client,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'TRACE - ${widget.disputeId}',
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
+            ),
+          ),
+          const Divider(),
+          Text(
+            'JOB',
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w800,
+              fontSize: 10,
+              color: Colors.blue.shade800,
+            ),
+          ),
+          _copyRow('JobId', d['jobId']),
+          _copyRow('Title', job?['title'] ?? d['jobTitle'] ?? '—'),
+          _copyRow('Category', job?['category'] ?? job?['trade'] ?? '—'),
+          _copyRow('Status', job?['status']?.toString() ?? '—'),
+          Text(
+            'Labour ${job?['labourCost'] ?? job?['amount'] ?? d['escrowAmount'] ?? 'null'} | Transport ${job?['transportFee'] ?? 0} | Total ${job?['totalAmount'] ?? job?['finalAmount'] ?? 'null'} | Payout ${job?['fundiPayoutAmount'] ?? 'null'}',
+            style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'CLIENT',
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w800,
+              fontSize: 10,
+              color: Colors.green.shade800,
+            ),
+          ),
+          _copyRow('ClientId', d['clientId'] ?? job?['clientId']),
+          _copyRow(
+            'Name',
+            client?['name'] ?? d['clientName'] ?? job?['clientName'],
+          ),
+          _copyRow('Phone', client?['phone'] ?? job?['clientPhone']),
+          const SizedBox(height: 8),
+          Text(
+            'FUNDI',
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w800,
+              fontSize: 10,
+              color: Colors.orange.shade800,
+            ),
+          ),
+          _copyRow('FundiId', d['fundiId'] ?? job?['fundiId']),
+          _copyRow(
+            'Name',
+            fundi?['name'] ?? d['fundiName'] ?? job?['fundiName'],
+          ),
+          _copyRow('Phone', fundi?['phone'] ?? job?['fundiPhone']),
+          _copyRow('Badge', fundi?['badge']?.toString() ?? '—'),
+          const SizedBox(height: 8),
+          Text(
+            'TRANSACTION',
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w800,
+              fontSize: 10,
+              color: Colors.red.shade800,
+            ),
+          ),
+          _copyRow('C2B', d['c2bId'] ?? job?['c2bTransactionId']),
+          _copyRow('B2C', d['b2cId'] ?? job?['b2cTransactionId']),
+          _copyRow(
+            'Amount',
+            'KES ${d['escrowAmount'] ?? d['amount'] ?? job?['totalAmount'] ?? 'null'}',
+          ),
+          _copyRow('Reason', d['reason']),
+        ],
+      ),
+    );
+  }
+
   Future<void> resolveClientWinWithRedoOffer(Map<String, dynamic> d) async {
     if (reasonCtrl.text.trim().length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -223,16 +343,40 @@ class _AdminDisputeDetailScreenState extends State<AdminDisputeDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Job: ${d['jobTitle']} | KES ${d['escrowAmount'] ?? d['amount']}',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  'Reason: ${d['reason']}',
-                  style: GoogleFonts.inter(fontSize: 11),
+                FutureBuilder<DocumentSnapshot>(
+                  future: FirebaseFirestore.instance
+                      .collection('jobs')
+                      .doc(d['jobId'])
+                      .get(),
+                  builder: (_, jobSnap) {
+                    var job = jobSnap.data?.data() as Map<String, dynamic>?;
+                    return FutureBuilder<DocumentSnapshot?>(
+                      future: d['fundiId'] != null
+                          ? FirebaseFirestore.instance
+                                .collection('fundis')
+                                .doc(d['fundiId'])
+                                .get()
+                          : Future<DocumentSnapshot?>.value(null),
+                      builder: (_, fundiSnap) {
+                        var fundi =
+                            fundiSnap.data?.data() as Map<String, dynamic>?;
+                        return FutureBuilder<DocumentSnapshot?>(
+                          future: d['clientId'] != null
+                              ? FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(d['clientId'])
+                                    .get()
+                              : Future<DocumentSnapshot?>.value(null),
+                          builder: (_, clientSnap) {
+                            var client =
+                                clientSnap.data?.data()
+                                    as Map<String, dynamic>?;
+                            return _traceCard(d, job, fundi, client);
+                          },
+                        );
+                      },
+                    );
+                  },
                 ),
                 const Divider(),
 

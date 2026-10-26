@@ -1,39 +1,13 @@
-Locked for trial Gold = 5% fundi / 5% client. Transport 164 is paid once, goes 100% to fundi.
+I think we only need fundi to dispute at 4 stages.
+1. client refuses extra labour request when job is bigger that explained. I think we had built this but I feel its not complete. You can request for relevant files to see this.
+when this dispute is raised, I did say if fundi requests for extra labour, the system should check for evidence that extra labour is required. remember when I said after arrival, while sending request extra labour, they need to provide evidence that they are on site, by sending a photo randomly chosen by the system from clients photo uploads, blur a certain part thats not movable, then ask them to retake the same photo with the blurred part revealed. this is enough evidence that they are on site. that is check 1. check 2 is they take photos of site where job has to be done, system compares the photos side by side  with what client sent and approves that indeed the job to be done is more than what was posted. for example, if client claims he has a broken tile, then fundi realizes its not just 1 tile, they are like 20 of them, then fundi has to send a video showing all the 20 broken tiles, not just a photo. If all these evidences align, only then shall fundi send the request to client. client has to accept or counter the extra labour. HE MUST, because there is evidence. if the photos/videos dont show enough evidence that the job to be done is more, show them the message the photos/videos sent do not warrant extra labour, resend/cancel extra labour request. until confirmed, do not send the extra labour request to client. now here is where dispute will come in, if clearly there was extra work to be done and client rejects/counters very little amount, fundi can raise a dispute. But how does admin handle this dispute? It should be auto resolved and both client and fundi gets notified of the resolution, then necessary transactions are done, if client actually refused to add money, close job and refund fundi transport and 25% of labour agreed (minus badge commission as app fee), client gets 5% less on labour agreed. mathematical explanation:
+if agreed labour during the firs bid if counters happened or not was 10,000 and fundi transport was 100, clients app fee is 5% of 10000 (500), he locks a total of 10,600:
+fundi gets 100 + 4000 - badge fee (if bronze: 400) = 3,700
+App fee: 5% of 10,000: = 500
+client receives: 10,600 - 4100 + 500 = 6000
+app gets: 400 + 500: 900
+2. When fundi completes job but client does not want to release his money (can provide photos of after work then we compare with what client sent while posting the job)
 
-Fundi receives = Labor - 5% + 164
+3. money released by client but fundi does not receive/partially receives money:
 
-Client pays = Labor + 5% + 164
-
-All 6 paths:
-1. Fundi 6000 → Client accepts 6000 → NO extra
-
-Labor: 6000
-Commission: 300
-Fundi gets: 5700 + 164 = 5,864 KES
-2. Fundi 6000 → Client accepts → Fundi asks +2000 → Client accepts 2000
-
-Labor: 6000 + 2000 = 8000
-Commission: 400
-Fundi gets: 7600 + 164 = 7,764 KES
-3. Fundi 6000 → Client accepts → Fundi asks +2000 → Client counters 1000
-
-Labor: 6000 + 1000 = 7000
-Commission: 350
-Fundi gets: 6650 + 164 = 6,814 KES
-4. Fundi 6000 → Client counters 5000 → Fundi accepts → NO extra
-
-Labor: 5000
-Commission: 250
-Fundi gets: 4750 + 164 = 4,914 KES
-5. Fundi 6000 → Client counters 5000 → Fundi asks +2000 → Client accepts
-
-Labor: 5000 + 2000 = 7000
-Commission: 350
-Fundi gets: 6650 + 164 = 6,814 KES (same as #3)
-6. Fundi 6000 → Client counters 5000 → Fundi asks +2000 → Client counters 1000
-
-Labor: 5000 + 1000 = 6000
-Commission: 300
-Fundi gets: 5700 + 164 = 5,864 KES (same as #1)
-If you deduct commission on transport too (labor+transport)*0.95, subtract 8 KES from each:
-1=5,856 / 2=7,756 / 3=6,806 / 4=4,906 / 5=6,806 / 6=5,856
+4. when fundi is deducted 50% from his pay due to not redoing the job that was not done well/incomplete job.
