@@ -6,7 +6,6 @@ import '../../../data/job_taxonomy.dart';
 import '../../../services/pricing_service.dart';
 import 'category_selection_section.dart';
 import 'photos_section.dart';
-import 'pricing_section.dart';
 import '../services/post_job_service.dart';
 
 class PostNewJobScreen extends StatefulWidget {
@@ -288,15 +287,7 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            if (subcategoryId != null)
-              PricingSection(
-                categoryId: categoryId,
-                subcategoryId: subcategoryId!,
-                faultId: faultId,
-                selectedCategory: selectedCategory,
-                selectedSub: selectedSub,
-              ),
-            const SizedBox(height: 12),
+           
             PhotosSection(
               photos: photos,
               existingPhotos: existingPhotos,
