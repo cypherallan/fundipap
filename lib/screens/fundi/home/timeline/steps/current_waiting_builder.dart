@@ -35,6 +35,159 @@ Widget? buildCurrentWaiting({
   String lowStat = (job['status'] ?? '').toString().toLowerCase();
   String lowPhase = (renego?['currentPhase'] ?? '').toString().toLowerCase();
   bool hasParts = hasPartsInRenego(renego);
+  String renegoStatus = (renego?['status'] ?? '').toString().toLowerCase();
+  bool isRejected =
+      renegoStatus == 'rejected' || job['hasClientRejected'] == true;
+  bool canDispute = job['fundiCanDispute'] == true;
+
+  // === CLIENT REJECTED NEW PRICE - SHOW IMMEDIATELY ===
+  if (isRejected && canDispute) {
+    int extraRequested = toInt(
+      renego?['extraLaborRequested'] ?? renego?['extraLabor'] ?? 0,
+    );
+    int oldPrice = toInt(
+      job['agreedPrice'] ?? job['originalLaborCost'] ?? job['laborCost'] ?? 0,
+    );
+    String rejectReason = (renego?['rejectedReason'] ?? 'No reason given')
+        .toString();
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.shade400, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.cancel, color: Colors.red.shade700, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Client rejected your new price request',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    color: Colors.red.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Client rejected extra KES $extraRequested. Reason: $rejectReason',
+            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'You can dispute if you are on site (photos verified) or continue with old price KES $oldPrice',
+            style: GoogleFonts.inter(fontSize: 10, color: Colors.black87),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                minimumSize: const Size(double.infinity, 48),
+              ),
+              onPressed: () async {
+                int oldPriceInt = toInt(
+                  job['agreedPrice'] ??
+                      job['originalLaborCost'] ??
+                      job['laborCost'] ??
+                      0,
+                );
+                await FirebaseFirestore.instance
+                    .collection('jobs')
+                    .doc(jobId)
+                    .update({
+                      'status': 'in_progress',
+                      'renegotiation.status': 'rejected_continued_old_price',
+                      'renegotiation.chose': 'continue_old_price_after_reject',
+                      'renegotiation.choseAt': FieldValue.serverTimestamp(),
+                      'renegotiation.extraLabor': 0,
+                      'renegotiation.extraLaborRequested': 0,
+                      'renegotiation.extraToLock': 0,
+                      'renegotiation.pendingLabor': 0,
+                      'renegotiation.agreedExtraLabor': 0,
+                      'renegotiation.finalExtraLabor': 0,
+                      'renegotiation.acceptedCounterExtraLabor': 0,
+                      'extraLabor': 0,
+                      'extraTopupAmount': 0,
+                      'extraTopupToLock': 0,
+                      'hasClientRejected': false,
+                      'fundiCanDispute': false,
+                      'escrowAmount': oldPriceInt,
+                      'lockedEscrow': oldPriceInt,
+                      'updatedAt': FieldValue.serverTimestamp(),
+                    });
+              },
+              child: Text(
+                'Continue with KES $oldPrice',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+                minimumSize: const Size(double.infinity, 52),
+              ),
+              onPressed: () async {
+                // Fundi disputes rejection
+                await FirebaseFirestore.instance
+                    .collection('jobs')
+                    .doc(jobId)
+                    .collection('disputes')
+                    .add({
+                      'type': 'price_rejected_dispute',
+                      'reason':
+                          'Client rejected extra KES $extraRequested but I am on site',
+                      'extraRequested': extraRequested,
+                      'oldPrice': oldPrice,
+                      'fundiId': FirebaseAuth.instance.currentUser!.uid,
+                      'createdAt': FieldValue.serverTimestamp(),
+                      'status': 'open',
+                    });
+                await FirebaseFirestore.instance
+                    .collection('jobs')
+                    .doc(jobId)
+                    .update({
+                      'status': 'dispute',
+                      'renegotiation.status': 'disputed_by_fundi',
+                      'hasClientRejected': false,
+                      'fundiCanDispute': false,
+                      'hasDispute': true,
+                      'updatedAt': FieldValue.serverTimestamp(),
+                    });
+              },
+              child: Text(
+                'DISPUTE',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 10,
+                  color: Colors.white,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   int origExtra = toInt(
     renego?['extraLabor'] ??
@@ -242,8 +395,7 @@ Widget? buildCurrentWaiting({
     );
   }
 
-  // === PRICE REVIEW DEADLOCK - Client countered 0 or <30% for 3 rounds ===
-  String renegoStatus = (renego?['status'] ?? '').toString().toLowerCase();
+  // === PRICE REVIEW DEADLOCK ===
   if (lowStat == 'price_review_deadlock' || renegoStatus.contains('deadlock')) {
     int oldLabor = toInt(
       renego?['oldLabor'] ?? job['agreedPrice'] ?? job['laborCost'] ?? 0,
@@ -834,12 +986,13 @@ Widget? buildCurrentWaiting({
             'Waiting for client to confirm and release KES $fundiReceives.',
       );
     case FundiWaitingType.priceReviewDeadlock:
-      // handled above via early return, but fallback
       int oldLabor = toInt(job['agreedPrice'] ?? job['laborCost'] ?? 0);
       return OrangeAnimatedWaitingCard(
         title: 'Deadlock - Client refused extra',
         message:
             'Client refused extra. Choose to continue old price KES $oldLabor or withdraw',
       );
+    case FundiWaitingType.priceRejected:
+      return null;
   }
 }

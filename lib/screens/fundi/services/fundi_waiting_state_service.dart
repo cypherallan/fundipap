@@ -12,6 +12,7 @@ enum FundiWaitingType {
   working,
   jobCompleted,
   priceReviewDeadlock,
+  priceRejected, // <-- ADD THIS
 }
 
 class FundiWaitingState {
@@ -93,6 +94,32 @@ FundiWaitingState? getFundiWaitingState({
       title: 'Deadlock - Client refused extra KES $extraReq ($round rounds)',
       message:
           'Client countered 0 or <30% for $round rounds. Choose continue old price KES $oldLab or withdraw with compensation',
+      price: extraReq,
+    );
+  }
+
+  // === CLIENT REJECTED NEW PRICE - SHOW CONTINUE / DISPUTE ===
+  var renegoForReject = job['renegotiation'] as Map<String, dynamic>?;
+  String renegoStatusForReject = (renegoForReject?['status'] ?? '')
+      .toString()
+      .toLowerCase();
+  bool isRejected =
+      renegoStatusForReject == 'rejected' || job['hasClientRejected'] == true;
+  bool canDispute = job['fundiCanDispute'] == true;
+  if (isRejected && canDispute) {
+    int extraReq = _toInt(
+      renegoForReject?['extraLaborRequested'] ??
+          renegoForReject?['extraLabor'] ??
+          0,
+    );
+    int oldLab = _toInt(
+      job['agreedPrice'] ?? job['laborCost'] ?? job['originalLaborCost'] ?? 0,
+    );
+    return FundiWaitingState(
+      type: FundiWaitingType.priceRejected,
+      title: 'Client rejected your new price request - Extra KES $extraReq',
+      message:
+          'Client rejected extra KES $extraReq. Dispute if on site or continue with KES $oldLab',
       price: extraReq,
     );
   }

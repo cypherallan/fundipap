@@ -74,3 +74,33 @@ StreamBuilder<DocumentSnapshot>(
 Check `adb logcat | grep -i "Firestore"` next time it happens - you will see `Could not reach Cloud Firestore backend` or `PERMISSION_DENIED`. That confirms zombie.
 
 Want me to patch your `fundi_profile_service.dart` and `fundi_home.dart` with this logic directly?
+
+
+
+
+Perfect. Put it on your pre-launch checklist, don't panic now while testing.
+
+**Pre-publish security TODO (copy this):**
+
+**Firebase Console:**
+- [ ] IAM - only your email is Owner
+- [ ] Your Gmail 2FA ON (Authenticator app)
+- [ ] Firestore PITR Enabled (7-day restore)
+- [ ] Firestore Rules: `allow delete: if false`
+- [ ] Storage Rules: same
+- [ ] Remove `serviceAccountKey.json` from project folder + GitHub
+
+**Code:**
+- [ ] All `onCall` functions check `request.auth` + `job.customerId == uid`
+- [ ] All escrow updates inside `runTransaction` + check `escrowStatus != released`
+- [ ] No function trusts `request.data.amount` - always read from job doc
+- [ ] Enable App Check Enforcement (Firestore + Functions)
+- [ ] Admin check via custom claims `token.admin`, not email
+
+**Mpesa:**
+- [ ] Switch `simulated: true` to real Daraja API + verify callback signature
+- [ ] Mpesa callback only accepts from Safaricom IPs + valid `CheckoutRequestID`
+
+You're good for now in test mode. Your money isn't real yet - the simulated Mpesa means even if I hack Firestore, no real KES moves.
+
+Focus now on finishing the receipt bug flow test. Security lockdown takes 15 mins right before Play Store publish.

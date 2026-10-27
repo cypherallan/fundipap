@@ -424,10 +424,14 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
             renego != null &&
             renego['requested'] == true &&
             (renego['status'] ?? 'pending') == 'pending';
+        bool isRejectedForSkip =
+            (renego?['status'] ?? '').toString().toLowerCase() == 'rejected' ||
+            jobDataForNotif['hasClientRejected'] == true;
         if (assignedIds.contains(b['jobId']) &&
             escrowDone &&
             siteDone &&
-            !renegoPending) {
+            !renegoPending &&
+            !isRejectedForSkip) {
           continue;
         }
         category = 'Bid sent - KES ${b['price']} • ${b['jobTitle']}';
@@ -590,8 +594,7 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                             jobsDone: completedJobs,
                             compact: true,
                             showLevel: true,
-                            hideCommission:
-                                false,
+                            hideCommission: false,
                           ),
                         if (badgeResult != null) const SizedBox(height: 6),
                         if (badgeResult != null)
@@ -804,33 +807,40 @@ class _FundiHomeState extends State<FundiHome> with FundiHomeActionsMixin {
                           wt == FundiWaitingType.siteVisited ||
                           wt == FundiWaitingType.travelling ||
                           wt == FundiWaitingType.working ||
-                          wt == FundiWaitingType.jobCompleted;
+                          wt == FundiWaitingType.jobCompleted ||
+                          wt == FundiWaitingType.priceReviewDeadlock ||
+                          wt == FundiWaitingType.priceRejected;
 
                       String msg;
-                      if (wt == FundiWaitingType.clientCounter) {
+                      if (wt == FundiWaitingType.priceRejected) {
+                        msg =
+                            "${g['clientName']} • Client rejected - Tap to Continue or Dispute";
+                      } else if (wt == FundiWaitingType.clientCounter) {
                         msg =
                             "${g['clientName']} • Tap to view • Client countered!";
-                      } else if (wt == FundiWaitingType.waitingEscrow)
+                      } else if (wt == FundiWaitingType.waitingEscrow) {
                         msg =
                             "${g['clientName']} • Tap to view • Waiting to lock escrow";
-                      else if (wt == FundiWaitingType.waitingNewPriceApproval)
+                      } else if (wt ==
+                          FundiWaitingType.waitingNewPriceApproval) {
                         msg =
                             "${g['clientName']} • Tap to view • Waiting extra approval";
-                      else if (wt == FundiWaitingType.myCounter)
+                      } else if (wt == FundiWaitingType.myCounter) {
                         msg =
                             "${g['clientName']} • Tap to view • Waiting for client reaction";
-                      else if (wt == FundiWaitingType.escrowLocked)
+                      } else if (wt == FundiWaitingType.escrowLocked) {
                         msg =
                             "${g['clientName']} • Tap to view • Escrow locked - Start site visit";
-                      else if (wt == FundiWaitingType.travelling)
+                      } else if (wt == FundiWaitingType.travelling) {
                         msg =
                             "${g['clientName']} • Tap to view • You are on the way";
-                      else if (wt == FundiWaitingType.siteVisited)
+                      } else if (wt == FundiWaitingType.siteVisited) {
                         msg =
                             "${g['clientName']} • Tap to view • Waiting for you to start work";
-                      else
+                      } else {
                         msg =
                             "${g['clientName']} • Tap to view • Waiting for client";
+                      }
 
                       if (isOrange) {
                         return Container(

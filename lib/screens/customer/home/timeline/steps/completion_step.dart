@@ -10,10 +10,17 @@ import '../timeline_context.dart';
 class CompletionSteps {
   static void handle(List<Widget> timeline, TimelineContext c) {
     if (c.status == 'job_completed' || c.status == 'pending_completion') {
-      final int oldLocked = c.reneg != null
+      // FIX: ignore extra when fundi continued with old price
+      bool isContinueOld =
+          c.renegStatus == 'rejected_continued_old_price' ||
+          c.renegStatus == 'fundi_continued_old_price' ||
+          c.renegStatus == 'rejected' ||
+          c.renegStatus == 'rejected_continued';
+
+      final int oldLocked = (!isContinueOld && c.reneg != null)
           ? toInt(c.reneg?['oldLabor'] ?? 0)
           : 0;
-      final int extraReq = c.reneg != null
+      final int extraReq = (!isContinueOld && c.reneg != null)
           ? (() {
               int clientC = toInt(c.reneg?['clientCounterExtraLabor'] ?? 0);
               int fundiC = toInt(c.reneg?['fundiCounterExtraLabor'] ?? 0);
@@ -36,7 +43,7 @@ class CompletionSteps {
               );
             })()
           : 0;
-      final bool hasExtra = oldLocked > 0 && extraReq > 0;
+      final bool hasExtra = !isContinueOld && oldLocked > 0 && extraReq > 0;
       int baseLabour = toInt(c.labour);
       int newLabour = hasExtra ? oldLocked + extraReq : baseLabour;
       int transportVal = toInt(c.job['transportFee'] ?? 0);

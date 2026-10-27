@@ -1,4 +1,3 @@
-
 part of 'client_price_approval_screen.dart';
 
 mixin FooterSectionMixin
@@ -52,9 +51,7 @@ mixin FooterSectionMixin
                 foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 52),
               ),
-              onPressed: () {
-                Navigator.pop(context);
-              },
+              onPressed: () => Navigator.pop(context),
               child: Text(
                 'GO TO TIMELINE TO LOCK KES $extraToLock',
                 style: GoogleFonts.montserrat(fontWeight: FontWeight.w800),
@@ -247,7 +244,7 @@ mixin FooterSectionMixin
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            'Fundi provided site photos (verification + evidence). System confirms scope change. Low counters flagged.',
+                            'Fundi provided site photos (verification + evidence). System confirms scope change.',
                             style: GoogleFonts.inter(
                               fontSize: 9,
                               color: Colors.blue.shade800,
@@ -267,7 +264,7 @@ mixin FooterSectionMixin
                       border: Border.all(color: Colors.orange),
                     ),
                     child: Text(
-                      'Round ${currentRound + 1}/3 - After 3 low counters, fundi can choose to continue old price or withdraw with compensation (transport + diagnostic fee from your locked amount).',
+                      'Round ${currentRound + 1}/3 - After 3 counters, fundi can choose to continue old price or withdraw with compensation.',
                       style: GoogleFonts.inter(
                         fontSize: 9,
                         color: Colors.orange.shade800,
@@ -275,6 +272,7 @@ mixin FooterSectionMixin
                       ),
                     ),
                   ),
+                // COUNTER + REJECT ROW - REJECT BACK
                 Row(
                   children: [
                     if (!isMaterialsOnly)
@@ -299,7 +297,7 @@ mixin FooterSectionMixin
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Fundi requested extra KES $extraLabor. Enter your counter (0 allowed). If 0, explain why old price covers it.',
+                                      'Fundi requested extra KES $extraLabor. Enter your counter (0 allowed). No dispute on counter.',
                                       style: GoogleFonts.inter(fontSize: 10),
                                     ),
                                     const SizedBox(height: 8),
@@ -310,65 +308,13 @@ mixin FooterSectionMixin
                                         labelText:
                                             'Your extra labour offer (0 allowed)',
                                         helperText:
-                                            'Min when verified: KES ${(extraLabor * 0.3).round()} (30% of requested). Transport already locked',
+                                            'Min when verified: KES ${(extraLabor * 0.3).round()} (30% of requested).',
                                         helperStyle: GoogleFonts.inter(
                                           fontSize: 9,
                                         ),
                                       ),
                                       onChanged: (_) => setState(() {}),
                                     ),
-                                    if (counterPriceCtrl.text.isNotEmpty)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 8),
-                                        child: Builder(
-                                          builder: (_) {
-                                            int cVal =
-                                                int.tryParse(
-                                                  counterPriceCtrl.text,
-                                                ) ??
-                                                0;
-                                            int minAllowed = (extraLabor * 0.3)
-                                                .round();
-                                            bool isLow =
-                                                hasEvidence &&
-                                                cVal < minAllowed;
-                                            return Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  'Extra to lock: KES ${cVal + (cVal * 0.05).round()}',
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: 10,
-                                                    color: Colors.green,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                                ),
-                                                if (isLow)
-                                                  Text(
-                                                    '⚠️ Counter too low for verified scope. Minimum when photos verified: KES $minAllowed. Low counters flagged and after 3 rounds fundi gets diagnostic fee from your locked amount.',
-                                                    style: GoogleFonts.inter(
-                                                      fontSize: 9,
-                                                      color: Colors.red,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                    ),
-                                                  ),
-                                                if (!hasEvidence && cVal == 0)
-                                                  Text(
-                                                    'You countered 0 - fundi will be asked to re-counter with better evidence. After 3 rounds, deadlock -> fundi chooses.',
-                                                    style: GoogleFonts.inter(
-                                                      fontSize: 9,
-                                                      color: Colors
-                                                          .orange
-                                                          .shade800,
-                                                    ),
-                                                  ),
-                                              ],
-                                            );
-                                          },
-                                        ),
-                                      ),
                                     const SizedBox(height: 8),
                                     TextField(
                                       controller: counterReasonCtrl,
@@ -420,16 +366,122 @@ mixin FooterSectionMixin
                           ),
                         ),
                       ),
-                    if (!isMaterialsOnly) const SizedBox(width: 6),
+                    if (!isMaterialsOnly) const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        'No Reject - counter with 0 if old price covers it',
-                        style: GoogleFonts.inter(
-                          fontSize: 9,
-                          color: Colors.grey,
-                          fontStyle: FontStyle.italic,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 48),
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red, width: 1.5),
                         ),
-                        textAlign: TextAlign.center,
+                        onPressed: loading
+                            ? null
+                            : () {
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: Text(
+                                      'Reject Extra Labour?',
+                                      style: GoogleFonts.montserrat(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 13,
+                                        color: Colors.red,
+                                      ),
+                                    ),
+                                    content: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'You are rejecting extra KES $extraLabor requested by fundi.',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red.shade50,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.red.shade200,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'If you reject, fundi can DISPUTE. Fundi will be able to raise dispute and admin will review photos. Counter with 0 does NOT trigger dispute.',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 10,
+                                              color: Colors.red.shade800,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        TextField(
+                                          controller: counterReasonCtrl,
+                                          maxLines: 2,
+                                          decoration: InputDecoration(
+                                            labelText:
+                                                'Reason for rejection (required)',
+                                            hintText:
+                                                'Why you reject extra labour?',
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        onPressed: () {
+                                          if (counterReasonCtrl.text
+                                              .trim()
+                                              .isEmpty) {
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Enter reason for rejection',
+                                                ),
+                                              ),
+                                            );
+                                            return;
+                                          }
+                                          Navigator.pop(context);
+                                          _rejectRequest(job, extraLabor);
+                                        },
+                                        child: const Text(
+                                          'Reject - Fundi Can Dispute',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                        child: Text(
+                          'Reject',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                            color: Colors.red,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -440,6 +492,68 @@ mixin FooterSectionMixin
         ),
       ],
     );
+  }
+
+  Future<void> _rejectRequest(Map<String, dynamic> job, int extraLabor) async {
+    setState(() => loading = true);
+    try {
+      final jobId = widget.jobId;
+      final fundiId = (job['fundiId'] ?? job['acceptedFundiId'] ?? '')
+          .toString();
+      final oldPrice =
+          (job['agreedPrice'] ??
+                  job['laborCost'] ??
+                  job['originalLaborCost'] ??
+                  0)
+              is int
+          ? job['agreedPrice'] ?? job['laborCost'] ?? 0
+          : int.tryParse('${job['agreedPrice'] ?? job['laborCost'] ?? 0}') ?? 0;
+
+      await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+        'renegotiation.status': 'rejected',
+        'renegotiation.rejectedAt': FieldValue.serverTimestamp(),
+        'renegotiation.rejectedBy': 'client',
+        'renegotiation.rejectedReason': counterReasonCtrl.text.trim(),
+        'renegotiation.extraLaborRequested': extraLabor,
+        'status': 'dispute_pending',
+        'hasClientRejected': true,
+        'fundiCanDispute': true,
+        'fundiHasUnread': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (fundiId.isNotEmpty) {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'toUserId': fundiId,
+          'userId': fundiId,
+          'jobId': jobId,
+          'type': 'price_rejected',
+          'title': 'Client rejected your new price request',
+          'message':
+              'Client rejected extra KES $extraLabor. Reason: ${counterReasonCtrl.text.trim()}. Tap to dispute or continue with KES $oldPrice',
+          'isRead': false,
+          'read': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Rejected. Fundi can dispute.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
 
   Widget buildStatusDoneSection(String renegStatus, int newTotal) {
@@ -461,4 +575,3 @@ mixin FooterSectionMixin
     );
   }
 }
-//

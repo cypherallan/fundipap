@@ -34,10 +34,14 @@ export const confirmCompletionSecure = onCall({ region: "europe-west1" }, async 
         const fundiId = (j.assignedFundiId || j.assignedFundi || "").toString();
         if (!fundiId) throw new HttpsError("failed-precondition", "No fundi assigned");
 
-        // CORRECT LABOUR - never use escrowAmount (includes client fee)
+        // FIX: ignore extra when fundi continued with old price after reject
+        const rs = (j.renegotiation?.status || '').toString().toLowerCase();
+        const isContinueOld = rs === 'rejected_continued_old_price' || rs === 'fundi_continued_old_price' || rs === 'rejected' || rs === 'rejected_continued' || rs.includes('continue_old');
+
         const labourBase = toInt(j.laborCost ?? j.agreedPrice ?? j.acceptedBidAmount ?? j.lastCounterAmount ?? j.budgetMax ?? 0);
-        const extraLabor = toInt(j.extraLaborAmount ?? j.renegotiation?.extraLabor ?? 0);
-        const newLaborTotal = toInt(j.renegotiation?.newLaborTotal ?? 0);
+        const extraLabor = isContinueOld ? 0 : toInt(j.extraLaborAmount ?? j.renegotiation?.extraLabor ?? j.renegotiation?.counterExtraLabor ?? j.renegotiation?.approvedExtra ?? j.renegotiation?.acceptedCounterExtraLabor ?? 0);
+        const newLaborTotalRaw = toInt(j.renegotiation?.newLaborTotal ?? 0);
+        const newLaborTotal = isContinueOld ? 0 : newLaborTotalRaw;
         const labour = newLaborTotal > 0 ? newLaborTotal : labourBase + extraLabor;
         if (labour <= 0) throw new HttpsError("failed-precondition", "Invalid labour amount");
 

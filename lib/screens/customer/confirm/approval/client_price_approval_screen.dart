@@ -195,7 +195,7 @@ class _ClientPriceApprovalScreenState extends State<ClientPriceApprovalScreen>
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Fundi verified on site (GPS + fixed anchor matched) - genuine scope change. System blocks 0 / low counters.',
+                            'Fundi verified on site (GPS + fixed anchor matched) - genuine scope change.',
                             style: GoogleFonts.inter(
                               fontSize: 10,
                               color: Colors.blue.shade800,

@@ -396,10 +396,13 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
           waitingType = ws.type;
         } else {
           var reneg = job['renegotiation'] as Map<String, dynamic>?;
-          var renegStatus = (reneg?['status'] ?? '').toString();
+          var renegStatus = (reneg?['status'] ?? '').toString().toLowerCase();
+          bool isRejected =
+              renegStatus == 'rejected' || job['hasClientRejected'] == true;
           bool isRenegCounter = renegStatus == 'countered_by_client';
           bool isRenegPending =
               renegStatus == 'pending' && reneg?['requested'] == true;
+
           int counterExtra = _toInt(
             reneg?['counterExtraLabor'] ?? reneg?['counterLabor'] ?? 0,
           );
@@ -409,7 +412,22 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                 reneg?['extraLabor'] ??
                 0,
           );
-          if (isRenegCounter) {
+          int rejectedExtra = _toInt(
+            reneg?['extraLaborRequested'] ?? reneg?['extraLabor'] ?? 0,
+          );
+          int oldPrice = _toInt(
+            job['agreedPrice'] ??
+                job['laborCost'] ??
+                job['originalLaborCost'] ??
+                0,
+          );
+
+          if (isRejected && job['fundiCanDispute'] == true) {
+            category =
+                'Client rejected your new price request - Extra KES $rejectedExtra - Continue KES $oldPrice or Dispute';
+            type = 'price_rejected';
+            waitingType = FundiWaitingType.priceRejected;
+          } else if (isRenegCounter) {
             category = '$title • Client countered extra KES $counterExtra';
             type = 'counter';
             waitingType = FundiWaitingType.clientCounter;
@@ -660,6 +678,7 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                       var g = list[i];
                       FundiWaitingType wt =
                           g['waitingType'] as FundiWaitingType;
+
                       bool isOrange =
                           wt == FundiWaitingType.bidSent ||
                           wt == FundiWaitingType.clientCounter ||
@@ -670,7 +689,9 @@ class _FundiNotificationsPageState extends State<FundiNotificationsPage> {
                           wt == FundiWaitingType.travelling ||
                           wt == FundiWaitingType.siteVisited ||
                           wt == FundiWaitingType.working ||
-                          wt == FundiWaitingType.jobCompleted;
+                          wt == FundiWaitingType.jobCompleted ||
+                          wt == FundiWaitingType.priceReviewDeadlock ||
+                          wt == FundiWaitingType.priceRejected; // <-- ADD THIS
 
                       if (isOrange) {
                         String msg;
