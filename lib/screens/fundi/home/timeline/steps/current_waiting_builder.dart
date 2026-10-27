@@ -146,32 +146,56 @@ Widget? buildCurrentWaiting({
                 minimumSize: const Size(double.infinity, 52),
               ),
               onPressed: () async {
-                // Fundi disputes rejection
-                await FirebaseFirestore.instance
-                    .collection('jobs')
-                    .doc(jobId)
-                    .collection('disputes')
-                    .add({
-                      'type': 'price_rejected_dispute',
-                      'reason':
-                          'Client rejected extra KES $extraRequested but I am on site',
-                      'extraRequested': extraRequested,
-                      'oldPrice': oldPrice,
-                      'fundiId': FirebaseAuth.instance.currentUser!.uid,
-                      'createdAt': FieldValue.serverTimestamp(),
-                      'status': 'open',
-                    });
-                await FirebaseFirestore.instance
-                    .collection('jobs')
-                    .doc(jobId)
-                    .update({
-                      'status': 'dispute',
-                      'renegotiation.status': 'disputed_by_fundi',
-                      'hasClientRejected': false,
-                      'fundiCanDispute': false,
-                      'hasDispute': true,
-                      'updatedAt': FieldValue.serverTimestamp(),
-                    });
+                try {
+                  final uid = FirebaseAuth.instance.currentUser!.uid;
+                  final clientId = (job['customerId'] ?? job['clientId'] ?? '')
+                      .toString();
+
+                  // Top-level disputes collection - same as admin panel listens to
+                  await FirebaseFirestore.instance.collection('disputes').add({
+                    'jobId': jobId,
+                    'fundiId': uid,
+                    'clientId': clientId,
+                    'type': 'price_rejected_dispute',
+                    'reason':
+                        'Client rejected extra KES $extraRequested but I am on site - photos verified',
+                    'extraRequested': extraRequested,
+                    'oldPrice': oldPrice,
+                    'status': 'open',
+                    'trade': job['trade'] ?? job['category'] ?? '',
+                    'disputedAmount': extraRequested,
+                    'createdAt': FieldValue.serverTimestamp(),
+                  });
+
+                  await FirebaseFirestore.instance
+                      .collection('jobs')
+                      .doc(jobId)
+                      .update({
+                        'status': 'dispute_pending',
+                        'renegotiation.status': 'disputed_by_fundi',
+                        'hasClientRejected': false,
+                        'fundiCanDispute': false,
+                        'hasDispute': true,
+                        'disputeRaisedBy': uid,
+                        'disputeRaisedAt': FieldValue.serverTimestamp(),
+                        'updatedAt': FieldValue.serverTimestamp(),
+                      });
+
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Dispute raised - Admin will review'),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  debugPrint('DISPUTE ERROR: $e');
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                  }
+                }
               },
               child: Text(
                 'DISPUTE',
