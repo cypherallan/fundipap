@@ -6,7 +6,7 @@ import '../../../../../theme/app_theme.dart';
 import '../../models/customer_home_models.dart';
 import '../../helpers/customer_home_utils.dart';
 import 'pending_bid_list.dart';
-import '../../../post_new_job_screen.dart';
+import '../../../post new job/post_new_job_screen.dart';
 
 class PendingJobTile extends StatelessWidget {
   final QueryDocumentSnapshot jobDoc;

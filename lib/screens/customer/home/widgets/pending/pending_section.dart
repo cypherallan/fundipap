@@ -4,9 +4,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../../theme/app_theme.dart';
 import '../../models/customer_home_models.dart';
-import '../../../post_new_job_screen.dart';
 import 'pending_header.dart';
 import 'pending_job_tile.dart';
+import '../../../post new job/post_new_job_screen.dart';
 
 class CustomerPendingSection extends StatelessWidget {
   final String uid;

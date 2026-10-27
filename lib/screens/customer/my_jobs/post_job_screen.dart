@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../post_new_job_screen.dart';
 import 'post_job_crud_actions.dart';
 import 'post_job_bidding_actions.dart';
 import 'post_job_escrow_actions.dart';
@@ -11,6 +10,7 @@ import 'client_confirmed_tab.dart';
 import 'client_rejected_tab.dart';
 import 'client_completed_tab.dart';
 import 'client_cancelled_tab.dart';
+import '../post new job/post_new_job_screen.dart';
 
 class PostJobScreen extends StatefulWidget {
   final int initialTabIndex;

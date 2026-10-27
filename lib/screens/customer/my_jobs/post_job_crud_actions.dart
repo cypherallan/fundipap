@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../post_new_job_screen.dart';
+import '../post new job/post_new_job_screen.dart';
 
 mixin PostJobCrudActionsMixin<T extends StatefulWidget> on State<T> {
   Future<void> deleteJob(BuildContext context, String jobId) async {
