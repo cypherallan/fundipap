@@ -1556,30 +1556,5 @@ class FundiTaxonomy {
     },
   ];
 
-  static String getJobType(Map<String, dynamic> sub) {
-    final id = (sub['id'] ?? '').toString().toLowerCase();
-    final name = (sub['name'] ?? '').toString().toLowerCase();
-    if (id.contains('_install') ||
-        id.contains('fabrication') ||
-        id.contains('_make') ||
-        name.contains('installation') ||
-        name.contains('fabrication') ||
-        name.contains('making') ||
-        name.contains('construction') ||
-        name.contains('paving') ||
-        name.contains('walling') ||
-        name.contains('plastering') ||
-        name.contains('foundation') ||
-        name.contains('retaining wall') ||
-        name.contains('slab')) {
-      return 'installation';
-    }
-    return 'repair';
-  }
-
-  static bool isInstallation(Map<String, dynamic> sub) =>
-      getJobType(sub) == 'installation';
-  static bool isRepair(Map<String, dynamic> sub) => getJobType(sub) == 'repair';
-
   static Future<void> seedToFirestore() async {}
 }
