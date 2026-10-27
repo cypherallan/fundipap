@@ -23,6 +23,7 @@ function db() {
 }
 
 export * from "./escrow";
+export * from "./verification";
 export * from "./support";
 
 // ============ YOUR EXISTING MPESA

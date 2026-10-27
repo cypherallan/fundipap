@@ -3,7 +3,7 @@ import '../widgets/timeline_card.dart';
 import '../fundi_timeline_actions.dart';
 import '../fundi_timeline_context.dart';
 import '../fundi_timeline_utils.dart';
-import '../../../my_jobs/fundi_request_new_price_screen.dart';
+import '../../../new_price/fundi_request_new_price_screen.dart';
 
 bool handleCounterStep(List<Widget> timeline, FundiTimelineContext c) {
   if (c.renegStatus.contains('deadlock')) {

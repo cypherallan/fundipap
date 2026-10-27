@@ -3,8 +3,8 @@ import '../../../../../theme/app_theme.dart';
 import '../widgets/timeline_card.dart';
 import '../fundi_timeline_actions.dart';
 import '../fundi_timeline_context.dart';
-import '../../../my_jobs/fundi_request_new_price_screen.dart';
 import '../../fundi_visit_customer_tab.dart';
+import '../../../new_price/fundi_request_new_price_screen.dart';
 
 bool _toBool(dynamic v) {
   if (v == null) return false;
