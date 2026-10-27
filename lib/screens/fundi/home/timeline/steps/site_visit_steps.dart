@@ -4,7 +4,7 @@ import '../widgets/timeline_card.dart';
 import '../fundi_timeline_actions.dart';
 import '../fundi_timeline_context.dart';
 import '../../fundi_visit_customer_tab.dart';
-import '../../../my_jobs/fundi_request_new_price_screen.dart';
+import '../../../new_price_request/fundi_request_new_price_screen.dart';
 
 bool _toBool(dynamic v) {
   if (v == null) return false;

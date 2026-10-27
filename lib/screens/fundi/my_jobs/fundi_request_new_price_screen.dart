@@ -1,4 +1,4 @@
-import 'dart:io';
+/*import 'dart:io';
 import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -150,7 +150,7 @@ class _FundiRequestNewPriceScreenState
         _anchorVerified = data['verified'] == true;
         _verifyReason = data['reason'];
       });
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -160,6 +160,7 @@ class _FundiRequestNewPriceScreenState
             ),
           ),
         );
+      }
       await ref.delete().catchError((_) {});
     } catch (e) {
       setState(() {
@@ -1215,4 +1216,4 @@ class _FundiRequestNewPriceScreenState
       ),
     );
   }
-}
+}*/

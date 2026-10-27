@@ -17,7 +17,13 @@ export const verifyAnchorPhoto = onCall(
 
             const clientPhotoUrl: string = data?.clientPhotoUrl;
             const verificationPhotoUrl: string = data?.verificationPhotoUrl;
-            const blurRect: Rect = data?.blurRect || { left: 0.3, top: 0.3, width: 0.4, height: 0.4 };
+            let blurRect: Rect = data?.blurRect || { left: 0.3, top: 0.3, width: 0.4, height: 0.4 };
+            // FIX: must blur visible object, not dot/scratch - min 25% side, 6% area
+            if (blurRect.width < 0.25 || blurRect.height < 0.25 || blurRect.width * blurRect.height < 0.06) {
+                return { verified: false, score: 0, reason: "Blur too small - must cover visible object. System will auto-select." };
+            }
+            blurRect.width = Math.min(0.55, Math.max(0.25, blurRect.width));
+            blurRect.height = Math.min(0.55, Math.max(0.25, blurRect.height));
 
             if (!clientPhotoUrl || !verificationPhotoUrl) {
                 return { verified: false, score: 0, reason: "Missing photos - retake" };
@@ -33,7 +39,7 @@ export const verifyAnchorPhoto = onCall(
             try {
                 [clientBuf, verifyBuf] = await Promise.all([fetchBuf(clientPhotoUrl), fetchBuf(verificationPhotoUrl)]);
             } catch (e: any) {
-                return { verified: true, score: 60, reason: "Auto-pass testing - fetch error" };
+                return { verified: false, score: 0, reason: "Failed to load photos - check connection and retake" };
             }
 
             // CROP TO BLURRED ANCHOR - THIS IS THE 95% FIX
@@ -120,7 +126,41 @@ export const verifyAnchorPhoto = onCall(
 
         } catch (e: any) {
             console.error(e);
-            return { verified: true, score: 50, reason: `Auto-pass testing: ${e.message}` };
+            return { verified: false, score: 0, reason: `Error: ${e.message} - retake` };
         }
+    }
+);
+
+export const getVisibleBlurRect = onCall(
+    { memory: "512MiB", timeoutSeconds: 30, region: "us-central1" },
+    async (request) => {
+        if (!request.auth) throw new HttpsError("unauthenticated", "Login");
+        const url = request.data?.clientPhotoUrl as string;
+        if (!url) throw new HttpsError("invalid-argument", "Missing photo");
+
+        const r = await fetch(url);
+        const buf = Buffer.from(await r.arrayBuffer());
+        const [objResult] = await (vision as any).objectLocalization({ image: { content: buf } });
+        const objs: any[] = objResult.localizedObjectAnnotations || [];
+
+        const valid = objs.filter((obj: any) => {
+            const verts: any[] = obj.boundingPoly?.normalizedVertices || [];
+            if (verts.length < 4) return false;
+            const w = Math.abs((verts[2]?.x ?? 0) - (verts[0]?.x ?? 0));
+            const h = Math.abs((verts[2]?.y ?? 0) - (verts[0]?.y ?? 0));
+            return w * h > 0.06 && w >= 0.25 && h >= 0.25;
+        }).sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
+
+        if (valid[0]) {
+            const verts: any[] = valid[0].boundingPoly!.normalizedVertices!;
+            const xs = verts.map((pt: any) => pt.x ?? 0);
+            const ys = verts.map((pt: any) => pt.y ?? 0);
+            const left = Math.min(...xs);
+            const top = Math.min(...ys);
+            const right = Math.max(...xs);
+            const bottom = Math.max(...ys);
+            return { left, top, width: Math.min(0.55, right - left), height: Math.min(0.55, bottom - top), object: valid[0].name };
+        }
+        return { left: 0.3, top: 0.3, width: 0.4, height: 0.4, object: "center" };
     }
 );
