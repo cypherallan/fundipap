@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../../../data/job_taxonomy.dart';
+import '../../../data/fundi_taxonomy.dart';
 
 class ProfileForm extends StatelessWidget {
   final String selectedCategoryId;

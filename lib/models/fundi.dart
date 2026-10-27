@@ -1,4 +1,4 @@
-import '../data/job_taxonomy.dart';
+import '../data/fundi_taxonomy.dart';
 
 class Fundi {
   final String id;

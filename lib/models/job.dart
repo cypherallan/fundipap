@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../data/job_taxonomy.dart';
+import '../data/fundi_taxonomy.dart';
 
 enum JobStatus {
   open,

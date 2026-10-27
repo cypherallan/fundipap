@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
-import '../../../data/job_taxonomy.dart';
+import '../../../data/fundi_taxonomy.dart';
 import '../../../services/pricing_service.dart';
 import 'category_selection_section.dart';
 import 'photos_section.dart';
@@ -279,15 +279,86 @@ class _PostNewJobScreenState extends State<PostNewJobScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: descC,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText:
-                    'Describe job + what you have tried (e.g. new TV, need wall mount, bricks wall)',
-                border: OutlineInputBorder(),
+              maxLines: 5,
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                label: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Provide all the necessary job details in depth. This will help Fundis bid',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                hintText:
+                    'e.g., TV size, how many units, distance, what you have, etc.',
+                hintStyle: GoogleFonts.inter(fontSize: 11),
+                floatingLabelBehavior: FloatingLabelBehavior.auto,
+                isDense: false,
+                contentPadding: const EdgeInsets.all(12),
               ),
             ),
             const SizedBox(height: 12),
-           
+            if (selectedSub != null)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: FundiTaxonomy.isInstallation(selectedSub!)
+                      ? const Color(0xFFE3F2FD)
+                      : const Color(0xFFFFF3E0),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: FundiTaxonomy.isInstallation(selectedSub!)
+                        ? Colors.blue
+                        : Colors.orange,
+                    width: 1.5,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          FundiTaxonomy.isInstallation(selectedSub!)
+                              ? Icons.build
+                              : Icons.videocam,
+                          size: 16,
+                          color: FundiTaxonomy.isInstallation(selectedSub!)
+                              ? Colors.blue
+                              : Colors.orange,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          FundiTaxonomy.isInstallation(selectedSub!)
+                              ? 'INSTALLATION - TYPE THIS IN BOX ABOVE:'
+                              : 'REPAIR - VIDEO REQUIRED',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      FundiTaxonomy.isInstallation(selectedSub!)
+                          ? '• How many? (e.g., 1, 3 rooms, 6 walls)\n• Where exactly? (bedroom, garage, near DB, balcony)\n• Distance from power/water? (in feet)\n• Size/height/width if needed? (e.g., 10x12 ft)\nFundi will see exactly what you type.'
+                          : '• Select fault above if listed\n• RECORD 10 sec VIDEO of symptom (TV blinking, engine not starting)\n• Upload VIDEO + photos ON/OFF + close-up below\n• Describe what you tried in box above',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 12),
             PhotosSection(
               photos: photos,
               existingPhotos: existingPhotos,
