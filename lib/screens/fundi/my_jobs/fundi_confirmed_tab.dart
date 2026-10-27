@@ -5,7 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../theme/app_theme.dart';
 import 'fundi_add_part_receipt.dart';
-import '../new_price/fundi_request_new_price_screen.dart';
+import 'fundi_request_new_price_screen.dart';
 import '../services/cancel/fundi_cancel_service.dart';
 
 class FundiConfirmedTab extends StatelessWidget {
