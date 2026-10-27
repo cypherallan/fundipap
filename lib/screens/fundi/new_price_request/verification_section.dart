@@ -13,6 +13,11 @@ class VerificationSection extends StatelessWidget {
   final String? verifyReason;
   final VoidCallback onTakePhoto;
   final bool hasValidVerification;
+  final int attempts;
+  final int maxAttempts;
+  final int cooldownSeconds;
+  final bool isLocked;
+  final String oldPrice;
 
   const VerificationSection({
     super.key,
@@ -24,17 +29,27 @@ class VerificationSection extends StatelessWidget {
     required this.verifyReason,
     required this.onTakePhoto,
     required this.hasValidVerification,
+    this.attempts = 0,
+    this.maxAttempts = 5,
+    this.cooldownSeconds = 0,
+    this.isLocked = false,
+    this.oldPrice = '0',
   });
 
   @override
   Widget build(BuildContext context) {
+    final remaining = maxAttempts - attempts;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.blue.shade50,
+        color: isLocked ? Colors.red.shade50 : Colors.blue.shade50,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: hasValidVerification ? Colors.green : Colors.blue.shade200,
+          color: isLocked
+              ? Colors.red
+              : hasValidVerification
+              ? Colors.green
+              : Colors.blue.shade200,
           width: 2,
         ),
       ),
@@ -44,18 +59,30 @@ class VerificationSection extends StatelessWidget {
           Row(
             children: [
               Icon(
-                hasValidVerification ? Icons.verified : Icons.verified_user,
+                isLocked
+                    ? Icons.block
+                    : hasValidVerification
+                    ? Icons.verified
+                    : Icons.verified_user,
                 size: 16,
-                color: hasValidVerification ? Colors.green : Colors.blue,
+                color: isLocked
+                    ? Colors.red
+                    : hasValidVerification
+                    ? Colors.green
+                    : Colors.blue,
               ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'SET 1 - VERIFICATION (Optional for testing) - Prove you are on site',
+                  isLocked
+                      ? 'VERIFICATION LOCKED - FAILED $maxAttempts/$maxAttempts'
+                      : 'SET 1 - VERIFICATION ($attempts/$maxAttempts) - Optional for testing',
                   style: GoogleFonts.montserrat(
                     fontWeight: FontWeight.w800,
                     fontSize: 10,
-                    color: hasValidVerification
+                    color: isLocked
+                        ? Colors.red.shade800
+                        : hasValidVerification
                         ? Colors.green.shade800
                         : Colors.blue.shade800,
                   ),
@@ -64,116 +91,128 @@ class VerificationSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            'Optional for now. When added: system picks random client photo, blurs fixed anchor (non-movable). Retake revealing it to prove on site.',
-            style: GoogleFonts.inter(fontSize: 9, color: Colors.blue.shade800),
-          ),
-          if (selectedAnchorPhoto != null) ...[
-            const SizedBox(height: 8),
+          if (isLocked)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.red.shade100,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'FAILED VERIFICATION 5 TIMES',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.red.shade900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'You cannot request new price. Work with OLD price: KES $oldPrice..',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red.shade900,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
             Text(
-              'Client anchor - blurred part must be revealed in your retake (tap to view full):',
+              'Optional for testing. $attempts/$maxAttempts | Remaining: $remaining | ${cooldownSeconds > 0
+                  ? 'Wait ${cooldownSeconds}s'
+                  : attempts == 0
+                  ? 'First free'
+                  : attempts == 1
+                  ? '4 left, no wait'
+                  : attempts == 2
+                  ? 'Next 30s'
+                  : attempts == 3
+                  ? 'Next 60s'
+                  : 'Next 90s'}',
               style: GoogleFonts.inter(
                 fontSize: 9,
                 fontWeight: FontWeight.w600,
+                color: Colors.blue.shade800,
               ),
             ),
-            const SizedBox(height: 4),
+          if (selectedAnchorPhoto != null && !isLocked) ...[
+            const SizedBox(height: 8),
             GestureDetector(
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => Dialog(
-                    backgroundColor: Colors.black,
-                    insetPadding: const EdgeInsets.all(12),
-                    child: Stack(
-                      children: [
-                        // FIXED: blur INSIDE InteractiveViewer so it tracks zoom/pan
-                        Center(
-                          child: InteractiveViewer(
-                            minScale: 1.0,
-                            maxScale: 4.0,
-                            child: LayoutBuilder(
-                              builder: (c, cons) {
-                                return Stack(
-                                  children: [
-                                    Image.network(
-                                      selectedAnchorPhoto!,
-                                      fit: BoxFit.contain,
-                                    ),
-                                    Positioned(
-                                      left: cons.maxWidth * blurRect.left,
-                                      top: cons.maxHeight * blurRect.top,
-                                      width: cons.maxWidth * blurRect.width,
-                                      height: cons.maxHeight * blurRect.height,
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: BackdropFilter(
-                                          filter: ImageFilter.blur(
-                                            sigmaX: 22,
-                                            sigmaY: 22,
-                                          ),
-                                          child: Container(
-                                            color: Colors.black.withOpacity(
-                                              0.25,
+              onTap: () => showDialog(
+                context: context,
+                builder: (ctx) => Dialog(
+                  backgroundColor: Colors.black,
+                  insetPadding: const EdgeInsets.all(12),
+                  child: Stack(
+                    children: [
+                      Center(
+                        child: InteractiveViewer(
+                          minScale: 1.0,
+                          maxScale: 4.0,
+                          child: LayoutBuilder(
+                            builder: (c, cons) => Stack(
+                              children: [
+                                Image.network(
+                                  selectedAnchorPhoto!,
+                                  fit: BoxFit.contain,
+                                ),
+                                Positioned(
+                                  left: cons.maxWidth * blurRect.left,
+                                  top: cons.maxHeight * blurRect.top,
+                                  width: cons.maxWidth * blurRect.width,
+                                  height: cons.maxHeight * blurRect.height,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: BackdropFilter(
+                                      filter: ImageFilter.blur(
+                                        sigmaX: 22,
+                                        sigmaY: 22,
+                                      ),
+                                      child: Container(
+                                        color: Colors.black.withOpacity(0.25),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            border: Border.all(
+                                              color: Colors.white70,
+                                              width: 1.5,
                                             ),
-                                            // border so fundi sees where to shoot
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                border: Border.all(
-                                                  color: Colors.white70,
-                                                  width: 1.5,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                              ),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
                                             ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ],
-                                );
-                              },
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        // Close + label stay outside viewer so they don't zoom
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.close,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                            onPressed: () => Navigator.pop(ctx),
+                      ),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 28,
                           ),
+                          onPressed: () => Navigator.pop(ctx),
                         ),
-                        Positioned(
-                          left: 12,
-                          right: 12,
-                          bottom: 12,
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              'Blurred area = fixed anchor you must reveal in your retake. Pinch to zoom - blur moves with image.',
-                              style: GoogleFonts.inter(
-                                color: Colors.white,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                );
-              },
+                ),
+              ),
               child: LayoutBuilder(
                 builder: (ctx, constraints) {
                   final w = constraints.maxWidth;
@@ -207,38 +246,6 @@ class VerificationSection extends StatelessWidget {
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: 6,
-                        bottom: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.zoom_in,
-                                size: 12,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                'Tap to enlarge',
-                                style: GoogleFonts.inter(
-                                  color: Colors.white,
-                                  fontSize: 8,
-                                ),
-                              ),
-                            ],
                           ),
                         ),
                       ),
@@ -278,27 +285,57 @@ class VerificationSection extends StatelessWidget {
                 ),
               ),
             ),
-          OutlinedButton.icon(
-            onPressed: verifying ? null : onTakePhoto,
-            icon: Icon(
-              verifying ? Icons.hourglass_top : Icons.camera_alt,
-              size: 16,
-              color: hasValidVerification ? Colors.green : Colors.blue,
-            ),
-            label: Text(
-              verifying
-                  ? 'Verifying. Please Wait...'
-                  : hasValidVerification
-                  ? 'Verified ✓ Retake if needed'
-                  : 'Retake the photo to reveal the blurred part',
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                color: hasValidVerification
-                    ? Colors.green.shade800
-                    : Colors.blue.shade800,
+          const SizedBox(height: 6),
+          if (isLocked)
+            SizedBox(
+              width: double.infinity,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Work with old price KES $oldPrice',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            )
+          else
+            OutlinedButton.icon(
+              onPressed: verifying || cooldownSeconds > 0 ? null : onTakePhoto,
+              icon: Icon(
+                verifying
+                    ? Icons.hourglass_top
+                    : cooldownSeconds > 0
+                    ? Icons.timer
+                    : Icons.camera_alt,
+                size: 16,
+                color: hasValidVerification ? Colors.green : Colors.blue,
+              ),
+              label: Text(
+                verifying
+                    ? 'Verifying...'
+                    : cooldownSeconds > 0
+                    ? 'Wait ${cooldownSeconds}s ($remaining left)'
+                    : hasValidVerification
+                    ? 'Verified ✓'
+                    : attempts == 0
+                    ? 'Retake revealing blurred part (Optional)'
+                    : 'Retry - $remaining left',
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  color: hasValidVerification
+                      ? Colors.green.shade800
+                      : Colors.blue.shade800,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

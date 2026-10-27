@@ -59,6 +59,33 @@ class _FundiRequestNewPriceScreenState
   bool _verifying = false;
   String? _verifyReason;
 
+  // Verification attempt limiting
+  int _verifyAttempts = 0;
+  static const int _maxVerifyAttempts = 5;
+  int _verifyCooldown = 0;
+  Timer? _cooldownTimer;
+  bool _verifyLocked = false;
+
+  int _getCooldownForNextAttempt(int failedAttempts) {
+    if (failedAttempts == 2) return 30;
+    if (failedAttempts == 3) return 60;
+    if (failedAttempts == 4) return 90;
+    return 0;
+  }
+
+  void _startCooldown(int seconds) {
+    _cooldownTimer?.cancel();
+    setState(() => _verifyCooldown = seconds);
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_verifyCooldown <= 0) {
+        t.cancel();
+        if (mounted) setState(() => _verifyCooldown = 0);
+      } else {
+        if (mounted) setState(() => _verifyCooldown--);
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +96,7 @@ class _FundiRequestNewPriceScreenState
 
   @override
   void dispose() {
+    _cooldownTimer?.cancel();
     detailsCtrl.dispose();
     extraLaborCtrl.dispose();
     tillCtrl.dispose();
@@ -141,6 +169,31 @@ class _FundiRequestNewPriceScreenState
   }
 
   Future<void> _runAnchorCheck(String localPath) async {
+    if (_verifyLocked) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Verification locked after 5 failed attempts. You cannot request new price. Work with old price.',
+            ),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+    if (_verifyCooldown > 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Wait $_verifyCooldown seconds before retrying verification.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
     if (_selectedAnchorPhoto == null) {
       setState(() => _anchorVerified = true);
       return;
@@ -157,20 +210,59 @@ class _FundiRequestNewPriceScreenState
         localPath: localPath,
         blurRect: _blurRect,
       );
+      final verified = data['verified'] == true;
       setState(() {
-        _anchorVerified = data['verified'] == true;
+        _anchorVerified = verified;
         _verifyReason = data['reason'];
+        if (verified) {
+          _verifyAttempts = 0;
+          _verifyCooldown = 0;
+          _cooldownTimer?.cancel();
+        } else {
+          _verifyAttempts++;
+          if (_verifyAttempts >= _maxVerifyAttempts) {
+            _verifyLocked = true;
+            _verifyCooldown = 0;
+            _cooldownTimer?.cancel();
+          } else {
+            final cd = _getCooldownForNextAttempt(_verifyAttempts);
+            if (cd > 0) _startCooldown(cd);
+          }
+        }
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              data['verified'] == true
-                  ? 'Verified ${data['score']}%: ${data['reason']}'
-                  : 'FAILED: ${data['reason']}',
+        if (verified) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Verified ${data['score']}%: ${data['reason']}'),
             ),
-          ),
-        );
+          );
+        } else {
+          if (_verifyLocked) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'FAILED 5/5: ${data['reason']}. Not on site. Cannot request new price.',
+                ),
+                duration: Duration(seconds: 5),
+              ),
+            );
+          } else {
+            final remaining = _maxVerifyAttempts - _verifyAttempts;
+            final waitMsg =
+                _getCooldownForNextAttempt(_verifyAttempts) > 0 && remaining > 0
+                ? ' Wait ${_getCooldownForNextAttempt(_verifyAttempts)}s before next try.'
+                : '';
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'FAILED (${_verifyAttempts}/5): ${data['reason']}. $remaining chances left.$waitMsg',
+                ),
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        }
       }
     } catch (e) {
       setState(() => _verifyReason = e.toString());
@@ -293,6 +385,16 @@ class _FundiRequestNewPriceScreenState
   }
 
   Future<void> _submit() async {
+    if (_verifyLocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Verification failed 5 times. You cannot request new price. Work with old price or raise dispute.',
+          ),
+        ),
+      );
+      return;
+    }
     if (selectedReasons.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -522,6 +624,16 @@ class _FundiRequestNewPriceScreenState
               verifyReason: _verifyReason,
               onTakePhoto: _showVerificationSourceSheet,
               hasValidVerification: _hasValidVerification,
+              attempts: _verifyAttempts,
+              maxAttempts: _maxVerifyAttempts,
+              cooldownSeconds: _verifyCooldown,
+              isLocked: _verifyLocked,
+              oldPrice:
+                  (widget.job['budget'] ??
+                          widget.job['offeredPrice'] ??
+                          widget.job['laborCost'] ??
+                          0)
+                      .toString(),
             ),
             const SizedBox(height: 16),
             EvidenceSection(
@@ -534,6 +646,40 @@ class _FundiRequestNewPriceScreenState
                 oldPartPhotos: oldPartPhotos,
                 onAdd: _showOldPartSourceSheet,
               ),
+            if (_verifyLocked)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade700,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.block, color: Colors.white, size: 28),
+                    const SizedBox(height: 6),
+                    Text(
+                      'VERIFICATION FAILED 5 TIMES',
+                      style: GoogleFonts.montserrat(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'You cannot request new price. You are not on site.\nContinue working with OLD price: KES ${widget.job['budget'] ?? widget.job['offeredPrice'] ?? widget.job['laborCost'] ?? 0}',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -543,7 +689,9 @@ class _FundiRequestNewPriceScreenState
                   foregroundColor: Colors.black,
                   minimumSize: const Size(double.infinity, 52),
                 ),
-                onPressed: uploading ? null : _submit,
+                onPressed: uploading || _verifyLocked || _verifyCooldown > 0
+                    ? null
+                    : _submit,
                 child: uploading
                     ? const CircularProgressIndicator()
                     : Text(
