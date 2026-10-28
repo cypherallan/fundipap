@@ -414,7 +414,7 @@ Widget buildCompletedReleasedView(
               ),
               const SizedBox(height: 8),
               Text(
-                'KES ${c.releasedAmount} Released!',
+                'KES ${c.fundiReceives} Released!',
                 style: GoogleFonts.montserrat(
                   fontWeight: FontWeight.w800,
                   fontSize: 16,
@@ -442,7 +442,7 @@ Widget buildCompletedReleasedView(
                     const Divider(),
                     feeRow(
                       'Total to receive:',
-                      'KES ${c.releasedAmount}',
+                      'KES ${c.fundiReceives}',
                       bold: true,
                     ),
                     // Show ledger IDs for KRA proof

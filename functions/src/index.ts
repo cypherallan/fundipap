@@ -7,10 +7,10 @@ import { setGlobalOptions } from "firebase-functions/v2/options";
 
 setGlobalOptions({
     memory: "256MiB",
-    cpu: 1,
-    concurrency: 80,
+    cpu: 0.333,
+    concurrency: 1,
     minInstances: 0,
-    maxInstances: 10,
+    maxInstances: 5,
     timeoutSeconds: 60,
 });
 
@@ -475,8 +475,9 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const oldLaborFromRenego = Number((r as any).oldLabor ?? (r as any).oldLabour ?? 0);
     let baseLabor = 0;
     if (oldLaborFromRenego > 0) baseLabor = oldLaborFromRenego;
-    else baseLabor = Number(after.lastCounterAmount ?? after.laborCost ?? after.originalLaborCost ?? 0) || (Number(after.agreedPrice || 0) - originalExtra) || Number(after.lastCounterAmount || after.laborCost || after.agreedPrice || after.clientCounterAmount || 0);
-    const totalLabor = oldLaborFromRenego > 0 ? baseLabor + finalExtra : (baseLabor >= 6000 + finalExtra && finalExtra > 0 ? baseLabor : baseLabor + finalExtra);
+    else baseLabor = Number(after.laborCost ?? after.lastCounterAmount ?? after.agreedPrice ?? after.originalLaborCost ?? 0);
+    const totalLabor = baseLabor + finalExtra;
+    const serverFundiPayout = Number(after.fundiPayoutAmount ?? after.fundiPayoutAfterDeduction ?? 0);
     const fundiSees = baseLabor + transport;
 
     const fundiSnap = await db().collection("users").doc(fundiId).get();
@@ -573,9 +574,29 @@ export const onJobPush = onDocumentWritten({ document: "jobs/{jobId}", region: "
     const wasReleased = oldEscStatus === "released" || before?.escrowReleased === true || before?.escrowStatus === "released";
     const nowReleased = newEscStatus === "released" || after?.escrowReleased === true || after?.escrowStatus === "released";
     if (!wasReleased && nowReleased) {
-        await sendPush(fundiTokens, `Client released KES ${fundiReceives}`, `${title} • Tap to view receipt`, { jobId, type: "released" });
-        await sendPush(clientTokens, `You released KES ${clientPays} • Completed`, `${title}`, { jobId, type: "released" });
-        await db().collection('notifications').add({ toUserId: clientId, title: `You released KES ${clientPays} • Completed`, body: `${title} • Completed`, type: 'released', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
+        const rs = (after.renegotiation?.status || "").toString();
+        const isContinueOld = rs.includes('rejected_continued') || rs.includes('continue_old') || rs.includes('fundi_continued');
+        const oldLab = Number(after.renegotiation?.oldLabor ?? after.renegotiation?.oldLabour ?? 0);
+        const trans = Number(after.transportFee ?? 183);
+        const pct = Number(after.fundiCommissionPct ?? after.fundiAppFee ?? 10);
+
+        let fundiDisplay = Number(after.fundiPayoutAmount ?? after.fundiPayoutAfterDeduction ?? 0);
+        // FIX: if doc still has 6400 (budget), recalc from oldLabor
+        if (fundiDisplay === 0 || fundiDisplay >= 6000 || (isContinueOld && fundiDisplay > (oldLab + trans + 500))) {
+            const lab = (isContinueOld && oldLab > 0 && oldLab < 6000) ? oldLab : Number(after.laborCost ?? after.lastCounterAmount ?? 4000);
+            const safeLab = (lab >= 6000) ? 4000 : lab;
+            const fee = Math.round(safeLab * (pct > 0 && pct < 20 ? pct : 10) / 100);
+            fundiDisplay = safeLab - fee + trans;
+        }
+
+        const clientFinal = Number(after.totalClientPays ?? after.escrowAmount ?? (fundiDisplay + Math.round(fundiDisplay * 0.15)));
+        await sendPush(fundiTokens, `Client released KES ${fundiDisplay}`, `${title} • Tap to view receipt`, { jobId, type: "released" });
+        await sendPush(clientTokens, `You released KES ${clientFinal} • Completed`, `${title}`, { jobId, type: "released" });
+        await db().collection('notifications').add({ toUserId: clientId, title: `You released KES ${clientFinal} • Completed`, body: `${title} • Completed`, type: 'released', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
+        // also add fundi doc so home shows correct
+        if (fundiId) {
+            await db().collection('notifications').add({ toUserId: fundiId, title: `Client released KES ${fundiDisplay} - Tap to view receipt`, body: `${title} • Tap to view • Completed`, type: 'released', jobId, createdAt: FieldValue.serverTimestamp(), isRead: false });
+        }
     }
 });
 export const onDisputePush = onDocumentWritten({ document: "disputes/{disputeId}", region: "europe-west1" }, async (event) => {

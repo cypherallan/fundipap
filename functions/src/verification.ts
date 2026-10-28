@@ -9,7 +9,7 @@ const vision = new ImageAnnotatorClient();
 type Rect = { left: number; top: number; width: number; height: number }; // 0-1
 
 export const verifyAnchorPhoto = onCall(
-    { memory: "1GiB", timeoutSeconds: 60, region: "us-central1" },
+    { memory: "512MiB", cpu: 0.5, concurrency: 1, timeoutSeconds: 60, region: "europe-west1" },
     async (request) => {
         try {
             const data = request.data as any;
@@ -132,7 +132,7 @@ export const verifyAnchorPhoto = onCall(
 );
 
 export const getVisibleBlurRect = onCall(
-    { memory: "512MiB", timeoutSeconds: 30, region: "us-central1" },
+    { memory: "512MiB", cpu: 0.5, concurrency: 1, timeoutSeconds: 30, region: "europe-west1" },
     async (request) => {
         if (!request.auth) throw new HttpsError("unauthenticated", "Login");
         const url = request.data?.clientPhotoUrl as string;

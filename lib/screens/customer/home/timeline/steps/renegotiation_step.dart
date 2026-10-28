@@ -84,8 +84,7 @@ class RenegotiationSteps {
         extraToLock = extraLaborToShow + (extraLaborToShow * 0.05).round();
       }
 
-      int newTotalClient =
-          c.alreadyLocked + extraToLock;
+      int newTotalClient = c.alreadyLocked + extraToLock;
 
       bool isCounterAccepted = counterExtraLabor > 0;
       String whoBuys = (c.reneg?['whoBuysParts'] ?? 'client').toString();
@@ -162,6 +161,21 @@ class RenegotiationSteps {
           ),
         );
       }
+    }
+
+    if (c.renegStatus == 'rejected_continued_old_price') {
+      final code = (c.reneg!['rejectionCode'] ?? '').toString();
+      final label = (c.reneg!['rejectionLabel'] ?? code).toString();
+      timeline.add(
+        TimelineCard(
+          title: 'Extra rejected - Continuing old price',
+          body:
+              'You rejected extra: $label ($code). Fundi will do ONLY what was in your original photos at old price KES ${c.alreadyLocked}.',
+          icon: Icons.block,
+          isDone: true,
+        ),
+      );
+      return true;
     }
     return false;
   }

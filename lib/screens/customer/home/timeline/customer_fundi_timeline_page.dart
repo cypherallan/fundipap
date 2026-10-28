@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../../../../app.dart';
 import '../timeline/widgets/timeline_chat_sheet.dart';
 import '../timeline/widgets/timeline_cancel_wrapper.dart';
@@ -103,9 +104,19 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
           var status = (job['status'] ?? '').toString();
           var reneg = job['renegotiation'] as Map<String, dynamic>?;
           String renegStatus = (reneg?['status'] ?? '').toString();
-          bool isRenegCountered = renegStatus == 'countered_by_client';
-          bool isRenegFundiCountered = renegStatus == 'countered_by_fundi';
+
+          bool isContinueOld =
+              renegStatus.contains('rejected_continued_old_price') ||
+              renegStatus.contains('fundi_continued_old_price') ||
+              renegStatus.contains('rejected_continued') ||
+              renegStatus == 'rejected';
+
+          bool isRenegCountered =
+              !isContinueOld && renegStatus == 'countered_by_client';
+          bool isRenegFundiCountered =
+              !isContinueOld && renegStatus == 'countered_by_fundi';
           bool isRenegApprovedNeedsTopup =
+              !isContinueOld &&
               renegStatus == 'approved' &&
               (_toBool(job['clientNeedsToTopup']) ||
                   job['escrowStatus'] == 'pending_topup');
@@ -359,47 +370,18 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
                               }
                               return;
                             }
-                            int newToLock = newAmt + (newAmt * 0.05).round();
-                            await FirebaseFirestore.instance
-                                .collection('jobs')
-                                .doc(widget.jobId)
-                                .update({
-                                  'renegotiation.counterExtraLabor': newAmt,
-                                  'renegotiation.clientCounterExtraLabor':
-                                      newAmt,
-                                  'renegotiation.extraToLock': newToLock,
-                                  'renegotiation.counterExtraToLock': newToLock,
-                                  'renegotiation.clientCounterExtraToLock':
-                                      newToLock,
-                                  'renegotiation.status': 'countered_by_client',
-                                  'renegotiation.currentPhase':
-                                      'countered_by_client',
-                                  'renegotiation.counterRound': round,
-                                  'fundiHasUnread': true,
-                                  'customerHasUnread': false,
-                                  'updatedAt': FieldValue.serverTimestamp(),
-                                });
-                            String fundiId =
-                                (job['fundiId'] ??
-                                        job['assignedFundiId'] ??
-                                        job['acceptedFundiId'] ??
-                                        job['selectedFundiId'] ??
-                                        '')
-                                    .toString();
-                            if (fundiId.isNotEmpty) {
-                              await FirebaseFirestore.instance
-                                  .collection('notifications')
-                                  .add({
-                                    'jobId': widget.jobId,
-                                    'toUserId': fundiId,
-                                    'type': 'client_counter_extra',
-                                    'title':
-                                        'Client countered extra to KES $newAmt',
-                                    'message':
-                                        'Client countered your extra KES $fundiNew with KES $newAmt',
-                                    'createdAt': FieldValue.serverTimestamp(),
-                                    'read': false,
-                                  });
+                            try {
+                              await FirebaseFunctions.instanceFor(
+                                region: 'europe-west1',
+                              ).httpsCallable('counterExtraSecure').call({
+                                "jobId": widget.jobId,
+                                "counterExtra": newAmt,
+                              });
+                            } catch (e) {
+                              if (context.mounted)
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Counter failed: $e')),
+                                );
                             }
                           },
                           child: const Text('Counter'),
@@ -495,58 +477,17 @@ class _CustomerFundiTimelinePageState extends State<CustomerFundiTimelinePage>
                       ),
                       onPressed: () async {
                         try {
-                          var reneg =
-                              job['renegotiation'] as Map<String, dynamic>?;
-                          int oldLabour = _toInt(
-                            reneg?['oldLabor'] ??
-                                job['lastCounterAmount'] ??
-                                job['currentLabour'] ??
-                                job['laborCost'] ??
-                                job['agreedPrice'] ??
-                                5000,
-                          );
-
-                          int transport = _toInt(
-                            job['transportFee'] ??
-                                job['escrowTransport'] ??
-                                150,
-                          );
-
-                          int newTotalLabour = oldLabour + approvedExtra;
-                          int newTotalFee = (newTotalLabour * 0.05).round();
-                          int newEscrowTotal =
-                              newTotalLabour + transport + newTotalFee;
-
-                          await FirebaseFirestore.instance
-                              .collection('jobs')
-                              .doc(widget.jobId)
-                              .update({
-                                'escrowAmount': newEscrowTotal,
-                                'totalClientPays': newEscrowTotal,
-                                'currentLabour': newTotalLabour,
-                                'agreedPrice': newTotalLabour,
-                                'laborCost': newTotalLabour,
-                                'escrowStatus': 'held',
-                                'extraEscrowStatus': 'paid',
-                                'clientNeedsToTopup': false,
-                                'renegotiation.status': 'locked',
-                                'renegotiation.newLaborTotal': newTotalLabour,
-                                'renegotiation.newTotalClientPays':
-                                    newEscrowTotal,
-                                'renegotiation.counterTotalClientPays':
-                                    newEscrowTotal,
-                                'renegotiation.counterLabor': newTotalLabour,
-                                'renegotiation.extraLocked': newEscrowTotal,
-                                'renegotiation.lockedAt':
-                                    FieldValue.serverTimestamp(),
-                                'updatedAt': FieldValue.serverTimestamp(),
-                              });
-
+                          // SECURE: Do NOT write escrowStatus directly. Go through Mpesa function
+                          await FirebaseFunctions.instanceFor(
+                            region: 'europe-west1',
+                          ).httpsCallable('lockExtraEscrowSecure').call({
+                            "jobId": widget.jobId,
+                          });
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'Extra locked! Total locked now KES $newEscrowTotal',
+                                  'Redirecting to Mpesa to lock KES $approvedToLock',
                                 ),
                                 backgroundColor: Colors.green,
                               ),

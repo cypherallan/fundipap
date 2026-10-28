@@ -119,15 +119,42 @@ class FundiTimelineActions {
   }
 
   static Future<void> startJob(String jobId) async {
-    String fundiId = FirebaseAuth.instance.currentUser?.uid ?? '';
-    if (fundiId.isNotEmpty) await _autoWriteBadge(jobId, fundiId);
-    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
-      'status': 'in_progress',
-      'renegotiation.currentPhase': 'fundi_working',
-      'workStartedAt': FieldValue.serverTimestamp(),
-      'customerHasUnread': true,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    try {
+      String fundiId = FirebaseAuth.instance.currentUser?.uid ?? '';
+      if (fundiId.isNotEmpty) await _autoWriteBadge(jobId, fundiId);
+
+      final snap = await FirebaseFirestore.instance
+          .collection('jobs')
+          .doc(jobId)
+          .get();
+      final data = snap.data() ?? {};
+      final renego = data['renegotiation'] as Map<String, dynamic>? ?? {};
+      final rStatus = (renego['status'] ?? '').toString().toLowerCase();
+      final isContinueOld = rStatus.contains('rejected_continued_old_price');
+
+      if (isContinueOld) {
+        await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+          'status': 'in_progress',
+          'renegotiation.status': 'fundi_working_continued_old_price',
+          'renegotiation.currentPhase': 'fundi_working',
+          'renegotiation.startedOldPriceAt': FieldValue.serverTimestamp(),
+          'workStartedAt': FieldValue.serverTimestamp(),
+          'fundiWorking': true,
+          'customerHasUnread': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+          'status': 'in_progress',
+          'renegotiation.currentPhase': 'fundi_working',
+          'workStartedAt': FieldValue.serverTimestamp(),
+          'customerHasUnread': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint('startJob error: $e');
+    }
   }
 
   static Future<void> completeJob(String jobId) async {

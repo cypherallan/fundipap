@@ -1,8 +1,14 @@
+import 'dart:io' show Platform;
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../theme/app_theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:http/http.dart' as http;
+import '../../post new job/extra_reject_reasons.dart';
 
 part 'client_price_approval_fields.dart';
 part 'client_price_approval_helpers.dart';

@@ -98,15 +98,62 @@ FundiWaitingState? getFundiWaitingState({
     );
   }
 
-  // === CLIENT REJECTED NEW PRICE - SHOW CONTINUE / DISPUTE ===
+  // === NEW FLOW - rejected_continued_old_price ===
   var renegoForReject = job['renegotiation'] as Map<String, dynamic>?;
   String renegoStatusForReject = (renegoForReject?['status'] ?? '')
       .toString()
       .toLowerCase();
+  bool isCompletedForContinueCheck =
+      jobStatus.contains('complet') ||
+      jobStatus.contains('closed') ||
+      escrowStatus == 'released' ||
+      _toBool(job['escrowReleased']) ||
+      _toBool(job['fundiConfirmedPayment']);
+  if ((renegoStatusForReject.contains('rejected_continued_old_price') ||
+          renegoStatusForReject.contains('continued_old') ||
+          renegoStatusForReject.contains('continue_old') ||
+          renegoStatusForReject.contains('fundi_continued') ||
+          renegoStatusForReject.contains('rejected_continued')) &&
+      !isCompletedForContinueCheck) {
+    int oldLab = _toInt(
+      renegoForReject?['oldLabor'] ??
+          renegoForReject?['oldLabour'] ??
+          renegoForReject?['oldPrice'] ??
+          job['originalLaborCost'] ??
+          job['agreedPrice'] ??
+          (job['laborCost'] != null && _toInt(job['laborCost']) < 6000
+              ? job['laborCost']
+              : null) ??
+          job['lastCounterAmount'] ??
+          4000,
+    );
+    if (oldLab >= 6000) oldLab = 4000;
+    return FundiWaitingState(
+      type: FundiWaitingType.siteVisited,
+      title: 'Client rejected extra - Continue OLD price KES $oldLab',
+      message: 'Do ONLY original photos (e.g., 1 socket). Tap START JOB',
+      price: oldLab,
+    );
+  }
+
+  // === CLIENT REJECTED NEW PRICE - SHOW CONTINUE / DISPUTE ===
+  bool isCompletedForRejectCheck =
+      jobStatus.contains('complet') ||
+      jobStatus.contains('closed') ||
+      escrowStatus == 'released' ||
+      _toBool(job['escrowReleased']) ||
+      _toBool(job['fundiConfirmedPayment']);
+  bool isContinueOldForReject =
+      renegoStatusForReject.contains('rejected_continued') ||
+      renegoStatusForReject.contains('continued_old') ||
+      renegoStatusForReject.contains('fundi_continued');
   bool isRejected =
       renegoStatusForReject == 'rejected' || job['hasClientRejected'] == true;
   bool canDispute = job['fundiCanDispute'] == true;
-  if (isRejected && canDispute) {
+  if (isRejected &&
+      canDispute &&
+      !isCompletedForRejectCheck &&
+      !isContinueOldForReject) {
     int extraReq = _toInt(
       renegoForReject?['extraLaborRequested'] ??
           renegoForReject?['extraLabor'] ??
@@ -144,10 +191,19 @@ FundiWaitingState? getFundiWaitingState({
         rEarly?['finalExtraLabor'] ??
         0,
   );
-  int finalExtraTop = agreedExtraTop > 0
-      ? agreedExtraTop
-      : (counterExtraTop > 0 ? counterExtraTop : origExtraTop);
-  int oldLaborTop = _toInt(rEarly?['oldLabor'] ?? 0);
+  int oldLaborTop = _toInt(
+    rEarly?['oldLabor'] ?? rEarly?['oldLabour'] ?? rEarly?['oldPrice'] ?? 0,
+  );
+  String rStatusTop = (rEarly?['status'] ?? '').toString().toLowerCase();
+  bool isContinueOldTop =
+      rStatusTop.contains('rejected_continued') ||
+      rStatusTop.contains('continued_old') ||
+      rStatusTop.contains('fundi_continued');
+  int finalExtraTop = isContinueOldTop
+      ? 0
+      : (agreedExtraTop > 0
+            ? agreedExtraTop
+            : (counterExtraTop > 0 ? counterExtraTop : origExtraTop));
 
   int baseLabourTop = 0;
   if (oldLaborTop > 0) {
@@ -179,23 +235,15 @@ FundiWaitingState? getFundiWaitingState({
       }
     }
   }
-  int totalLabourTop = oldLaborTop > 0
-      ? baseLabourTop + finalExtraTop
-      : (baseLabourTop >= 6000 + finalExtraTop && finalExtraTop > 0
-            ? baseLabourTop
-            : baseLabourTop + finalExtraTop);
-
+  int totalLabourTop = baseLabourTop + finalExtraTop;
   int labour = totalLabourTop > 0
       ? totalLabourTop
       : _toInt(
-          job['lastCounterAmount'] ??
+          job['laborCost'] ??
+              job['lastCounterAmount'] ??
               job['lastCounterPrice'] ??
-              job['laborCost'] ??
               job['agreedPrice'] ??
-              job['acceptedBidAmount'] ??
-              job['price'] ??
               bid['price'] ??
-              bid['amount'] ??
               0,
         );
   int transport = _toInt(job['transportFee'] ?? 0);
@@ -271,11 +319,37 @@ FundiWaitingState? getFundiWaitingState({
       _toBool(job['isCompleted']);
 
   if (isCompletedLike) {
-    // Use server payout if available
     int serverFinal = _toInt(
       job['fundiPayoutAmount'] ?? job['fundiPayoutAfterDeduction'] ?? 0,
     );
     int displayReceives = serverFinal > 0 ? serverFinal : fundiReceives;
+    String rStatusDisp = (job['renegotiation']?['status'] ?? '')
+        .toString()
+        .toLowerCase();
+    bool isContinueOldDisp =
+        rStatusDisp.contains('rejected_continued') ||
+        rStatusDisp.contains('continued_old') ||
+        rStatusDisp.contains('fundi_continued');
+    if (displayReceives >= 6000 ||
+        (isContinueOldDisp && displayReceives > 5000)) {
+      int oldLabDisp = _toInt(
+        job['renegotiation']?['oldLabor'] ??
+            job['renegotiation']?['oldLabour'] ??
+            job['originalLaborCost'] ??
+            job['agreedPrice'] ??
+            job['lastCounterAmount'] ??
+            4000,
+      );
+      if (oldLabDisp >= 6000) oldLabDisp = 4000;
+      int feePctDisp = _toInt(job['fundiCommissionPct'] ?? 10);
+      int feeDisp =
+          (oldLabDisp *
+                  (feePctDisp > 0 && feePctDisp < 20 ? feePctDisp : 10) /
+                  100)
+              .round();
+      int transDisp = _toInt(job['transportFee'] ?? 183);
+      displayReceives = oldLabDisp - feeDisp + transDisp;
+    }
 
     if (escrowStatus == 'released' || _toBool(job['escrowReleased'])) {
       return FundiWaitingState(

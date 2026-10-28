@@ -110,26 +110,49 @@ class FundiTimelineContext {
     String phase = (reneg?['currentPhase'] ?? '').toString();
     String rs = (reneg?['status'] ?? '').toString();
 
+    // --- FIX: detect continue old price ---
+    bool isContinueOld =
+        rs == 'rejected_continued_old_price' ||
+        rs == 'fundi_working_continued_old_price' ||
+        rs == 'fundi_continued_old_price' ||
+        rs == 'rejected_continued' ||
+        rs.contains('rejected_continued_old_price') ||
+        rs.contains('fundi_continued_old_price');
+
     int rawExtra = toInt(reneg?['extraLabor'] ?? job['extraLaborAmount'] ?? 0);
     int counterExtra = toInt(
       reneg?['acceptedCounterExtraLabor'] ?? reneg?['counterExtraLabor'] ?? 0,
     );
     int extraLabour = counterExtra > 0 ? counterExtra : rawExtra;
 
-    int oldLabour = toInt(reneg?['oldLabor'] ?? 0);
+    if (isContinueOld) {
+      // client rejected extra -> ignore extra completely
+      rawExtra = 0;
+      counterExtra = 0;
+      extraLabour = 0;
+    }
+
+    int oldLabour = toInt(
+      reneg?['oldLabor'] ??
+          reneg?['oldLabour'] ??
+          reneg?['oldLabourAmount'] ??
+          0,
+    );
     if (oldLabour == 0) {
-      int fromJob = toInt(job['laborCost'] ?? job['agreedPrice'] ?? 0);
-      oldLabour = fromJob > extraLabour ? fromJob - extraLabour : 5000;
-      if (oldLabour <= 0) oldLabour = 5000;
+      // FIX: don't subtract extra, use laborCost directly
+      oldLabour = toInt(
+        job['laborCost'] ?? job['lastCounterAmount'] ?? job['agreedPrice'] ?? 0,
+      );
+      if (oldLabour == 0) oldLabour = 4000;
     }
 
     int newLabour = oldLabour + extraLabour;
-    if (newLabour <= 0) newLabour = toInt(job['laborCost'] ?? 5000);
+    if (newLabour <= 0) newLabour = toInt(job['laborCost'] ?? oldLabour);
 
     int transport = toInt(
       job['transportFee'] ?? reneg?['oldTransportFee'] ?? 183,
     );
-    int labour = newLabour;
+    int labour = isContinueOld ? oldLabour : newLabour;
 
     // --- SERVER TRUTH FIRST ---
     int serverPlatformFee = toInt(job['platformFee'] ?? 0);
@@ -155,7 +178,7 @@ class FundiTimelineContext {
 
     int fundiPct;
     if (serverCommissionPct > 0) {
-      fundiPct = serverCommissionPct; // use server-calculated bronze 10%
+      fundiPct = serverCommissionPct;
     } else if (isTrialGold) {
       fundiPct = 5;
     } else if (badgeLevel == 'gold')
@@ -168,27 +191,28 @@ class FundiTimelineContext {
       fundiPct = 15;
 
     int fundiAppFee;
-    if (serverPlatformFee > 0) {
-      fundiAppFee = serverPlatformFee; // 1000 for bronze
+    if (serverPlatformFee > 0 && !isContinueOld) {
+      fundiAppFee = serverPlatformFee;
     } else {
       fundiAppFee = (labour * fundiPct / 100).round();
     }
 
     int baseFundiReceives = labour - fundiAppFee + transport;
-    if (baseFromServer > 0) {
+
+    // When continue old, ignore stale baseFromServer that includes extra/budget
+    if (baseFromServer > 0 && !isContinueOld) {
       baseFundiReceives = baseFromServer;
-      // keep fee from server if available
       if (serverPlatformFee == 0) {
         fundiAppFee = (labour - baseFundiReceives + transport).abs();
       }
     }
-    // ---------------------------------------------------
-    // ---------------------------------------------------
+
     int fundiSeesWaiting = labour + transport;
     int newTotalFundiLocked = newLabour + transport;
     int newFundiReceivesVal =
         newLabour - (newLabour * fundiPct / 100).round() + transport;
-    bool isCounterAccepted = counterExtra > 0;
+    bool isCounterAccepted = counterExtra > 0 && !isContinueOld;
+
     double deduction = (job['deductionThisJob'] ?? 0).toDouble();
     double originalAmount = (job['originalReleasedAmount'] ?? baseFundiReceives)
         .toDouble();
@@ -209,21 +233,34 @@ class FundiTimelineContext {
       finalOriginal = originalAmount;
       finalRemaining = remainingAfter;
     } else {
-      finalFundiReceives = serverPayout > 0 ? serverPayout : baseFundiReceives;
-      finalReleasedAmount = serverPayout > 0 ? serverPayout : baseFundiReceives;
+      if (isContinueOld) {
+        finalFundiReceives = baseFundiReceives;
+        finalReleasedAmount = baseFundiReceives;
+      } else {
+        // sanity: if serverPayout > labour+transport+500, it's stale (includes budget)
+        bool serverStale = serverPayout > (labour + transport + 500);
+        finalFundiReceives = (!serverStale && serverPayout > 0)
+            ? serverPayout
+            : baseFundiReceives;
+        finalReleasedAmount = (!serverStale && serverPayout > 0)
+            ? serverPayout
+            : baseFundiReceives;
+      }
       finalOriginal = null;
       finalRemaining = null;
     }
 
     bool siteDone = toBool(job['siteVisitDone']) || toBool(job['siteVisited']);
     bool travelling = toBool(job['travelling']) || status == 'travelling';
-    bool extraPaid = (job['extraEscrowStatus'] ?? '') == 'paid';
+    bool extraPaid =
+        (job['extraEscrowStatus'] ?? '') == 'paid' && !isContinueOld;
     bool isStarted =
         status == 'in_progress' ||
         phase == 'fundi_working' ||
         status == 'job_completed' ||
         status == 'pending_completion' ||
-        status == 'completed';
+        status == 'completed' ||
+        rs == 'fundi_working_continued_old_price';
     bool isCancelled = status.toLowerCase().contains('cancel');
     bool canFundiCancel =
         (status == 'assigned' || status == 'confirmed') &&
@@ -247,7 +284,6 @@ class FundiTimelineContext {
           'KES ${deduction.toStringAsFixed(0)} deducted from your pay as a result of dispute $shortId, it will be deducted until client gets a refund of 50% of what was paid to you. Reason: repeat job within 14 days - no redo after 24h + 6h reminder.';
     }
 
-    // NEW: parse releasedAt for 2hr dispute rule
     DateTime? releasedAt;
     try {
       var ts =

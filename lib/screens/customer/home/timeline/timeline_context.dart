@@ -93,16 +93,51 @@ class TimelineContext {
     var reneg = job['renegotiation'] as Map<String, dynamic>?;
     String renegStatus = (reneg?['status'] ?? '').toString();
     String phase = (reneg?['currentPhase'] ?? '').toString();
-    bool needsExtraEscrow = renegStatus.contains('pending_extra_escrow');
 
-    int labour = toInt(
-      job['lastCounterAmount'] ??
+    bool isContinueOld =
+        renegStatus.contains('rejected_continued_old_price') ||
+        renegStatus.contains('fundi_continued_old_price') ||
+        renegStatus.contains('rejected_continued') ||
+        renegStatus == 'rejected';
+
+    bool needsExtraEscrow = false;
+    if (!isContinueOld) {
+      needsExtraEscrow =
+          renegStatus.contains('pending_extra_escrow') ||
+          renegStatus.contains('extra_pending_escrow') ||
+          renegStatus.contains('accepted_counter') ||
+          (job['status'] ?? '') == 'awaiting_extra_escrow';
+    }
+
+    int labour;
+    if (isContinueOld) {
+      // FIX 5: receipt must show OLD PRICE ONLY (5350), ignore extra after reject
+      labour = toInt(
+        reneg?['oldLabor'] ??
+            reneg?['oldPrice'] ??
+            job['originalLaborCost'] ??
+            job['agreedPrice'] ??
+            job['laborCost'] ??
+            0,
+      );
+      if (labour == 0) {
+        labour = toInt(
           job['agreedPrice'] ??
-          job['laborCost'] ??
-          job['acceptedBidAmount'] ??
-          job['lastCounterPrice'] ??
-          0,
-    );
+              job['laborCost'] ??
+              job['lastCounterAmount'] ??
+              0,
+        );
+      }
+    } else {
+      labour = toInt(
+        job['lastCounterAmount'] ??
+            job['agreedPrice'] ??
+            job['laborCost'] ??
+            job['acceptedBidAmount'] ??
+            job['lastCounterPrice'] ??
+            0,
+      );
+    }
 
     int transport = toInt(job['transportFee'] ?? job['transport'] ?? 100);
     double km = toDouble(job['transportDistanceKm'] ?? 0);
@@ -122,7 +157,7 @@ class TimelineContext {
         : rawFundiFee;
 
     int rawTotal = toInt(job['totalClientPays'] ?? job['totalCost'] ?? -1);
-    int totalToPay = rawTotal <= 0
+    int totalToPay = (rawTotal <= 0 || isContinueOld)
         ? labour + transport + clientAppFee
         : rawTotal;
 

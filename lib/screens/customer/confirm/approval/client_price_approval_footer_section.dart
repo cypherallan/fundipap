@@ -377,100 +377,103 @@ mixin FooterSectionMixin
                         onPressed: loading
                             ? null
                             : () {
-                                showDialog(
+                                String? selectedCode;
+                                final otherC = TextEditingController();
+                                showModalBottomSheet(
                                   context: context,
-                                  builder: (_) => AlertDialog(
-                                    title: Text(
-                                      'Reject Extra Labour?',
-                                      style: GoogleFonts.montserrat(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 13,
-                                        color: Colors.red,
+                                  isScrollControlled: true,
+                                  builder: (_) => StatefulBuilder(
+                                    builder: (ctx, setS) => Padding(
+                                      padding: EdgeInsets.only(
+                                        bottom: MediaQuery.of(
+                                          ctx,
+                                        ).viewInsets.bottom,
+                                        left: 16,
+                                        right: 16,
+                                        top: 16,
                                       ),
-                                    ),
-                                    content: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'You are rejecting extra KES $extraLabor requested by fundi.',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: Colors.red.shade50,
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                            border: Border.all(
-                                              color: Colors.red.shade200,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            "Why reject extra KES $extraLabor?",
+                                            style: GoogleFonts.montserrat(
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 13,
                                             ),
                                           ),
-                                          child: Text(
-                                            'If you reject, fundi can DISPUTE. Fundi will be able to raise dispute and admin will review photos. Counter with 0 does NOT trigger dispute.',
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            "Fundi will continue OLD price - ONLY what was in your original photos (e.g., 1 socket)",
                                             style: GoogleFonts.inter(
                                               fontSize: 10,
-                                              color: Colors.red.shade800,
-                                              fontWeight: FontWeight.w600,
                                             ),
                                           ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        TextField(
-                                          controller: counterReasonCtrl,
-                                          maxLines: 2,
-                                          decoration: InputDecoration(
-                                            labelText:
-                                                'Reason for rejection (required)',
-                                            hintText:
-                                                'Why you reject extra labour?',
-                                            border: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: const Text('Cancel'),
-                                      ),
-                                      ElevatedButton(
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.red,
-                                          foregroundColor: Colors.white,
-                                        ),
-                                        onPressed: () {
-                                          if (counterReasonCtrl.text
-                                              .trim()
-                                              .isEmpty) {
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  'Enter reason for rejection',
+                                          const SizedBox(height: 12),
+                                          ...ExtraRejectReasons.all.map(
+                                            (r) => RadioListTile<String>(
+                                              dense: true,
+                                              title: Text(
+                                                r['label']!,
+                                                style: GoogleFonts.montserrat(
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 12,
                                                 ),
                                               ),
-                                            );
-                                            return;
-                                          }
-                                          Navigator.pop(context);
-                                          _rejectRequest(job, extraLabor);
-                                        },
-                                        child: const Text(
-                                          'Reject - Fundi Can Dispute',
-                                        ),
+                                              subtitle: Text(
+                                                r['hint']!,
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 10,
+                                                ),
+                                              ),
+                                              value: r['code']!,
+                                              groupValue: selectedCode,
+                                              onChanged: (v) =>
+                                                  setS(() => selectedCode = v),
+                                            ),
+                                          ),
+                                          if (selectedCode == 'other')
+                                            TextField(
+                                              controller: otherC,
+                                              decoration: InputDecoration(
+                                                labelText: 'Explain',
+                                                border: OutlineInputBorder(),
+                                              ),
+                                              maxLines: 2,
+                                            ),
+                                          const SizedBox(height: 12),
+                                          SizedBox(
+                                            width: double.infinity,
+                                            height: 48,
+                                            child: ElevatedButton(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.black,
+                                              ),
+                                              onPressed: selectedCode == null
+                                                  ? null
+                                                  : () async {
+                                                      Navigator.pop(ctx);
+                                                      await _rejectRequestWithCode(
+                                                        job,
+                                                        extraLabor,
+                                                        selectedCode!,
+                                                        otherC.text,
+                                                      );
+                                                    },
+                                              child: Text(
+                                                "REJECT - CONTINUE OLD PRICE",
+                                                style: GoogleFonts.montserrat(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 11,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 24),
+                                        ],
                                       ),
-                                    ],
+                                    ),
                                   ),
                                 );
                               },
@@ -494,54 +497,47 @@ mixin FooterSectionMixin
     );
   }
 
-  Future<void> _rejectRequest(Map<String, dynamic> job, int extraLabor) async {
+  Future<void> _rejectRequestWithCode(
+    Map<String, dynamic> job,
+    int extraLabor,
+    String code,
+    String customText,
+  ) async {
     setState(() => loading = true);
     try {
-      final jobId = widget.jobId;
-      final fundiId = (job['fundiId'] ?? job['acceptedFundiId'] ?? '')
-          .toString();
-      final oldPrice =
-          (job['agreedPrice'] ??
-                  job['laborCost'] ??
-                  job['originalLaborCost'] ??
-                  0)
-              is int
-          ? job['agreedPrice'] ?? job['laborCost'] ?? 0
-          : int.tryParse('${job['agreedPrice'] ?? job['laborCost'] ?? 0}') ?? 0;
-
-      await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
-        'renegotiation.status': 'rejected',
-        'renegotiation.rejectedAt': FieldValue.serverTimestamp(),
-        'renegotiation.rejectedBy': 'client',
-        'renegotiation.rejectedReason': counterReasonCtrl.text.trim(),
-        'renegotiation.extraLaborRequested': extraLabor,
-        'status': 'dispute_pending',
-        'hasClientRejected': true,
-        'fundiCanDispute': true,
-        'fundiHasUnread': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      if (fundiId.isNotEmpty) {
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'toUserId': fundiId,
-          'userId': fundiId,
-          'jobId': jobId,
-          'type': 'price_rejected',
-          'title': 'Client rejected your new price request',
-          'message':
-              'Client rejected extra KES $extraLabor. Reason: ${counterReasonCtrl.text.trim()}. Tap to dispute or continue with KES $oldPrice',
-          'isRead': false,
-          'read': false,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+      final data = {
+        "jobId": widget.jobId,
+        "code": code,
+        "customText": customText,
+      };
+      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+        final user = FirebaseAuth.instance.currentUser;
+        final token = await user?.getIdToken();
+        final url = Uri.parse(
+          'https://europe-west1-fundipap-global.cloudfunctions.net/rejectExtraSecure',
+        );
+        final resp = await http.post(
+          url,
+          headers: {
+            'Content-Type': 'application/json',
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({'data': data}),
+        );
+        if (resp.statusCode != 200) throw Exception(resp.body);
+      } else {
+        await FirebaseFunctions.instanceFor(
+          app: Firebase.app(),
+          region: 'europe-west1',
+        ).httpsCallable('rejectExtraSecure').call(data);
       }
-
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Rejected. Fundi can dispute.'),
-          backgroundColor: Colors.red,
+        SnackBar(
+          content: Text(
+            'Rejected ($code) - Fundi will do ONLY your original photos at old price',
+          ),
+          backgroundColor: Colors.black,
         ),
       );
       Navigator.pop(context);

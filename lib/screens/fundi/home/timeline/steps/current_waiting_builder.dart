@@ -40,7 +40,169 @@ Widget? buildCurrentWaiting({
       renegoStatus == 'rejected' || job['hasClientRejected'] == true;
   bool canDispute = job['fundiCanDispute'] == true;
 
-  // === CLIENT REJECTED NEW PRICE - SHOW IMMEDIATELY ===
+  // === FIX 4: NEW FLOW - rejected_continued_old_price ===
+  // Client rejected extra (e.g., 1 socket vs 8). Fundi continues NOW with old price, ONLY original client photos.
+  if (renegoStatus.contains('rejected_continued_old_price')) {
+    int extraRequested = toInt(
+      renego?['extraLaborRequested'] ??
+          renego?['extraLabor'] ??
+          renego?['requestedExtra'] ??
+          0,
+    );
+    int oldPrice = toInt(
+      job['agreedPrice'] ?? job['originalLaborCost'] ?? job['laborCost'] ?? 0,
+    );
+    String rejectionLabel =
+        (renego?['rejectionLabel'] ??
+                renego?['rejectedReason'] ??
+                'Client rejected extra')
+            .toString();
+    String rejectionCode = (renego?['rejectionCode'] ?? renego?['code'] ?? '')
+        .toString();
+    String customText = (renego?['rejectionCustomText'] ?? '').toString();
+
+    IconData reasonIcon = Icons.info_outline;
+    String instruction =
+        'DO ONLY what was in client ORIGINAL photos. Example: 1 socket only, NOT 8.';
+    if (rejectionCode == 'only_original') {
+      reasonIcon = Icons.photo_library_outlined;
+      instruction =
+          'Client: Do ONLY original scope from my posted photos (e.g., 1 socket). Extra work will be posted later as new job.';
+    } else if (rejectionCode == 'photos_not_genuine') {
+      reasonIcon = Icons.report_problem_rounded;
+      instruction =
+          'Client flagged photos as not genuine. Continue OLD price with original photos only. Admin will review extra ticket separately.';
+    } else if (rejectionCode == 'too_expensive') {
+      instruction =
+          'Client says too expensive. Continue OLD price, original scope only.';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade600, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(reasonIcon, color: Colors.orange.shade900, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Client rejected extra - Continue OLD price KES $oldPrice',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    color: Colors.orange.shade900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Reason: $rejectionLabel',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (customText.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Details: $customText',
+                    style: GoogleFonts.inter(fontSize: 10),
+                  ),
+                ],
+                if (extraRequested > 0) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Extra rejected: KES $extraRequested',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      color: Colors.black54,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Text(
+                  'Code: $rejectionCode',
+                  style: GoogleFonts.inter(fontSize: 9, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.task_alt, size: 16, color: Colors.blue.shade800),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    instruction,
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.blue.shade900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: FundipapColors.greenSuccess,
+                minimumSize: const Size(double.infinity, 52),
+              ),
+              onPressed: () => FundiTimelineActions.startJob(jobId),
+              child: Text(
+                'START / CONTINUE JOB - KES $oldPrice (OLD PRICE ONLY)',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 10,
+                  color: Colors.white,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          if (rejectionCode == 'photos_not_genuine') ...[
+            const SizedBox(height: 8),
+            Text(
+              'This rejection created ticket in extra_disputes for admin. You still continue old job NOW. No waiting.',
+              style: GoogleFonts.inter(fontSize: 9, color: Colors.red.shade700),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // === CLIENT REJECTED NEW PRICE - SHOW IMMEDIATELY (OLD FLOW - legacy jobs) ===
   if (isRejected && canDispute) {
     int extraRequested = toInt(
       renego?['extraLaborRequested'] ?? renego?['extraLabor'] ?? 0,

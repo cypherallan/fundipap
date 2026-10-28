@@ -2,8 +2,17 @@ import * as admin from "firebase-admin";
 import { onCall, HttpsError, onRequest } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { FieldValue } from "firebase-admin/firestore";
 
 const db = admin.firestore();
+
+function hashEvidence(evidence: any[]): string {
+    try { return JSON.stringify(evidence).split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a }, 0).toString(); } catch { return Date.now().toString(); }
+}
+function isInstallationSub(subId: string): boolean {
+    const id = (subId || '').toLowerCase();
+    return id.includes('_install') || id.includes('fabrication') || id.includes('_make');
+}
 
 function toInt(v: any): number {
     if (v == null) return 0;
@@ -38,20 +47,31 @@ export const confirmCompletionSecure = onCall({ region: "europe-west1" }, async 
         const rs = (j.renegotiation?.status || '').toString().toLowerCase();
         const isContinueOld = rs === 'rejected_continued_old_price' || rs === 'fundi_continued_old_price' || rs === 'rejected' || rs === 'rejected_continued' || rs.includes('continue_old');
 
-        const labourBase = toInt(j.laborCost ?? j.agreedPrice ?? j.acceptedBidAmount ?? j.lastCounterAmount ?? j.budgetMax ?? 0);
-        const extraLabor = isContinueOld ? 0 : toInt(j.extraLaborAmount ?? j.renegotiation?.extraLabor ?? j.renegotiation?.counterExtraLabor ?? j.renegotiation?.approvedExtra ?? j.renegotiation?.acceptedCounterExtraLabor ?? 0);
-        const newLaborTotalRaw = toInt(j.renegotiation?.newLaborTotal ?? 0);
-        const newLaborTotal = isContinueOld ? 0 : newLaborTotalRaw;
-        const labour = newLaborTotal > 0 ? newLaborTotal : labourBase + extraLabor;
+        const oldLaborReneg = toInt(j.renegotiation?.oldLabor ?? j.renegotiation?.oldLabour ?? 0);
+        const labourBase = toInt(j.laborCost ?? j.lastCounterAmount ?? j.agreedPrice ?? j.acceptedBidAmount ?? j.budgetMax ?? 0);
+        let labour: number;
+        if (isContinueOld) {
+            labour = oldLaborReneg > 0 ? oldLaborReneg : labourBase;
+            // if labourBase is still budget 6000 and lastCounter is smaller (real bid), use it
+            const lastCounter = toInt(j.lastCounterAmount ?? 0);
+            if (lastCounter > 0 && lastCounter < labour && labour >= 6000) {
+                labour = lastCounter;
+            }
+        } else {
+            const extraLabor = toInt(j.extraLaborAmount ?? j.renegotiation?.extraLabor ?? j.renegotiation?.counterExtraLabor ?? j.renegotiation?.approvedExtra ?? j.renegotiation?.acceptedCounterExtraLabor ?? 0);
+            const newLaborTotalRaw = toInt(j.renegotiation?.newLaborTotal ?? 0);
+            labour = newLaborTotalRaw > 0 ? newLaborTotalRaw : labourBase + extraLabor;
+        }
+        const extraLabor = isContinueOld ? 0 : toInt(j.extraLaborAmount ?? j.renegotiation?.extraLabor ?? 0);
         if (labour <= 0) throw new HttpsError("failed-precondition", "Invalid labour amount");
 
         const transport = toInt(j.transportFee ?? 100);
-        const clientFeeLocked = toInt(j.clientAppFee ?? Math.round(labour * 0.05));
+        // ALWAYS recalc fee from final labour - old j.clientAppFee is stale when extra added
+        const clientFeeLocked = Math.round(labour * 0.05);
         const totalLocked = labour + transport + clientFeeLocked;
-        const escrowAmount = toInt(j.escrowAmount ?? j.totalCost ?? 0);
-        // Validate client locked enough, but don't use escrowAmount for payout math
+        const escrowAmount = toInt(j.escrowAmount ?? j.totalCost ?? j.totalClientPays ?? 0);
         if (escrowAmount > 0 && escrowAmount < totalLocked - 50) {
-            console.warn(`Escrow ${escrowAmount} less than expected ${totalLocked} for job ${jobId}`);
+            console.warn(`Escrow ${escrowAmount} less than expected ${totalLocked} for job ${jobId} - clientFee recalculated to ${clientFeeLocked}`);
         }
 
         // Badge - server truth
@@ -102,6 +122,7 @@ export const confirmCompletionSecure = onCall({ region: "europe-west1" }, async 
         const c2bId = `SIM_C2B_${jobId}_${Date.now()}`;
         const b2cId = `SIM_B2C_${jobId}_${Date.now()}`;
         const payoutRef = db.collection("mpesaPayouts").doc(jobId);
+        const clientIdForNotif = (j.customerId || j.clientId || "").toString();
 
         tx.set(payoutRef, {
             jobId,
@@ -124,6 +145,29 @@ export const confirmCompletionSecure = onCall({ region: "europe-west1" }, async 
             simulated: true,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
+
+        // Correct client notification - what client actually sees
+        if (clientIdForNotif) {
+            const notifRef = db.collection("notifications").doc();
+            tx.set(notifRef, {
+                toUserId: clientIdForNotif,
+                toRole: "client",
+                type: "job_completed_released_correct",
+                jobId,
+                title: `Job completed - Released KES ${totalLocked}`,
+                body: `You paid KES ${totalLocked} (Labour ${labour} + Transport ${transport} + Fee ${clientFeeLocked}). Fundi received KES ${finalPayout} (after ${fundiPct}% fee ${platformFee} + deduction ${deducted}). B2C ${b2cId} / C2B ${c2bId}`,
+                totalPaid: totalLocked,
+                fundiReceived: finalPayout,
+                platformFee,
+                clientFee: clientFeeLocked,
+                transportFee: transport,
+                labourCost: labour,
+                b2cTransactionId: b2cId,
+                c2bTransactionId: c2bId,
+                isRead: false,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+        }
 
         // Update job - fundiPayoutApplied prevents double-pay
         tx.update(jobRef, {
@@ -311,7 +355,7 @@ export const onDisputeCreatedSecure = onDocumentCreated({ document: "disputes/{d
 });
 
 // 3. RETRY B2C - ONLY ADMIN, ONLY IF FAILED, IDEMPOTENT
-export const retryFundiPayoutSecure = onCall({ memory: "256MiB", cpu: 1, concurrency: 80, minInstances: 0, maxInstances: 10, region: "europe-west1" }, async (request) => {
+export const retryFundiPayoutSecure = onCall({ memory: "256MiB", cpu: 1, concurrency: 10, minInstances: 0, maxInstances: 10, region: "europe-west1" }, async (request) => {
     const uid = request.auth?.uid;
     const jobId = (request.data?.jobId as string)?.trim();
     if (!uid) throw new HttpsError("unauthenticated", "Must be logged in");
@@ -373,7 +417,46 @@ export const dailyReconciliation = onSchedule({ schedule: "every day 02:00", reg
     });
     console.log(`KRA Reconciliation ${today}: ${count} jobs, C2B ${totalC2B}, B2C ${totalB2C}, Fees ${totalFees}, Match: ${totalC2B - totalB2C === totalFees}`);
 });
-// 5. GATE 1 - EXTRA WORK REFUSED DEADLOCK RESOLVE
+
+// 5. REQUEST EXTRA WITH FAKE PROTECTION - 1 vs 8 sockets
+export const requestExtraLaborSecure = onCall({ region: "europe-west1", memory: "512MiB", cpu: 1, concurrency: 10 }, async (request) => {
+    const uid = request.auth?.uid;
+    const { jobId, extraAmount, reasonDetails, evidence } = request.data as any;
+    if (!uid) throw new HttpsError("unauthenticated", "Login required");
+    if (!jobId || !extraAmount) throw new HttpsError("invalid-argument", "Missing fields");
+    if (Array.isArray(evidence) && evidence.length > 3) throw new HttpsError("invalid-argument", "Max 3 photos for extra, you sent " + evidence.length);
+
+    return await db.runTransaction(async (tx) => {
+        const jobRef = db.collection("jobs").doc(jobId);
+        const snap = await tx.get(jobRef);
+        if (!snap.exists) throw new HttpsError("not-found", "Job not found");
+        const job = snap.data() as any;
+        const fundiId = (job.assignedFundiId || job.fundiId || "").toString();
+        if (fundiId !== uid) throw new HttpsError("permission-denied", "Only fundi");
+
+        const labourBase = toInt(job.laborCost ?? job.agreedPrice ?? 0);
+        if (Number(extraAmount) > labourBase) throw new HttpsError("failed-precondition", "Extra cannot be >100% of base");
+
+        const newHash = hashEvidence(evidence || []);
+        const oldHash = job.renegotiation?.evidenceHash;
+        if (job.renegotiation?.status === "rejected_continued_old_price" && oldHash === newHash) throw new HttpsError("already-exists", "Same photos already rejected");
+
+        tx.update(jobRef, {
+            "renegotiation.status": "pending",
+            "renegotiation.extraLabor": toInt(extraAmount),
+            "renegotiation.reasonDetails": reasonDetails || "",
+            "renegotiation.evidence": evidence || [],
+            "renegotiation.evidenceHash": newHash,
+            "renegotiation.isBlocking": false,
+            "renegotiation.isInstallation": isInstallationSub(job.subcategoryId || ""),
+            "renegotiation.requestedAt": FieldValue.serverTimestamp(),
+            "updatedAt": FieldValue.serverTimestamp(),
+        });
+        return { success: true };
+    });
+});
+
+// 6. GATE 1 - EXTRA WORK REFUSED DEADLOCK RESOLVE
 export const resolveExtraRefusedDeadlock = onCall({ region: "europe-west1" }, async (request) => {
     const uid = request.auth?.uid;
     const jobId = (request.data?.jobId as string)?.trim();
@@ -584,4 +667,115 @@ export const resolveExtraRefusedDeadlock = onCall({ region: "europe-west1" }, as
 
         return { success: true, fundiGets, clientGets, appGets, b2cId, c2bId, disputeId: disputeRef2.id };
     });
+});
+
+const REJECT_LABELS: Record<string, string> = {
+    only_original: "I only want what I posted done (e.g., 1 socket)",
+    photos_not_genuine: "Photos not genuine / not my site",
+    too_expensive: "Too expensive",
+    post_later: "I will post extra as new job later",
+    other: "Other",
+};
+
+export const rejectExtraSecure = onCall({ region: "europe-west1", cpu: 1, memory: "512MiB", concurrency: 10 }, async (request) => {
+    const uid = request.auth?.uid;
+    const { jobId, code, customText } = request.data as any;
+    if (!uid) throw new HttpsError("unauthenticated", "Login required");
+    if (!jobId || !code) throw new HttpsError("invalid-argument", "jobId and code required");
+    if (!["only_original", "photos_not_genuine", "too_expensive", "post_later", "other"].includes(code)) throw new HttpsError("invalid-argument", "Invalid code");
+    return await db.runTransaction(async (tx) => {
+        const jobRef = db.collection("jobs").doc(jobId);
+        const snap = await tx.get(jobRef);
+        if (!snap.exists) throw new HttpsError("not-found", "Job not found");
+        const job = snap.data() as any;
+        if ((job.customerId || job.clientId) !== uid) throw new HttpsError("permission-denied", "Only client can reject");
+        const oldLabor = toInt(job.renegotiation?.oldLabor ?? job.renegotiation?.oldLabour ?? job.agreedPrice ?? job.laborCost ?? job.lastCounterAmount ?? 4000);
+        const oldTransport = toInt(job.renegotiation?.oldTransportFee ?? job.transportFee ?? 183);
+        const oldClientFee = Math.round(oldLabor * 0.05);
+        const oldTotal = oldLabor + oldTransport + oldClientFee;
+        const extraReq = toInt(job.renegotiation?.extraLabor ?? 0);
+        const label = REJECT_LABELS[code] || code;
+        tx.update(jobRef, {
+            status: "in_progress",
+            laborCost: oldLabor,
+            agreedPrice: oldLabor,
+            totalClientPays: oldTotal,
+            totalCost: oldTotal,
+            escrowAmount: oldTotal,
+            transportFee: oldTransport,
+            clientAppFee: oldClientFee,
+            extraLaborAmount: 0,
+            extraLabor: 0,
+            extraTopupAmount: 0,
+            extraTopupToLock: 0,
+            "renegotiation.status": "rejected_continued_old_price",
+            "renegotiation.rejectionCode": code,
+            "renegotiation.rejectionLabel": label,
+            "renegotiation.rejectionCustomText": (customText || "").toString().slice(0, 500),
+            "renegotiation.rejectedAt": FieldValue.serverTimestamp(),
+            "renegotiation.rejectedBy": "client",
+            "renegotiation.rejectedReason": label,
+            "renegotiation.extraLaborRequested": extraReq,
+            "renegotiation.extraLabor": 0,
+            "renegotiation.extraToLock": 0,
+            "renegotiation.pendingLabor": 0,
+            hasClientRejected: false,
+            fundiCanDispute: false,
+            fundiHasUnread: true,
+            customerHasUnread: false,
+            updatedAt: FieldValue.serverTimestamp(),
+        });
+        if (code === "photos_not_genuine") {
+            const dRef = db.collection("extra_disputes").doc();
+            tx.set(dRef, {
+                jobId, clientId: uid, fundiId: (job.fundiId || job.assignedFundiId || "").toString(),
+                type: "photos_not_genuine", code, label, customText: (customText || "").toString(),
+                extraRequested: extraReq, oldLabor, status: "open",
+                evidence: job.renegotiation?.evidence || [], evidenceHash: job.renegotiation?.evidenceHash || "",
+                createdAt: FieldValue.serverTimestamp(),
+            });
+        }
+        const fundiId = (job.fundiId || job.assignedFundiId || "").toString();
+        if (fundiId) {
+            const nRef = db.collection("notifications").doc();
+            tx.set(nRef, {
+                toUserId: fundiId, userId: fundiId, jobId, type: "extra_rejected_continue_old",
+                title: `Client rejected extra KES ${extraReq} - Continue old price KES ${oldLabor}`,
+                message: `${label}. Do ONLY original photos (e.g., 1 socket).`,
+                isRead: false, read: false, createdAt: FieldValue.serverTimestamp(),
+            });
+        }
+        return { success: true, oldLabor };
+    });
+});
+
+export const counterExtraSecure = onCall({ region: "europe-west1", cpu: 1, memory: "512MiB", concurrency: 10 }, async (request) => {
+    const uid = request.auth?.uid;
+    const { jobId, counterExtra } = request.data as any;
+    if (!uid) throw new HttpsError("unauthenticated", "Login");
+    if (!jobId || counterExtra == null) throw new HttpsError("invalid-argument", "Missing");
+    const jobRef = db.collection("jobs").doc(jobId);
+    const snap = await jobRef.get();
+    if (!snap.exists) throw new HttpsError("not-found", "Job");
+    const job = snap.data() as any;
+    if ((job.customerId || job.clientId) !== uid) throw new HttpsError("permission-denied", "Only client");
+    const round = toInt(job.renegotiation?.counterRound ?? 0) + 1;
+    if (round > 3) throw new HttpsError("failed-precondition", "Max 3 counters");
+    const toLock = toInt(counterExtra) + Math.round(toInt(counterExtra) * 0.05);
+    await jobRef.update({
+        "renegotiation.counterExtraLabor": toInt(counterExtra),
+        "renegotiation.clientCounterExtraLabor": toInt(counterExtra),
+        "renegotiation.extraToLock": toLock,
+        "renegotiation.counterExtraToLock": toLock,
+        "renegotiation.clientCounterExtraToLock": toLock,
+        "renegotiation.status": "countered_by_client",
+        "renegotiation.currentPhase": "countered_by_client",
+        "renegotiation.counterRound": round,
+        fundiHasUnread: true, customerHasUnread: false, updatedAt: FieldValue.serverTimestamp(),
+    });
+    return { success: true };
+});
+
+export const lockExtraEscrowSecure = onCall({ region: "europe-west1", cpu: 1, memory: "512MiB", concurrency: 10 }, async (request) => {
+    throw new HttpsError("unimplemented", "Wire Mpesa here - do NOT set escrowStatus directly in client.");
 });

@@ -22,7 +22,7 @@ class AnchorVerifier {
     final verifyUrl = await ref.getDownloadURL();
 
     try {
-      final res = await FirebaseFunctions.instance
+      final res = await FirebaseFunctions.instanceFor(region: 'europe-west1')
           .httpsCallable('verifyAnchorPhoto')
           .call({
             'jobId': jobId,
